@@ -1,0 +1,333 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Myles AI Dashboard</title>
+    <style>
+        :root {
+            --bg-color: #121212;
+            --card-bg: #1e1e1e;
+            --text-primary: #ffffff;
+            --text-secondary: #b0b0b0;
+            --accent-purple: #bb86fc;
+            --accent-green: #03dac6;
+            --danger-red: #cf6679;
+            --font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            background-color: var(--bg-color);
+            color: var(--text-primary);
+            font-family: var(--font-family);
+            line-height: 1.6;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* Sticky Header */
+        header {
+            background-color: rgba(30, 30, 30, 0.95);
+            backdrop-filter: blur(10px);
+            padding: 1rem 2rem;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+            border-bottom: 1px solid #333;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+        }
+
+        .brand {
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: var(--accent-purple);
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        /* Pulsing Status Dot */
+        .status-dot {
+            width: 12px;
+            height: 12px;
+            background-color: var(--accent-green);
+            border-radius: 50%;
+            display: inline-block;
+            box-shadow: 0 0 0 rgba(3, 218, 198, 0.4);
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0% {
+                transform: scale(0.95);
+                box-shadow: 0 0 0 0 rgba(3, 218, 198, 0.7);
+            }
+            70% {
+                transform: scale(1);
+                box-shadow: 0 0 0 10px rgba(3, 218, 198, 0);
+            }
+            100% {
+                transform: scale(0.95);
+                box-shadow: 0 0 0 0 rgba(3, 218, 198, 0);
+            }
+        }
+
+        /* Main Layout */
+        main {
+            flex: 1;
+            padding: 2rem;
+            max-width: 1200px;
+            margin: 0 auto;
+            width: 100%;
+        }
+
+        h1, h2, h3 {
+            color: var(--text-primary);
+            margin-bottom: 1rem;
+        }
+
+        h2 {
+            font-size: 1.5rem;
+            border-bottom: 2px solid var(--accent-purple);
+            display: inline-block;
+            padding-bottom: 0.5rem;
+            margin-bottom: 1.5rem;
+        }
+
+        /* Grid Layout */
+        .dashboard-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 2rem;
+            margin-bottom: 2rem;
+        }
+
+        /* Cards */
+        .card {
+            background-color: var(--card-bg);
+            border-radius: 12px;
+            padding: 1.5rem;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.2);
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+            border: 1px solid #333;
+        }
+
+        .card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 8px 15px rgba(187, 134, 252, 0.15);
+            border-color: var(--accent-purple);
+        }
+
+        /* System Status Specifics */
+        .status-indicator {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 1rem;
+            font-weight: bold;
+        }
+
+        .metric-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 0.5rem 0;
+            border-bottom: 1px solid #333;
+        }
+
+        .metric-label { color: var(--text-secondary); }
+        .metric-value { font-family: monospace; color: var(--accent-purple); }
+
+        /* Recent Activity Specifics */
+        .activity-list {
+            list-style: none;
+        }
+
+        .activity-item {
+            display: flex;
+            align-items: center;
+            padding: 0.8rem 0;
+            border-bottom: 1px solid #333;
+            gap: 1rem;
+        }
+
+        .activity-item:last-child { border-bottom: none; }
+
+        .icon-box {
+            width: 40px;
+            height: 40px;
+            background-color: rgba(187, 134, 252, 0.1);
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--accent-purple);
+            font-size: 1.2rem;
+        }
+
+        .activity-info h4 {
+            font-size: 0.95rem;
+            margin-bottom: 0.2rem;
+        }
+
+        .activity-time {
+            font-size: 0.8rem;
+            color: var(--text-secondary);
+        }
+
+        /* Quick Actions Specifics */
+        .action-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 1rem;
+            margin-top: 1rem;
+        }
+
+        .action-btn {
+            background-color: #2c2c2c;
+            border: 1px solid #444;
+            color: var(--text-primary);
+            padding: 1rem;
+            border-radius: 8px;
+            cursor: pointer;
+            text-align: center;
+            transition: all 0.2s ease;
+            font-weight: 600;
+        }
+
+        .action-btn:hover {
+            background-color: var(--accent-purple);
+            color: #121212;
+            border-color: var(--accent-purple);
+        }
+
+        /* Footer */
+        footer {
+            text-align: center;
+            padding: 2rem;
+            color: var(--text-secondary);
+            font-size: 0.9rem;
+            border-top: 1px solid #333;
+            margin-top: auto;
+        }
+
+        /* Responsive Adjustments */
+        @media (max-width: 768px) {
+            header {
+                padding: 1rem;
+            }
+            main {
+                padding: 1rem;
+            }
+            .action-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+
+    <header>
+        <div class="brand">
+            <span class="status-dot"></span>
+            Myles AI
+        </div>
+        <nav style="color: var(--text-secondary); font-size: 0.9rem;">
+            <a href="#" style="color: inherit; text-decoration: none; margin-right: 15px;">Dashboard</a>
+            <a href="#" style="color: inherit; text-decoration: none;">Settings</a>
+        </nav>
+    </header>
+
+    <main>
+        <!-- System Status Section -->
+        <section class="dashboard-grid">
+            <div class="card">
+                <h2>System Status</h2>
+                <div class="status-indicator">
+                    <span style="color: var(--accent-green);">●</span>
+                    All Systems Operational
+                </div>
+                
+                <div class="metric-row">
+                    <span class="metric-label">CPU Load</span>
+                    <span class="metric-value">12%</span>
+                </div>
+                <div class="metric-row">
+                    <span class="metric-label">Memory Usage</span>
+                    <span class="metric-value">4.2 GB / 16 GB</span>
+                </div>
+                <div class="metric-row">
+                    <span class="metric-label">Network Latency</span>
+                    <span class="metric-value">24ms</span>
+                </div>
+                <div class="metric-row">
+                    <span class="metric-label">API Uptime</span>
+                    <span class="metric-value">99.98%</span>
+                </div>
+            </div>
+
+            <!-- Recent Activity Section -->
+            <div class="card">
+                <h2>Recent Activity</h2>
+                <ul class="activity-list">
+                    <li class="activity-item">
+                        <div class="icon-box">⚡</div>
+                        <div class="activity-info">
+                            <h4>Model Update Deployed</h4>
+                            <span class="activity-time">2 minutes ago</span>
+                        </div>
+                    </li>
+                    <li class="activity-item">
+                        <div class="icon-box">🔒</div>
+                        <div class="activity-info">
+                            <h4>Security Scan Completed</h4>
+                            <span class="activity-time">1 hour ago</span>
+                        </div>
+                    </li>
+                    <li class="activity-item">
+                        <div class="icon-box">💾</div>
+                        <div class="activity-info">
+                            <h4>Backup Synced</h4>
+                            <span class="activity-time">3 hours ago</span>
+                        </div>
+                    </li>
+                    <li class="activity-item">
+                        <div class="icon-box">👤</div>
+                        <div class="activity-info">
+                            <h4>New User Registered</h4>
+                            <span class="activity-time">5 hours ago</span>
+                        </div>
+                    </li>
+                </ul>
+            </div>
+
+            <!-- Quick Actions Section -->
+            <div class="card">
+                <h2>Quick Actions</h2>
+                <p style="color: var(--text-secondary); font-size: 0.9rem;">Common tasks for system administration.</p>
+                
+                <div class="action-grid">
+                    <button class="action-btn" onclick="alert('Restarting services...')">Restart Services</button>
+                    <button class="action-btn" onclick="alert('Clearing cache...')">Clear Cache</button>
+                    <button class="action-btn" onclick="alert('Generating report...')">Generate Report</button>
+                    <button class="action-btn" onclick="alert('Opening logs...')">View Logs</button>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <footer>
+        &copy; 2023 Myles AI Dashboard. All rights reserved.
+    </footer>
+
+</body>
+</html>
