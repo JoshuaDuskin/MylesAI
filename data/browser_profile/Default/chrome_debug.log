@@ -1,0 +1,181 @@
+[0925/204526.578:INFO:CONSOLE:162] "[bugsnag] Loaded!", source: https://app.netlify.com/assets/js/monitoring.vendor.d1a11d03159abc367abb.js (162)
+[0925/204527.160:INFO:CONSOLE:259] "requestStorageAccess: Permission denied.", source: https://www.google.com/recaptcha/enterprise/anchor?ar=1&k=6LexhEgsAAAAANL6JPUnOx6lWZViw8-TBON3_faT&co=aHR0cHM6Ly9hcHAubmV0bGlmeS5jb206NDQz&hl=en&v=kemdRjWFxNjgsGdhRslyEPwU&size=invisible&anchor-ms=20000&execute-ms=30000&cb=t0yys6xivcm5 (259)
+[0925/204528.136:INFO:CONSOLE:0] "[.WebGL-0x200400af2e00]GL Driver Message (OpenGL, Performance, GL_CLOSE_PATH_NV, High): GPU stall due to ReadPixels", source: https://app.netlify.com/drop (0)
+[0925/204528.193:INFO:CONSOLE:4696] "The powerPreference option is currently ignored when calling requestAdapter() on Windows. See https://crbug.com/369219127", source: https://app.netlify.com/assets/js/83120.205de94774804271c020.js (4696)
+[0925/204528.216:INFO:CONSOLE:0] "No available adapters.", source: https://app.netlify.com/drop (0)
+[0925/204528.217:INFO:CONSOLE:161] "THREE.WebGPURenderer: WebGPU is not available, running under WebGL2 backend.", source: https://app.netlify.com/assets/js/monitoring.vendor.d1a11d03159abc367abb.js (161)
+[0925/204528.398:INFO:CONSOLE:161] "THREE.WebGLProgram: Shader Error 0 - VALIDATE_STATUS false
+
+Program Info Log: Vertex shader is not compiled.
+VERTEX
+
+ERROR: 0:47: 'baseColor__r_3_' : identifiers containing two consecutive underscores (__) are reserved as possible future keywords
+ERROR: 0:48: 'leftColor__r_3_' : identifiers containing two consecutive underscores (__) are reserved as possible future keywords
+ERROR: 0:60: 'rightColor__r_3_' : identifiers containing two consecutive underscores (__) are reserved as possible future keywords
+ERROR: 0:61: 'downColor__r_3_' : identifiers containing two consecutive underscores (__) are reserved as possible future keywords
+ERROR: 0:62: 'upColor__r_3_' : identifiers containing two consecutive underscores (__) are reserved as possible future keywords
+ERROR: 0:74: 'colorA__r_1_' : identifiers containing two consecutive underscores (__) are reserved as possible future keywords
+ERROR: 0:75: 'start__r_1_' : identifiers containing two consecutive underscores (__) are reserved as possible future keywords
+ERROR: 0:76: 'end__r_1_' : identifiers containing two consecutive underscores (__) are reserved as possible future keywords
+ERROR: 0:78: 'angle__r_1_' : identifiers containing two consecutive underscores (__) are reserved as possible future keywords
+ERROR: 0:79: 'colorB__r_1_' : identifiers containing two consecutive underscores (__) are reserved as possible future keywords
+ERROR: 0:80: 'center__r_2_' : identifiers containing two consecutive underscores (__) are reserved as possible future keywords
+ERROR: 0:82: 'seed__r_2_' : identifiers containing two consecutive underscores (__) are reserved as possible future keywords
+ERROR: 0:83: 'waviness__r_2_' : identifiers containing two consecutive underscores (__) are reserved as possible future keywords
+ERROR: 0:84: 'height__r_2_' : identifiers containing two consecutive underscores (__) are reserved as possible future keywords
+ERROR: 0:85: 'rayDensity__r_2_' : identifiers containing two consecutive underscores (__) are reserved as possible future keywords
+ERROR: 0:86: 'colorA__r_2_' : identifiers containing two consecutive underscores (__) are reserved as possible future keywords
+ERROR: 0:87: 'balance__r_2_' : identifiers containing two consecutive underscores (__) are reserved as possible future keywords
+ERROR: 0:88: 'colorB__r_2_' : identifiers containing two consecutive underscores (__) are reserved as possible future keywords
+ERROR: 0:89: 'colorC__r_2_' : identifiers containing two consecutive underscores (__) are reserved as possible future keywords
+ERROR: 0:90: 'intensity__r_2_' : identifiers containing two consecutive underscores (__) are reserved as possible future keywords
+
+  42: 	mat4 cameraProjectionMatrix;
+  43: 	mat4 cameraViewMatrix;
+  44: };
+  45: 
+  46: layout( std140 ) uniform object {
+> 47: 	vec4 baseColor__r_3_;
+  48: 	vec4 leftColor__r_3_;
+  49: 	mat3 nodeUniform3;
+  50: 	vec2 nodeUniform4;
+  51: 	uint nodeUniform5;
+  52: 	mat3 nodeUniform6;
+  53: 	uint nodeUniform7;
+FRAGMENT
+
+ERROR: 0:42: 'baseColor__r_3_' : identifiers containing two consecutive underscores (__) are reserved as possible future keywords
+ERROR: 0:43: 'leftColor__r_3_' : identifiers containing two consecutive underscores (__) are reserved as possible future keywords
+ERROR: 0:55: 'rightColor__r_3_' : identifiers containing two consecutive underscores (__) are reserved as possible future keywords
+ERROR: 0:56: 'downColor__r_3_' : identifiers containing two consecutive underscores (__) are reserved as possible future keywords
+ERROR: 0:57: 'upColor__r_3_' : identifiers containing two consecutive underscores (__) are reserved as possible future keywords
+ERROR: 0:69: 'colorA__r_1_' : identifiers containing two consecutive underscores (__) are reserved as possible future keywords
+ERROR: 0:70: 'start__r_1_' : identifiers containing two consecutive underscores (__) are reserved as possible future keywords
+ERROR: 0:71: 'end__r_1_' : identifiers containing two consecutive underscores (__) are reserved as possible future keywords
+ERROR: 0:73: 'angle__r_1_' : identifiers containing two consecutive underscores (__) are reserved as possible future keywords
+ERROR: 0:74: 'colorB__r_1_' : identifiers containing two consecutive underscores (__) are reserved as possible future keywords
+ERROR: 0:75: 'center__r_2_' : identifiers containing two consecutive underscores (__) are reserved as possible future keywords
+ERROR: 0:77: 'seed__r_2_' : identifiers containing two consecutive underscores (__) are reserved as possible future keywords
+ERROR: 0:78: 'waviness__r_2_' : identifiers containing two consecutive underscores (__) are reserved as possible future keywords
+ERROR: 0:79: 'height__r_2_' : identifiers containing two consecutive underscores (__) are reserved as possible future keywords
+ERROR: 0:80: 'rayDensity__r_2_' : identifiers containing two consecutive underscores (__) are reserved as possible future keywords
+ERROR: 0:81: 'colorA__r_2_' : identifiers containing two consecutive underscores (__) are reserved as possible future keywords
+ERROR: 0:82: 'balance__r_2_' : identifiers containing two consecutive underscores (__) are reserved as possible future keywords
+ERROR: 0:83: 'colorB__r_2_' : identifiers containing two consecutive underscores (__) are reserved as possible future keywords
+ERROR: 0:84: 'colorC__r_2_' : identifiers containing two consecutive underscores (__) are reserved as possible future keywords
+ERROR: 0:85: 'intensity__r_2_' : identifiers containing two consecutive underscores (__) are reserved as possible future keywords
+
+  37: 
+  38: 
+  39: // uniforms
+  40: 
+  41: layout( std140 ) uniform object {
+> 42: 	vec4 baseColor__r_3_;
+  43: 	vec4 leftColor__r_3_;
+  44: 	mat3 nodeUniform3;
+  45: 	vec2 nodeUniform4;
+  46: 	uint nodeUniform5;
+  47: 	mat3 nodeUniform6;
+  48: 	uint nodeUniform7;", source: https://app.netlify.com/assets/js/monitoring.vendor.d1a11d03159abc367abb.js (161)
+[0925/204528.399:INFO:CONSOLE:4350] "WebGL: INVALID_OPERATION: useProgram: program not valid", source: https://app.netlify.com/assets/js/83120.205de94774804271c020.js (4350)
+[0925/204528.399:INFO:CONSOLE:4362] "WebGL: INVALID_OPERATION: uniformBlockBinding: program not linked", source: https://app.netlify.com/assets/js/83120.205de94774804271c020.js (4362)
+[0925/204528.399:INFO:CONSOLE:4362] "WebGL: INVALID_OPERATION: uniformBlockBinding: program not linked", source: https://app.netlify.com/assets/js/83120.205de94774804271c020.js (4362)
+[0925/204528.399:INFO:CONSOLE:4362] "WebGL: INVALID_OPERATION: getUniformLocation: program not linked", source: https://app.netlify.com/assets/js/83120.205de94774804271c020.js (4362)
+[0925/204528.399:INFO:CONSOLE:4362] "WebGL: INVALID_OPERATION: getUniformLocation: program not linked", source: https://app.netlify.com/assets/js/83120.205de94774804271c020.js (4362)
+[0925/204528.405:INFO:CONSOLE:161] "THREE.WebGLProgram: Shader Error 1282 - VALIDATE_STATUS false
+
+Program Info Log: Vertex shader is not compiled.
+VERTEX
+
+ERROR: 0:47: 'baseColor__r_3_' : identifiers containing two consecutive underscores (__) are reserved as possible future keywords
+ERROR: 0:48: 'leftColor__r_3_' : identifiers containing two consecutive underscores (__) are reserved as possible future keywords
+ERROR: 0:60: 'rightColor__r_3_' : identifiers containing two consecutive underscores (__) are reserved as possible future keywords
+ERROR: 0:61: 'downColor__r_3_' : identifiers containing two consecutive underscores (__) are reserved as possible future keywords
+ERROR: 0:62: 'upColor__r_3_' : identifiers containing two consecutive underscores (__) are reserved as possible future keywords
+ERROR: 0:74: 'colorA__r_1_' : identifiers containing two consecutive underscores (__) are reserved as possible future keywords
+ERROR: 0:75: 'start__r_1_' : identifiers containing two consecutive underscores (__) are reserved as possible future keywords
+ERROR: 0:76: 'end__r_1_' : identifiers containing two consecutive underscores (__) are reserved as possible future keywords
+ERROR: 0:78: 'angle__r_1_' : identifiers containing two consecutive underscores (__) are reserved as possible future keywords
+ERROR: 0:79: 'colorB__r_1_' : identifiers containing two consecutive underscores (__) are reserved as possible future keywords
+ERROR: 0:80: 'center__r_2_' : identifiers containing two consecutive underscores (__) are reserved as possible future keywords
+ERROR: 0:82: 'seed__r_2_' : identifiers containing two consecutive underscores (__) are reserved as possible future keywords
+ERROR: 0:83: 'waviness__r_2_' : identifiers containing two consecutive underscores (__) are reserved as possible future keywords
+ERROR: 0:84: 'height__r_2_' : identifiers containing two consecutive underscores (__) are reserved as possible future keywords
+ERROR: 0:85: 'rayDensity__r_2_' : identifiers containing two consecutive underscores (__) are reserved as possible future keywords
+ERROR: 0:86: 'colorA__r_2_' : identifiers containing two consecutive underscores (__) are reserved as possible future keywords
+ERROR: 0:87: 'balance__r_2_' : identifiers containing two consecutive underscores (__) are reserved as possible future keywords
+ERROR: 0:88: 'colorB__r_2_' : identifiers containing two consecutive underscores (__) are reserved as possible future keywords
+ERROR: 0:89: 'colorC__r_2_' : identifiers containing two consecutive underscores (__) are reserved as possible future keywords
+ERROR: 0:90: 'intensity__r_2_' : identifiers containing two consecutive underscores (__) are reserved as possible future keywords
+ERROR: 0:92: 'colorShift__r_4_' : identifiers containing two consecutive underscores (__) are reserved as possible future keywords
+ERROR: 0:96: 'contrast__r_4_' : identifiers containing two consecutive underscores (__) are reserved as possible future keywords
+ERROR: 0:97: 'brightness__r_4_' : identifiers containing two consecutive underscores (__) are reserved as possible future keywords
+ERROR: 0:98: 'scanlineIntensity__r_4_' : identifiers containing two consecutive underscores (__) are reserved as possible future keywords
+ERROR: 0:99: 'scanlineFrequency__r_4_' : identifiers containing two consecutive underscores (__) are reserved as possible future keywords
+ERROR: 0:100: 'pixelSize__r_4_' : identifiers containing two consecutive underscores (__) are reserved as possible future keywords
+ERROR: 0:101: 'vignetteRadius__r_4_' : identifiers containing two consecutive underscores (__) are reserved as possible future keywords
+ERROR: 0:102: 'vignetteIntensity__r_4_' : identifiers containing two consecutive underscores (__) are reserved as possible future keywords
+
+  42: 	mat4 cameraProjectionMatrix;
+  43: 	mat4 cameraViewMatrix;
+  44: };
+  45: 
+  46: layout( std140 ) uniform object {
+> 47: 	vec4 baseColor__r_3_;
+  48: 	vec4 leftColor__r_3_;
+  49: 	mat3 nodeUniform3;
+  50: 	vec2 nodeUniform4;
+  51: 	uint nodeUniform5;
+  52: 	mat3 nodeUniform6;
+  53: 	uint nodeUniform7;
+FRAGMENT
+
+ERROR: 0:42: 'baseColor__r_3_' : identifiers containing two consecutive underscores (__) are reserved as possible future keywords
+ERROR: 0:43: 'leftColor__r_3_' : identifiers containing two consecutive underscores (__) are reserved as possible future keywords
+ERROR: 0:55: 'rightColor__r_3_' : identifiers containing two consecutive underscores (__) are reserved as possible future keywords
+ERROR: 0:56: 'downColor__r_3_' : identifiers containing two consecutive underscores (__) are reserved as possible future keywords
+ERROR: 0:57: 'upColor__r_3_' : identifiers containing two consecutive underscores (__) are reserved as possible future keywords
+ERROR: 0:69: 'colorA__r_1_' : identifiers containing two consecutive underscores (__) are reserved as possible future keywords
+ERROR: 0:70: 'start__r_1_' : identifiers containing two consecutive underscores (__) are reserved as possible future keywords
+ERROR: 0:71: 'end__r_1_' : identifiers containing two consecutive underscores (__) are reserved as possible future keywords
+ERROR: 0:73: 'angle__r_1_' : identifiers containing two consecutive underscores (__) are reserved as possible future keywords
+ERROR: 0:74: 'colorB__r_1_' : identifiers containing two consecutive underscores (__) are reserved as possible future keywords
+ERROR: 0:75: 'center__r_2_' : identifiers containing two consecutive underscores (__) are reserved as possible future keywords
+ERROR: 0:77: 'seed__r_2_' : identifiers containing two consecutive underscores (__) are reserved as possible future keywords
+ERROR: 0:78: 'waviness__r_2_' : identifiers containing two consecutive underscores (__) are reserved as possible future keywords
+ERROR: 0:79: 'height__r_2_' : identifiers containing two consecutive underscores (__) are reserved as possible future keywords
+ERROR: 0:80: 'rayDensity__r_2_' : identifiers containing two consecutive underscores (__) are reserved as possible future keywords
+ERROR: 0:81: 'colorA__r_2_' : identifiers containing two consecutive underscores (__) are reserved as possible future keywords
+ERROR: 0:82: 'balance__r_2_' : identifiers containing two consecutive underscores (__) are reserved as possible future keywords
+ERROR: 0:83: 'colorB__r_2_' : identifiers containing two consecutive underscores (__) are reserved as possible future keywords
+ERROR: 0:84: 'colorC__r_2_' : identifiers containing two consecutive underscores (__) are reserved as possible future keywords
+ERROR: 0:85: 'intensity__r_2_' : identifiers containing two consecutive underscores (__) are reserved as possible future keywords
+ERROR: 0:87: 'colorShift__r_4_' : identifiers containing two consecutive underscores (__) are reserved as possible future keywords
+ERROR: 0:91: 'contrast__r_4_' : identifiers containing two consecutive underscores (__) are reserved as possible future keywords
+ERROR: 0:92: 'brightness__r_4_' : identifiers containing two consecutive underscores (__) are reserved as possible future keywords
+ERROR: 0:93: 'scanlineIntensity__r_4_' : identifiers containing two consecutive underscores (__) are reserved as possible future keywords
+ERROR: 0:94: 'scanlineFrequency__r_4_' : identifiers containing two consecutive underscores (__) are reserved as possible future keywords
+ERROR: 0:95: 'pixelSize__r_4_' : identifiers containing two consecutive underscores (__) are reserved as possible future keywords
+ERROR: 0:96: 'vignetteRadius__r_4_' : identifiers containing two consecutive underscores (__) are reserved as possible future keywords
+ERROR: 0:97: 'vignetteIntensity__r_4_' : identifiers containing two consecutive underscores (__) are reserved as possible future keywords
+
+  37: 
+  38: 
+  39: // uniforms
+  40: 
+  41: layout( std140 ) uniform object {
+> 42: 	vec4 baseColor__r_3_;
+  43: 	vec4 leftColor__r_3_;
+  44: 	mat3 nodeUniform3;
+  45: 	vec2 nodeUniform4;
+  46: 	uint nodeUniform5;
+  47: 	mat3 nodeUniform6;
+  48: 	uint nodeUniform7;", source: https://app.netlify.com/assets/js/monitoring.vendor.d1a11d03159abc367abb.js (161)
+[0925/204528.408:INFO:CONSOLE:4350] "WebGL: INVALID_OPERATION: useProgram: program not valid", source: https://app.netlify.com/assets/js/83120.205de94774804271c020.js (4350)
+[0925/204528.408:INFO:CONSOLE:4362] "WebGL: INVALID_OPERATION: uniformBlockBinding: program not linked", source: https://app.netlify.com/assets/js/83120.205de94774804271c020.js (4362)
+[0925/204528.408:INFO:CONSOLE:4362] "WebGL: INVALID_OPERATION: uniformBlockBinding: program not linked", source: https://app.netlify.com/assets/js/83120.205de94774804271c020.js (4362)
+[0925/204528.408:INFO:CONSOLE:4362] "WebGL: INVALID_OPERATION: getUniformLocation: program not linked", source: https://app.netlify.com/assets/js/83120.205de94774804271c020.js (4362)
+[0925/204528.408:INFO:CONSOLE:4362] "WebGL: INVALID_OPERATION: getUniformLocation: program not linked", source: https://app.netlify.com/assets/js/83120.205de94774804271c020.js (4362)
+[0925/204528.408:INFO:CONSOLE:4362] "WebGL: INVALID_OPERATION: getUniformLocation: program not linked", source: https://app.netlify.com/assets/js/83120.205de94774804271c020.js (4362)
+[0925/204528.414:INFO:CONSOLE:4350] "WebGL: INVALID_OPERATION: useProgram: program not valid", source: https://app.netlify.com/assets/js/83120.205de94774804271c020.js (4350)
+[0925/204528.414:INFO:CONSOLE:4350] "WebGL: INVALID_OPERATION: useProgram: program not valid", source: https://app.netlify.com/assets/js/83120.205de94774804271c020.js (4350)

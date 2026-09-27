@@ -1,0 +1,969 @@
+from __future__ import annotations
+
+import argparse
+import hashlib
+import json
+import os
+import re
+import shutil
+import subprocess
+import threading
+import time
+from collections import defaultdict, deque
+from datetime import datetime, timezone
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from pathlib import Path
+from typing import Any
+from urllib.error import HTTPError, URLError
+from urllib.request import Request, urlopen
+from urllib.parse import parse_qs, quote, urlparse
+
+ROOT = Path(os.environ.get("LOCALAPPDATA", str(Path.home() / "AppData" / "Local"))) / "MylesAI"
+CORE = "http://127.0.0.1:8766"
+HOST = "127.0.0.1"
+PORT = 8790
+ALLOWED_ORIGINS = {
+    "https://joshuaduskin.github.io",
+    "http://127.0.0.1",
+    "http://localhost",
+}
+MAX_BODY = 64 * 1024
+RATE_WINDOW = 60.0
+GET_LIMIT = 180
+# The public gateway forwards authenticated requests from localhost.  A plain
+# client-IP bucket therefore made phone + dashboard traffic share one limit.
+# Keep a limit, but key authenticated traffic by a short hash of the owner
+# token and allow normal owner interaction plus retries.
+POST_LIMIT = 120
+RATE: dict[str, deque[float]] = defaultdict(deque)
+RATE_LOCK = threading.Lock()
+TOKEN = ""
+PAIR_CODE = ""
+PAIR_EXPIRES = 0.0
+
+
+def now_iso() -> str:
+    return datetime.now(timezone.utc).astimezone().isoformat(timespec="seconds")
+
+
+def human_task_label(value: Any, limit: int = 120) -> str:
+    """Expose a short owner-facing task summary, never the raw voice transcript."""
+    text = re.sub(r"\s+", " ", str(value or "").strip())
+    low = text.lower()
+    if ("zip" in low or "patch" in low) and re.search(r"upgrade|repair|rebuild|install", low):
+        return "Audit and stabilize the Myles tower after multiple runtime upgrades."
+    if "dashboard" in low and re.search(r"layout|ui|chat|mobile|screen|page", low):
+        return "Improve and verify the Myles dashboard layout and behavior."
+    if re.search(r"backtest|back test|trading bot|quant", low):
+        return "Review and improve the trading bot and its research results."
+    if re.search(r"pair (the )?phone|phone bridge|tower and phone", low):
+        return "Pair the phone with the Myles tower and verify the bridge."
+    if re.search(r"continuous improvement|make myles faster|optimize myles|game mode", low):
+        return "Improve Myles performance and reliability for everyday use."
+    if re.search(r"solana|gmx|wallet|live trading|live execution", low):
+        return "Configure and verify the requested trading and wallet route."
+    return "The requested tower work"
+
+
+def summarize_job(job: Any) -> dict[str, Any]:
+    item = dict(job) if isinstance(job, dict) else {}
+    raw = item.get("prompt") or item.get("task") or item.get("instruction") or ""
+    summary = human_task_label(raw)
+    item["label"] = summary
+    item["summary"] = summary
+    item["detail"] = "The original request is available in the task details."
+    return item
+
+
+def load_json(path: Path) -> Any:
+    try:
+        if not path.is_file() or path.stat().st_size > 2_000_000:
+            return None
+        return json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        return None
+
+
+def core_json(path: str, method: str = "GET", body: Any = None, timeout: float = 5.0) -> tuple[int, Any]:
+    data = None
+    headers = {"Accept": "application/json", "User-Agent": "MylesDashboardBridge/1.0"}
+    if body is not None:
+        data = json.dumps(body).encode("utf-8")
+        headers["Content-Type"] = "application/json"
+    req = Request(CORE + path, data=data, headers=headers, method=method)
+    try:
+        with urlopen(req, timeout=timeout) as resp:
+            raw = resp.read()
+            try:
+                parsed = json.loads(raw.decode("utf-8")) if raw else {}
+            except Exception:
+                parsed = {"text": raw.decode("utf-8", errors="replace")}
+            return resp.status, parsed
+    except HTTPError as exc:
+        raw = exc.read()
+        try:
+            parsed = json.loads(raw.decode("utf-8")) if raw else {"error": str(exc)}
+        except Exception:
+            parsed = {"error": raw.decode("utf-8", errors="replace") or str(exc)}
+        return exc.code, parsed
+    except (URLError, TimeoutError, OSError) as exc:
+        return 599, {"error": str(exc)}
+
+
+def find_runtime_status() -> dict[str, Any]:
+    candidates = [
+        ROOT / "data" / "public_status.json",
+        ROOT / "data" / "dashboard_status.json",
+        ROOT / "data" / "status.json",
+        ROOT / "public_status.json",
+        ROOT / "dashboard_status.json",
+        ROOT / "status.json",
+        ROOT / "runtime" / "status.json",
+    ]
+    for path in candidates:
+        data = load_json(path)
+        if isinstance(data, dict):
+            return data
+    return {}
+
+
+def trading_score(data: Any) -> int:
+    if not isinstance(data, dict):
+        return 0
+    keys = {str(k).lower() for k in data.keys()}
+    score = 0
+    for key in ("trading", "paper_trading", "quant", "equity_curve", "positions", "backtests", "strategies", "pnl"):
+        if key in keys:
+            score += 3
+    text = " ".join(keys)
+    if any(word in text for word in ("trade", "quant", "backtest", "equity", "paper")):
+        score += 1
+    return score
+
+
+def find_trading_data() -> dict[str, Any]:
+    direct = [
+        ROOT / "data" / "trading_status.json",
+        ROOT / "data" / "trading.json",
+        ROOT / "data" / "paper_trading.json",
+        ROOT / "data" / "quant_status.json",
+        ROOT / "data" / "quant_lab_status.json",
+        ROOT / "trading_status.json",
+        ROOT / "quant_status.json",
+    ]
+    best: tuple[int, float, dict[str, Any]] | None = None
+    for path in direct:
+        data = load_json(path)
+        if isinstance(data, dict):
+            score = trading_score(data)
+            if score:
+                best = max(best or (0, 0.0, {}), (score, path.stat().st_mtime, data), key=lambda x: (x[0], x[1]))
+
+    workspaces = ROOT / "workspaces"
+    if workspaces.is_dir():
+        seen = 0
+        try:
+            candidates = sorted(
+                (p for p in workspaces.rglob("*.json") if re.search(r"trade|trading|quant|paper|backtest|equity", p.name, re.I)),
+                key=lambda p: p.stat().st_mtime,
+                reverse=True,
+            )
+            for path in candidates[:120]:
+                seen += 1
+                data = load_json(path)
+                if not isinstance(data, dict):
+                    continue
+                score = trading_score(data)
+                if score:
+                    item = (score, path.stat().st_mtime, data)
+                    if best is None or item[:2] > best[:2]:
+                        best = item
+                if seen >= 120:
+                    break
+        except Exception:
+            pass
+
+    if not best:
+        return {}
+    data = best[2]
+    if isinstance(data.get("trading"), dict):
+        return data["trading"]
+    if isinstance(data.get("paper_trading"), dict):
+        return data["paper_trading"]
+    if isinstance(data.get("quant"), dict):
+        return data["quant"]
+    return data
+
+
+
+
+QUANT_DIR = ROOT / "quant"
+QUANT_CONFIG = QUANT_DIR / "quant_config.json"
+QUANT_STATE = ROOT / "data" / "quant_paper_state_v3.json"
+QUANT_SCRIPT = QUANT_DIR / "quant_service.mjs"
+LIVE_SCRIPT = QUANT_DIR / "gmx_live.mjs"
+LIVE_STATUS = ROOT / "data" / "gmx_live_status.json"
+QUANT_MARKETS = ["BTC/USD", "ETH/USD", "SOL/USD", "XRP/USD", "TAO/USD"]
+QUANT_PERIODS = ["1m", "5m", "15m", "1h", "4h", "1d"]
+
+
+def fetch_quant_candles(symbol: str, period: str, limit: int = 240) -> dict[str, Any]:
+    symbol = str(symbol or "").upper()
+    period = str(period or "")
+    if symbol not in QUANT_MARKETS:
+        raise RuntimeError("Unsupported market")
+    if period not in QUANT_PERIODS:
+        raise RuntimeError("Unsupported candle period")
+    limit = max(50, min(500, int(limit or 240)))
+    token = symbol.split("/", 1)[0]
+    url = (
+        "https://arbitrum-api.gmxinfra.io/prices/candles"
+        f"?tokenSymbol={quote(token)}&period={quote(period)}&limit={limit}"
+    )
+    req = Request(
+        url,
+        headers={"Accept": "application/json", "User-Agent": "MylesDashboardBridge/1.7"},
+        method="GET",
+    )
+    try:
+        with urlopen(req, timeout=12) as resp:
+            raw = json.loads(resp.read().decode("utf-8"))
+    except Exception as exc:
+        raise RuntimeError(f"GMX candle request failed: {exc}")
+    rows = raw if isinstance(raw, list) else raw.get("candles", []) if isinstance(raw, dict) else []
+    candles = []
+    for row in rows:
+        try:
+            if isinstance(row, list) and len(row) >= 5:
+                ts, op, hi, lo, cl = row[:5]
+            elif isinstance(row, dict):
+                ts, op, hi, lo, cl = row.get("timestamp"), row.get("open"), row.get("high"), row.get("low"), row.get("close")
+            else:
+                continue
+            item = {
+                "timestamp": int(float(ts)),
+                "open": float(op),
+                "high": float(hi),
+                "low": float(lo),
+                "close": float(cl),
+            }
+            if item["timestamp"] > 0 and min(item["open"], item["high"], item["low"], item["close"]) > 0:
+                candles.append(item)
+        except Exception:
+            continue
+    candles.sort(key=lambda x: x["timestamp"])
+    if len(candles) < 2:
+        raise RuntimeError("GMX returned insufficient candle data")
+    return {
+        "ok": True,
+        "symbol": symbol,
+        "period": period,
+        "source": "GMX Oracle /prices/candles",
+        "generated_at": now_iso(),
+        "candles": candles,
+    }
+
+
+def clamp_num(value: Any, low: float, high: float, fallback: float) -> float:
+    try:
+        n = float(value)
+    except Exception:
+        n = fallback
+    return max(low, min(high, n))
+
+
+def load_quant_config() -> dict[str, Any]:
+    data = load_json(QUANT_CONFIG)
+    return data if isinstance(data, dict) else {}
+
+
+def save_quant_config(payload: Any) -> dict[str, Any]:
+    current = load_quant_config()
+    incoming = payload.get("config") if isinstance(payload, dict) and isinstance(payload.get("config"), dict) else payload
+    if not isinstance(incoming, dict):
+        raise ValueError("config object required")
+
+    cfg = dict(current)
+    cfg["schema_version"] = 3
+    cfg["venue"] = "GMX"
+    cfg["chain_id"] = 42161
+    timeframe = str(incoming.get("timeframe", cfg.get("timeframe", "1h")))
+    cfg["timeframe"] = timeframe if timeframe in QUANT_PERIODS else "1h"
+    cfg["history_limit"] = int(clamp_num(incoming.get("history_limit", cfg.get("history_limit", 3000)), 300, 10000, 3000))
+    cfg["poll_seconds"] = int(clamp_num(incoming.get("poll_seconds", cfg.get("poll_seconds", 60)), 30, 900, 60))
+    cfg["starting_equity"] = clamp_num(incoming.get("starting_equity", cfg.get("starting_equity", 10000)), 100, 10_000_000, 10000)
+    cfg["bot_budget_usd"] = clamp_num(incoming.get("bot_budget_usd", cfg.get("bot_budget_usd", min(1000, cfg["starting_equity"]))), 1, cfg["starting_equity"], min(1000, cfg["starting_equity"]))
+
+    existing_markets = cfg.get("market_settings") if isinstance(cfg.get("market_settings"), dict) else {}
+    incoming_markets = incoming.get("market_settings") if isinstance(incoming.get("market_settings"), dict) else {}
+    market_settings: dict[str, Any] = {}
+    for symbol in QUANT_MARKETS:
+        old = existing_markets.get(symbol) if isinstance(existing_markets.get(symbol), dict) else {}
+        new = incoming_markets.get(symbol) if isinstance(incoming_markets.get(symbol), dict) else {}
+        strategy = str(new.get("paper_strategy", old.get("paper_strategy", "trend_momentum")))
+        if strategy not in {"trend_momentum", "mean_reversion"}:
+            strategy = "trend_momentum"
+        market_settings[symbol] = {
+            "enabled": bool(new.get("enabled", old.get("enabled", True))),
+            "paper_strategy": strategy,
+            "auto_trade_enabled": bool(new.get("auto_trade_enabled", old.get("auto_trade_enabled", True))),
+        }
+    if not any(v["enabled"] for v in market_settings.values()):
+        raise ValueError("At least one research market must remain enabled")
+    cfg["market_settings"] = market_settings
+
+    risk_old = cfg.get("risk") if isinstance(cfg.get("risk"), dict) else {}
+    risk_new = incoming.get("risk") if isinstance(incoming.get("risk"), dict) else {}
+    cfg["risk"] = {
+        "max_risk_per_trade_pct": clamp_num(risk_new.get("max_risk_per_trade_pct", risk_old.get("max_risk_per_trade_pct", .5)), .05, 5, .5),
+        "max_notional_leverage": clamp_num(risk_new.get("max_notional_leverage", risk_old.get("max_notional_leverage", 1.5)), .1, 5, 1.5),
+        "stop_loss_pct": clamp_num(risk_new.get("stop_loss_pct", risk_old.get("stop_loss_pct", 1.5)), .25, 15, 1.5),
+        "take_profit_pct": clamp_num(risk_new.get("take_profit_pct", risk_old.get("take_profit_pct", 3)), .25, 40, 3),
+        "max_daily_loss_pct": clamp_num(risk_new.get("max_daily_loss_pct", risk_old.get("max_daily_loss_pct", 2)), .25, 20, 2),
+        "max_drawdown_pct": clamp_num(risk_new.get("max_drawdown_pct", risk_old.get("max_drawdown_pct", 8)), .5, 40, 8),
+        "max_concurrent_positions": int(clamp_num(risk_new.get("max_concurrent_positions", risk_old.get("max_concurrent_positions", 2)), 1, 5, 2)),
+        "max_market_allocation_pct": clamp_num(risk_new.get("max_market_allocation_pct", risk_old.get("max_market_allocation_pct", 35)), 5, 100, 35),
+    }
+
+    costs_old = cfg.get("research_costs") if isinstance(cfg.get("research_costs"), dict) else {}
+    costs_new = incoming.get("research_costs") if isinstance(incoming.get("research_costs"), dict) else {}
+    cfg["research_costs"] = {
+        "position_fee_bps_per_side": clamp_num(costs_new.get("position_fee_bps_per_side", costs_old.get("position_fee_bps_per_side", 6)), 0, 100, 6),
+        "slippage_bps_per_side": clamp_num(costs_new.get("slippage_bps_per_side", costs_old.get("slippage_bps_per_side", 5)), 0, 300, 5),
+        "impact_bps_per_side": clamp_num(costs_new.get("impact_bps_per_side", costs_old.get("impact_bps_per_side", 20)), 0, 1000, 20),
+        "holding_cost_bps_per_day": clamp_num(costs_new.get("holding_cost_bps_per_day", costs_old.get("holding_cost_bps_per_day", 5)), 0, 300, 5),
+    }
+
+    val_old = cfg.get("validation") if isinstance(cfg.get("validation"), dict) else {}
+    val_new = incoming.get("validation") if isinstance(incoming.get("validation"), dict) else {}
+    cfg["validation"] = {
+        "min_trades": int(clamp_num(val_new.get("min_trades", val_old.get("min_trades", 12)), 1, 500, 12)),
+        "max_drawdown_pct": clamp_num(val_new.get("max_drawdown_pct", val_old.get("max_drawdown_pct", 12)), 1, 60, 12),
+        "min_walk_forward_positive_pct": clamp_num(val_new.get("min_walk_forward_positive_pct", val_old.get("min_walk_forward_positive_pct", 50)), 0, 100, 50),
+        "min_base_return_pct": clamp_num(val_new.get("min_base_return_pct", val_old.get("min_base_return_pct", 0)), -100, 500, 0),
+        "min_stress_return_pct": clamp_num(val_new.get("min_stress_return_pct", val_old.get("min_stress_return_pct", -3)), -100, 500, -3),
+        "stress_cost_multiplier": clamp_num(val_new.get("stress_cost_multiplier", val_old.get("stress_cost_multiplier", 2.5)), 1, 10, 2.5),
+    }
+
+    paper_old = cfg.get("paper") if isinstance(cfg.get("paper"), dict) else {}
+    paper_new = incoming.get("paper") if isinstance(incoming.get("paper"), dict) else {}
+    cfg["paper"] = {
+        "enabled": bool(paper_new.get("enabled", paper_old.get("enabled", True))),
+        "auto_trading_enabled": bool(paper_new.get("auto_trading_enabled", paper_old.get("auto_trading_enabled", True))),
+        "emergency_stop": bool(paper_new.get("emergency_stop", paper_old.get("emergency_stop", False))),
+        "bot_budget_usd": cfg["bot_budget_usd"],
+    }
+    cfg["strategies"] = {"trend_momentum": {"enabled": True}, "mean_reversion": {"enabled": True}}
+    cfg["live_execution"] = {
+        "enabled": False,
+        "signing_enabled": False,
+        "reason": "Live execution remains hard-locked until owner review, forward-paper validation, and a dedicated execution wallet are complete.",
+    }
+    QUANT_CONFIG.parent.mkdir(parents=True, exist_ok=True)
+    tmp = QUANT_CONFIG.with_suffix(".json.tmp")
+    tmp.write_text(json.dumps(cfg, indent=2), encoding="utf-8")
+    tmp.replace(QUANT_CONFIG)
+    return cfg
+
+
+def start_quant_once(backtest_only: bool = False) -> int | None:
+    if not QUANT_SCRIPT.is_file():
+        return None
+    node = shutil.which("node") or shutil.which("node.exe")
+    if not node:
+        return None
+    args = [node, str(QUANT_SCRIPT), "--backtest-only" if backtest_only else "--once"]
+    proc = subprocess.Popen(
+        args, cwd=str(QUANT_DIR),
+        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+        creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+    )
+    return proc.pid
+
+
+def run_quant_manual(payload: dict[str, Any]) -> dict[str, Any]:
+    if not QUANT_SCRIPT.is_file():
+        raise RuntimeError("Quant service is not installed")
+    node = shutil.which("node") or shutil.which("node.exe")
+    if not node:
+        raise RuntimeError("Node.js is not available")
+    raw = json.dumps(payload, separators=(",", ":"))
+    proc = subprocess.run(
+        [node, str(QUANT_SCRIPT), "--manual-order", raw],
+        cwd=str(QUANT_DIR), capture_output=True, text=True, timeout=150,
+        creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+    )
+    lines = [x.strip() for x in (proc.stdout or "").splitlines() if x.strip()]
+    if proc.returncode != 0:
+        detail = (proc.stderr or "").strip()
+        try:
+            err = json.loads(detail.splitlines()[-1]) if detail else {}
+            if isinstance(err, dict) and err.get("error"):
+                detail = str(err["error"])
+        except Exception:
+            pass
+        raise RuntimeError(detail or f"Quant manual action failed with exit code {proc.returncode}")
+    if not lines:
+        raise RuntimeError("Quant manual action returned no response")
+    try:
+        result = json.loads(lines[-1])
+    except Exception as exc:
+        raise RuntimeError(f"Quant manual action returned invalid JSON: {exc}")
+    if not isinstance(result, dict) or not result.get("ok"):
+        raise RuntimeError(str(result.get("error") if isinstance(result, dict) else result))
+    return result
+
+
+def run_live_cli(flag: str, payload: dict[str, Any] | None = None, timeout: int = 180) -> dict[str, Any]:
+    if not LIVE_SCRIPT.is_file():
+        raise RuntimeError("GMX live adapter is not installed")
+    node = shutil.which("node") or shutil.which("node.exe")
+    if not node:
+        raise RuntimeError("Node.js is not available")
+    args = [node, str(LIVE_SCRIPT), flag]
+    if payload is not None:
+        args.append(json.dumps(payload, separators=(",", ":")))
+    proc = subprocess.run(
+        args, cwd=str(QUANT_DIR), capture_output=True, text=True, timeout=timeout,
+        creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+    )
+    out_lines = [x.strip() for x in (proc.stdout or "").splitlines() if x.strip()]
+    err_lines = [x.strip() for x in (proc.stderr or "").splitlines() if x.strip()]
+    raw = out_lines[-1] if out_lines else (err_lines[-1] if err_lines else "")
+    try:
+        result = json.loads(raw) if raw else {}
+    except Exception:
+        result = {"ok": False, "error": raw or f"Live adapter exit {proc.returncode}"}
+    if proc.returncode != 0 or not isinstance(result, dict) or result.get("ok") is False:
+        raise RuntimeError(str(result.get("error") if isinstance(result, dict) else raw) or f"Live adapter exit {proc.returncode}")
+    return result
+
+
+def live_status() -> dict[str, Any]:
+    cached = load_json(LIVE_STATUS)
+    try:
+        if isinstance(cached, dict) and LIVE_STATUS.is_file() and (time.time() - LIVE_STATUS.stat().st_mtime) < 25:
+            return cached
+    except Exception:
+        pass
+    try:
+        return run_live_cli("--status", timeout=45)
+    except Exception as exc:
+        if isinstance(cached, dict):
+            return {**cached, "ok": False, "stale": True, "error": str(exc)}
+        return {"ok": False, "version": "0.6.2", "setup_complete": False, "armed": False, "error": str(exc)}
+
+
+def system_metrics() -> dict[str, Any]:
+    out: dict[str, Any] = {}
+    try:
+        usage = shutil.disk_usage(ROOT.anchor or str(ROOT))
+        out["disk_free_gb"] = round(usage.free / (1024 ** 3), 1)
+        out["disk_total_gb"] = round(usage.total / (1024 ** 3), 1)
+    except Exception:
+        pass
+    try:
+        import psutil  # type: ignore
+        out["cpu_percent"] = psutil.cpu_percent(interval=0.15)
+        vm = psutil.virtual_memory()
+        out["memory_percent"] = vm.percent
+        out["memory_used_gb"] = round(vm.used / (1024 ** 3), 1)
+        out["memory_total_gb"] = round(vm.total / (1024 ** 3), 1)
+        out["uptime_seconds"] = int(time.time() - psutil.boot_time())
+    except Exception:
+        pass
+    status, tags = http_json("http://127.0.0.1:11434/api/tags", timeout=2.0)
+    if status == 200 and isinstance(tags, dict):
+        models = tags.get("models") or []
+        if isinstance(models, list):
+            out["ollama_models"] = [m.get("name") if isinstance(m, dict) else str(m) for m in models][:20]
+            if out["ollama_models"]:
+                out["model"] = out["ollama_models"][0]
+    return out
+
+
+def http_json(url: str, timeout: float = 5.0) -> tuple[int, Any]:
+    req = Request(url, headers={"Accept": "application/json", "User-Agent": "MylesDashboardBridge/1.0"})
+    try:
+        with urlopen(req, timeout=timeout) as resp:
+            raw = resp.read()
+            return resp.status, json.loads(raw.decode("utf-8")) if raw else {}
+    except Exception as exc:
+        return 599, {"error": str(exc)}
+
+
+def normalize_jobs(payload: Any) -> list[dict[str, Any]]:
+    if isinstance(payload, list):
+        return [x for x in payload if isinstance(x, dict)]
+    if isinstance(payload, dict):
+        for key in ("jobs", "items", "tasks"):
+            value = payload.get(key)
+            if isinstance(value, list):
+                return [x for x in value if isinstance(x, dict)]
+    return []
+
+
+def build_status() -> dict[str, Any]:
+    base = find_runtime_status()
+    if not isinstance(base, dict):
+        base = {}
+    result = dict(base)
+    result.setdefault("schema_version", 4)
+    result["generated_at"] = now_iso()
+
+    health_code, health = core_json("/health", timeout=4.0)
+    if not isinstance(health, dict):
+        health = {}
+    existing_myles = result.get("myles") if isinstance(result.get("myles"), dict) else {}
+    myles = dict(existing_myles)
+    myles["online"] = health_code == 200 and health.get("ok", True) is not False
+    if health.get("version"):
+        myles["version"] = health["version"]
+    if health.get("status"):
+        myles["status"] = health["status"]
+    result["myles"] = myles
+    if health.get("status") and not result.get("status"):
+        result["status"] = health["status"]
+    # Publish the actual low-latency state so the dashboard's Game Mode control
+    # reflects the runtime profile, not a stale snapshot.
+    if "light_mode" in health:
+        result["game_mode"] = bool(health.get("light_mode"))
+
+    jobs_code, jobs_payload = core_json("/api/jobs", timeout=4.0)
+    jobs = normalize_jobs(jobs_payload) if jobs_code == 200 else []
+    if jobs:
+        running = next((summarize_job(j) for j in jobs if str(j.get("state", "")).lower() in {"running", "active", "working"}), None)
+        pending = [summarize_job(j) for j in jobs if str(j.get("state", "")).lower() in {"pending", "queued", "waiting"}]
+        completed = [summarize_job(j) for j in jobs if str(j.get("state", "")).lower() in {"completed", "done", "success"}]
+        failed = [summarize_job(j) for j in jobs if str(j.get("state", "")).lower() in {"failed", "error", "blocked"}]
+        if running:
+            result["current_task"] = result.get("current_task") or running
+        result["queue"] = pending[:30]
+        result["recent_completed"] = sorted(completed, key=lambda j: str(j.get("updated_at") or j.get("completed_at") or j.get("created_at") or ""), reverse=True)[:30]
+        result["recent_failures"] = sorted(failed, key=lambda j: str(j.get("updated_at") or j.get("created_at") or ""), reverse=True)[:20]
+
+    # Pull live public/runtime state directly from core when available so the
+    # dashboard does not depend on GitHub snapshots for owner controls.
+    public_code, public_payload = core_json("/api/public-status", timeout=4.0)
+    if public_code == 200 and isinstance(public_payload, dict):
+        for key in ("continuous_program", "current_task", "queue", "game_mode", "activity", "model", "runtime"):
+            if key in public_payload:
+                value = public_payload[key]
+                if key == "current_task" and isinstance(value, dict):
+                    value = summarize_job(value)
+                elif key == "queue" and isinstance(value, list):
+                    value = [summarize_job(j) for j in value]
+                result[key] = value
+
+    capabilities_code, capabilities_payload = core_json("/api/capabilities", timeout=6.0)
+    capability_payload_is_useful = False
+    if isinstance(capabilities_payload, list):
+        capability_payload_is_useful = bool(capabilities_payload)
+    elif isinstance(capabilities_payload, dict):
+        capability_payload_is_useful = any(
+            bool(capabilities_payload.get(key))
+            for key in ("capabilities", "tools", "items", "providers", "checks")
+        )
+    if capabilities_code == 200 and capability_payload_is_useful:
+        result["capabilities"] = capabilities_payload
+    else:
+        # Older cores do not expose /api/capabilities.  The dashboard must
+        # still show the real reachable surfaces instead of an empty card.
+        # These are derived from the checks above and local installed files;
+        # no capability is reported as working merely because it is named.
+        node_ready = bool(shutil.which("node") or shutil.which("node.exe"))
+        quant_ready = QUANT_SCRIPT.is_file() and node_ready
+        result["capabilities"] = [
+            {
+                "name": "Myles core API",
+                "status": "working" if health_code == 200 else "offline",
+                "detail": "Health and owner runtime endpoints",
+            },
+            {
+                "name": "Tasks and tool routing",
+                "status": "working" if jobs_code == 200 else "offline",
+                "detail": "Queue, current work, and completion history",
+            },
+            {
+                "name": "Quant paper bot",
+                "status": "ready" if quant_ready else "unavailable",
+                "detail": "Paper configuration and simulated execution",
+            },
+            {
+                "name": "Automatic backtests",
+                "status": "ready" if quant_ready else "unavailable",
+                "detail": "Fresh strategy validation from the Trading Bot page",
+            },
+            {
+                "name": "GMX market data",
+                "status": "ready" if quant_ready else "unavailable",
+                "detail": "Read-only market candles; live money remains locked",
+            },
+            {
+                "name": "Phone chat bridge",
+                "status": "working" if TOKEN else "pair required",
+                "detail": "One-time pairing stores the phone authorization locally",
+            },
+        ]
+
+    result["system"] = {**(result.get("system") if isinstance(result.get("system"), dict) else {}), **system_metrics()}
+    trading = find_trading_data()
+    if trading:
+        result["trading"] = trading
+    result.setdefault("bridge", {})
+    if isinstance(result["bridge"], dict):
+        result["bridge"]["online"] = True
+        result["bridge"]["local_port"] = PORT
+    if isinstance(result.get("current_task"), dict):
+        result["current_task"] = summarize_job(result["current_task"])
+    if isinstance(result.get("queue"), list):
+        result["queue"] = [summarize_job(j) for j in result["queue"]]
+    return result
+
+
+def authorized(handler: BaseHTTPRequestHandler) -> bool:
+    if not TOKEN:
+        return False
+    auth = handler.headers.get("Authorization", "")
+    alt = handler.headers.get("X-Myles-Token", "")
+    supplied = auth[7:].strip() if auth.lower().startswith("bearer ") else alt.strip()
+    return bool(supplied) and constant_time_equal(supplied, TOKEN)
+
+
+def constant_time_equal(a: str, b: str) -> bool:
+    if len(a) != len(b):
+        return False
+    result = 0
+    for x, y in zip(a.encode(), b.encode()):
+        result |= x ^ y
+    return result == 0
+
+
+def rate_ok(client: str, is_post: bool) -> bool:
+    limit = POST_LIMIT if is_post else GET_LIMIT
+    now = time.monotonic()
+    with RATE_LOCK:
+        q = RATE[client]
+        while q and q[0] < now - RATE_WINDOW:
+            q.popleft()
+        if len(q) >= limit:
+            return False
+        q.append(now)
+        return True
+
+
+def send_to_myles(text: str) -> tuple[int, Any, str]:
+    candidates = [
+        # Native Myles owner-message ingress. This is the same core path used
+        # by local console/dashboard input and ultimately handle_owner_message().
+        ("/api/send", {"text": text, "source": "dashboard"}),
+        # Compatibility fallbacks for older experimental builds.
+        ("/api/messages", {"message": text, "text": text, "source": "dashboard"}),
+        ("/api/chat", {"message": text, "text": text, "source": "dashboard"}),
+        ("/chat", {"message": text, "text": text, "source": "dashboard"}),
+    ]
+    diagnostics = []
+    for path, body in candidates:
+        code, payload = core_json(path, method="POST", body=body, timeout=90.0)
+        diagnostics.append(f"{path}:{code}")
+        if 200 <= code < 300:
+            return code, payload, path
+        if code not in {400, 404, 405, 415, 422, 599}:
+            return code, payload, path
+    return 502, {"error": "Myles did not expose a compatible dashboard chat POST route", "attempts": diagnostics}, ""
+
+
+class Handler(BaseHTTPRequestHandler):
+    server_version = "MylesDashboardBridge/1.8"
+
+    def log_message(self, fmt: str, *args: Any) -> None:
+        line = f"[{now_iso()}] {self.client_address[0]} {fmt % args}\n"
+        try:
+            log = ROOT / "logs" / "dashboard_bridge.log"
+            log.parent.mkdir(parents=True, exist_ok=True)
+            with log.open("a", encoding="utf-8") as f:
+                f.write(line)
+        except Exception:
+            pass
+
+    def cors(self) -> None:
+        origin = self.headers.get("Origin", "")
+        if origin in ALLOWED_ORIGINS or origin.startswith("http://127.0.0.1:") or origin.startswith("http://localhost:"):
+            self.send_header("Access-Control-Allow-Origin", origin)
+            self.send_header("Vary", "Origin")
+        self.send_header("Access-Control-Allow-Headers", "Authorization, X-Myles-Token, Content-Type")
+        self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+        self.send_header("Cache-Control", "no-store")
+        self.send_header("X-Content-Type-Options", "nosniff")
+        self.send_header("Referrer-Policy", "no-referrer")
+
+    def json_response(self, code: int, payload: Any) -> None:
+        raw = json.dumps(payload, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+        self.send_response(code)
+        self.cors()
+        self.send_header("Content-Type", "application/json; charset=utf-8")
+        self.send_header("Content-Length", str(len(raw)))
+        self.end_headers()
+        self.wfile.write(raw)
+
+    def deny(self, code: int = 401, message: str = "Unauthorized") -> None:
+        self.json_response(code, {"ok": False, "error": message})
+
+    def do_OPTIONS(self) -> None:  # noqa: N802
+        self.send_response(204)
+        self.cors()
+        self.end_headers()
+
+    def preflight(self, is_post: bool = False) -> bool:
+        origin = self.headers.get("Origin", "")
+        if origin and origin not in ALLOWED_ORIGINS and not origin.startswith("http://127.0.0.1:") and not origin.startswith("http://localhost:"):
+            self.deny(403, "Origin not allowed")
+            return False
+        auth = self.headers.get("Authorization", "")
+        alt = self.headers.get("X-Myles-Token", "")
+        supplied = auth[7:].strip() if auth.lower().startswith("bearer ") else alt.strip()
+        identity = self.client_address[0]
+        if supplied:
+            identity = "owner:" + hashlib.sha256(supplied.encode("utf-8")).hexdigest()[:24]
+        if not rate_ok(identity, is_post):
+            self.deny(429, "Rate limit exceeded")
+            return False
+        if not authorized(self):
+            self.deny(401, "Pairing token required")
+            return False
+        return True
+
+    def do_GET(self) -> None:  # noqa: N802
+        if not self.preflight(False):
+            return
+        parsed = urlparse(self.path)
+        path = parsed.path
+        query = parse_qs(parsed.query)
+        if path == "/dashboard/health":
+            # Bridge health is intentionally independent from Myles core health.
+            # A temporary Myles restart must not make Cloudflare/tunnel verification
+            # falsely report that the bridge itself is down.
+            code, health = core_json("/health", timeout=4.0)
+            self.json_response(
+                200,
+                {
+                    "ok": True,
+                    "bridge": {"ok": True, "version": "1.8", "time": now_iso()},
+                    "myles": {
+                        "ok": code == 200 and (not isinstance(health, dict) or health.get("ok", True) is not False),
+                        "http_status": code,
+                        "data": health if isinstance(health, dict) else {},
+                    },
+                },
+            )
+            return
+        if path == "/dashboard/status":
+            self.json_response(200, build_status())
+            return
+        if path == "/dashboard/messages":
+            code, data = core_json("/api/messages", timeout=6.0)
+            if code == 200:
+                self.json_response(200, data)
+            else:
+                self.json_response(502, {"error": "Could not read Myles message history", "core_status": code, "detail": data})
+            return
+        if path == "/dashboard/quant/config":
+            self.json_response(200, {"ok": True, "config": load_quant_config(), "markets": QUANT_MARKETS, "periods": QUANT_PERIODS})
+            return
+        if path == "/dashboard/quant/live/status":
+            self.json_response(200, live_status())
+            return
+        if path == "/dashboard/quant/candles":
+            try:
+                symbol = (query.get("symbol") or ["BTC/USD"])[0]
+                period = (query.get("period") or ["1m"])[0]
+                try:
+                    limit = int((query.get("limit") or ["240"])[0])
+                except Exception:
+                    limit = 240
+                self.json_response(200, fetch_quant_candles(symbol, period, limit))
+            except Exception as exc:
+                self.deny(400, str(exc))
+            return
+        self.deny(404, "Unknown dashboard bridge route")
+
+    def do_POST(self) -> None:  # noqa: N802
+        path = self.path.split("?", 1)[0]
+        if path == "/dashboard/pair":
+            origin = self.headers.get("Origin", "")
+            if origin and origin not in ALLOWED_ORIGINS and not origin.startswith("http://127.0.0.1:") and not origin.startswith("http://localhost:"):
+                self.deny(403, "Origin not allowed")
+                return
+            if not rate_ok(self.client_address[0] + ":pair", True):
+                self.deny(429, "Too many pairing attempts")
+                return
+            try:
+                length = int(self.headers.get("Content-Length", "0"))
+            except ValueError:
+                length = 0
+            if length <= 0 or length > 4096:
+                self.deny(400, "Invalid pairing body")
+                return
+            try:
+                payload = json.loads(self.rfile.read(length).decode("utf-8"))
+            except Exception:
+                self.deny(400, "Invalid JSON")
+                return
+            code = str(payload.get("code") or "").strip().upper() if isinstance(payload, dict) else ""
+            if not PAIR_CODE or not PAIR_EXPIRES or time.time() > PAIR_EXPIRES:
+                self.deny(410, "Pairing code expired. Generate a new code on the tower.")
+                return
+            if not constant_time_equal(code, PAIR_CODE):
+                time.sleep(0.35)
+                self.deny(401, "Pairing code is incorrect")
+                return
+            self.json_response(200, {"ok": True, "token": TOKEN, "paired_at": now_iso()})
+            return
+        if not self.preflight(True):
+            return
+        try:
+            length = int(self.headers.get("Content-Length", "0"))
+        except ValueError:
+            length = 0
+        if length <= 0 or length > MAX_BODY:
+            self.deny(400, "Invalid request body size")
+            return
+        try:
+            payload = json.loads(self.rfile.read(length).decode("utf-8"))
+        except Exception:
+            self.deny(400, "Invalid JSON")
+            return
+        if not isinstance(payload, dict):
+            self.deny(400, "JSON object required")
+            return
+
+        if path == "/dashboard/game-mode":
+            enabled = bool(payload.get("enabled"))
+            code, result = core_json("/api/game-mode", method="POST", body={"enabled": enabled}, timeout=10.0)
+            if code < 200 or code >= 300:
+                self.deny(code if 400 <= code < 600 else 502, str((result or {}).get("error") if isinstance(result, dict) else result))
+                return
+            self.json_response(200, result)
+            return
+
+        if path.startswith("/dashboard/quant/live/"):
+            try:
+                route = path.removeprefix("/dashboard/quant/live/")
+                if route == "setup/begin":
+                    result = run_live_cli("--setup-begin", payload, timeout=90)
+                elif route == "setup/finish":
+                    result = run_live_cli("--setup-finish", payload, timeout=90)
+                elif route == "arm":
+                    result = run_live_cli("--arm", payload, timeout=60)
+                elif route == "order":
+                    result = run_live_cli("--order", payload, timeout=180)
+                elif route == "approve":
+                    result = run_live_cli("--build-approve", timeout=60)
+                elif route == "withdraw":
+                    result = run_live_cli("--build-withdraw", payload, timeout=60)
+                else:
+                    self.deny(404, "Unknown live trading route")
+                    return
+                self.json_response(200, result)
+            except Exception as exc:
+                self.deny(400, str(exc))
+            return
+
+        if path == "/dashboard/quant/config":
+            try:
+                cfg = save_quant_config(payload)
+                pid = start_quant_once(backtest_only=True)
+                self.json_response(200, {"ok": True, "config": cfg, "validation_pid": pid})
+            except Exception as exc:
+                self.deny(400, str(exc))
+            return
+
+        if path == "/dashboard/quant/action":
+            action = str(payload.get("action") or "").strip().lower()
+            try:
+                cfg = load_quant_config()
+                if action == "run_backtests":
+                    pid = start_quant_once(backtest_only=True)
+                    if not pid:
+                        raise RuntimeError("Could not start Quant validation process")
+                    self.json_response(202, {"ok": True, "action": action, "pid": pid})
+                    return
+                if action == "reset_paper":
+                    if QUANT_STATE.exists():
+                        stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                        archived = QUANT_STATE.with_name(f"quant_paper_state_v3_before_reset_{stamp}.json")
+                        QUANT_STATE.replace(archived)
+                    pid = start_quant_once(backtest_only=False)
+                    self.json_response(200, {"ok": True, "action": action, "pid": pid})
+                    return
+                if action in {"emergency_stop", "resume_paper"}:
+                    cfg.setdefault("paper", {})["emergency_stop"] = action == "emergency_stop"
+                    cfg = save_quant_config({"config": cfg})
+                    pid = start_quant_once(backtest_only=False)
+                    self.json_response(200, {"ok": True, "action": action, "pid": pid, "emergency_stop": cfg["paper"]["emergency_stop"]})
+                    return
+                self.deny(400, "Unknown Quant action")
+            except Exception as exc:
+                self.deny(500, str(exc))
+            return
+
+        if path == "/dashboard/quant/manual":
+            try:
+                action = str(payload.get("action") or "").strip().lower()
+                if action not in {"open", "close", "close_all"}:
+                    self.deny(400, "Manual paper action must be open, close, or close_all")
+                    return
+                result = run_quant_manual(payload)
+                self.json_response(200, result)
+            except Exception as exc:
+                self.deny(400, str(exc))
+            return
+
+        if path != "/dashboard/messages":
+            self.deny(404, "Unknown dashboard bridge route")
+            return
+        text = payload.get("message") or payload.get("text") or payload.get("prompt")
+        if not isinstance(text, str) or not text.strip():
+            self.deny(400, "Message text required")
+            return
+        text = text.strip()
+        if len(text) > 6000:
+            self.deny(400, "Message is too long")
+            return
+        code, data, route = send_to_myles(text)
+        if 200 <= code < 300:
+            if isinstance(data, dict):
+                data = {**data, "bridge_route": route}
+            self.json_response(200, data)
+        else:
+            self.json_response(code if code < 600 else 502, data)
+
+
+def main() -> None:
+    global TOKEN, PORT, PAIR_CODE, PAIR_EXPIRES
+    parser = argparse.ArgumentParser(description="Authenticated phone-to-tower bridge for Myles Dashboard")
+    parser.add_argument("--token-file", required=True)
+    parser.add_argument("--port", type=int, default=8790)
+    parser.add_argument("--pair-code-file")
+    args = parser.parse_args()
+    PORT = args.port
+    token_path = Path(args.token_file)
+    TOKEN = token_path.read_text(encoding="utf-8").strip()
+    if len(TOKEN) < 24:
+        raise SystemExit("Pairing token is missing or too short")
+    if args.pair_code_file:
+        try:
+            pair_data = json.loads(Path(args.pair_code_file).read_text(encoding="utf-8"))
+            PAIR_CODE = str(pair_data.get("code") or "").strip().upper()
+            PAIR_EXPIRES = float(pair_data.get("expires_epoch") or 0)
+        except Exception:
+            PAIR_CODE = ""
+            PAIR_EXPIRES = 0.0
+    server = ThreadingHTTPServer((HOST, PORT), Handler)
+    server.daemon_threads = True
+    print(json.dumps({"ok": True, "listen": f"http://{HOST}:{PORT}", "core": CORE, "time": now_iso()}), flush=True)
+    server.serve_forever(poll_interval=0.5)
+
+
+if __name__ == "__main__":
+    main()

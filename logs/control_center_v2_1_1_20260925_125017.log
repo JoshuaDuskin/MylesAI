@@ -1,0 +1,36 @@
+﻿**********************
+Windows PowerShell transcript start
+Start time: 20260925125017
+Username: DESKTOP-CKIIVNP\Joshu
+RunAs User: DESKTOP-CKIIVNP\Joshu
+Configuration Name: 
+Machine: DESKTOP-CKIIVNP (Microsoft Windows NT 10.0.19045.0)
+Host Application: powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File C:\Users\Joshu\OneDrive\Desktop\MYLES_CONTROL_CENTER_V2_1_1_SAFE_FIX\MYLES_CONTROL_CENTER_V2_1_1_FIX\PATCH.ps1
+Process ID: 14236
+PSVersion: 5.1.19041.6456
+PSEdition: Desktop
+PSCompatibleVersions: 1.0, 2.0, 3.0, 4.0, 5.0, 5.1.19041.6456
+BuildVersion: 10.0.19041.6456
+CLRVersion: 4.0.30319.42000
+WSManStackVersion: 3.0
+PSRemotingProtocolVersion: 2.3
+SerializationVersion: 1.1.0.1
+**********************
+
+=======================================================================
+ MYLES CONTROL CENTER v2.1.1 - SAFE GMX + BRIDGE REPAIR
+=======================================================================
+This incremental patch keeps the working V2 dashboard and repairs only Quant + bridge verification.
+Run log: C:\Users\Joshu\AppData\Local\MylesAI\logs\control_center_v2_1_1_20260925_125017.log
+
+=== Backing up only important V2 files ===
+PASS: lightweight rollback backup created at C:\Users\Joshu\AppData\Local\MylesAI\backups\control_center_v2_1_1_20260925_125017
+
+=== Installing Myles Quant v0.2.1 direct GMX HTTP data layer ===
+GMX live-data verification attempt 1/3...
+GMX live-data verification attempt 2/3...
+GMX live-data verification attempt 3/3...
+**********************
+Windows PowerShell transcript end
+End time: 20260925125031
+**********************

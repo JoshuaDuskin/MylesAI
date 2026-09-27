@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MylesAI Public Dashboard</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+    <!-- Header Section -->
+    <header class="dashboard-header">
+        <div class="logo-area">
+            <h1>MylesAI <span class="sub-title">Public Dashboard</span></h1>
+        </div>
+        <div class="status-indicator" id="system-status">
+            <span class="status-dot"></span>
+            <span class="status-text">System Operational</span>
+        </div>
+    </header>
+
+    <!-- Main Content Grid -->
+    <main class="dashboard-grid">
+        
+        <!-- System Health Section -->
+        <section class="health-section">
+            <h2>System Health</h2>
+            
+            <!-- Latency Card -->
+            <article class="card latency-card">
+                <div class="card-icon">⚡</div>
+                <h3>Latency</h3>
+                <div class="metric-value" id="latency-value">42ms</div>
+                <div class="metric-label">Average Response Time</div>
+            </article>
+
+            <!-- Uptime Card -->
+            <article class="card uptime-card">
+                <div class="card-icon">🕒</div>
+                <h3>Uptime</h3>
+                <div class="metric-value" id="uptime-value">99.98%</div>
+                <div class="metric-label">Last 30 Days</div>
+            </article>
+
+            <!-- Data Source Card -->
+            <article class="card datasource-card">
+                <div class="card-icon">📡</div>
+                <h3>Data Source</h3>
+                <div class="metric-value">Live Stream</div>
+                <div class="metric-label">Connected: Primary Node</div>
+            </article>
+        </section>
+
+        <!-- Live Feed Section -->
+        <section class="feed-section">
+            <h2>Live Feed</h2>
+            <div class="feed-container" id="live-feed">
+                <!-- Dynamic content will be injected here via script.js -->
+            </div>
+        </section>
+
+    </main>
+
+    <script src="script.js"></script>
+</body>
+</html>

@@ -1,0 +1,30 @@
+==========================================================================
+ MYLES UNIFIED RUNTIME REPAIR v0.7.5
+==========================================================================
+One click. No manual PowerShell. PineTree is never touched.
+Run log: C:\Users\Joshu\AppData\Local\MylesAI\logs\clean_rebuild_v074_20260926_135915.log
+
+==========================================================================
+ 1. Back up and retire duplicate launchers
+==========================================================================
+PASS: archived stale workspaces outside the live Myles folder
+PASS: backed up current Myles state at C:\Users\Joshu\AppData\Local\MylesAI\backups\clean_rebuild_v074_20260926_135915
+PASS: retired 0 Startup item(s), 0 Run/RunOnce value(s), 0 scheduled task(s), 6 old process(es)
+PASS: archived 2 stale storage/launcher item(s) outside the live Myles folder
+
+==========================================================================
+ 2. Restore the local Myles and trading services
+==========================================================================
+PASS: Myles v9.7.0 healthy / PID 17444
+PASS: Quant v0.6.2 / running / paper
+PASS: GMX v0.6.2 / armed=False / auto=False
+
+==========================================================================
+ 3. Restore the authenticated bridge and public read gateway
+==========================================================================
+PASS: authenticated bridge healthy / 1.8
+PASS: read-only public gateway healthy on 127.0.0.1:8791
+TUNNEL: starting authenticated Tailscale Funnel on 8791...
+TUNNEL: reading Tailscale public URL...
+NOTICE: Tailscale Funnel started but did not report a public ts.net URL
+ERROR: Tailscale was detected but Funnel did not become healthy; see the NOTICE above. Cloudflare fallback was intentionally skipped.

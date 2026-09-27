@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MylesAI System Status</title>
+    <style>
+        :root {
+            --bg-color: #0f172a;
+            --card-bg: #1e293b;
+            --text-primary: #f8fafc;
+            --text-secondary: #94a3b8;
+            --accent: #38bdf8;
+            --success: #22c55e;
+            --warning: #eab308;
+            --danger: #ef4444;
+            --border: #334155;
+        }
+
+        body {
+            font-family: 'Segoe UI', system-ui, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-primary);
+            margin: 0;
+            padding: 2rem;
+            display: flex;
+            justify-content: center;
+            min-height: 100vh;
+        }
+
+        .dashboard {
+            width: 100%;
+            max-width: 800px;
+            background: var(--card-bg);
+            border-radius: 12px;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.5);
+            padding: 2rem;
+            border: 1px solid var(--border);
+        }
+
+        header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 2rem;
+            border-bottom: 1px solid var(--border);
+            padding-bottom: 1rem;
+        }
+
+        h1 { margin: 0; font-size: 1.5rem; letter-spacing: -0.5px; }
+        
+        .toggle-container {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+        }
+
+        .switch {
+            position: relative;
+            display: inline-block;
+            width: 50px;
+            height: 26px;
+        }
+
+        .switch input { opacity: 0; width: 0; height: 0; }
+
+        .slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background-color: var(--border);
+            transition: .4s;
+            border-radius: 34px;
+        }
+
+        .slider:before {
+            position: absolute;
+            content: "";
+            height: 18px;
+            width: 18px;
+            left: 4px;
+            bottom: 4px;
+            background-color: white;
+            transition: .4s;
+            border-radius: 50%;
+        }
+
+        input:checked + .slider { background-color: var(--accent); }
+        input:checked + .slider:before { transform: translateX(24px); }
+
+        .status-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1.5rem;
+            margin-bottom: 2rem;
+        }
+
+        .metric-card {
+            background: rgba(255,255,255,0.03);
+            padding: 1rem;
+            border-radius: 8px;
+            border: 1px solid var(--border);
+            display: flex;
+            flex-direction: column;
+        }
+
+        .metric-label { font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 0.5rem; }
+        .metric-value { font-size: 1.25rem; font-weight: 600; }
+        .metric-unit { font-size: 0.8rem; color: var(--text-secondary); margin-left: 4px; }
+
+        .log-terminal {
+            background: #000;
+            border-radius: 8px;
+            padding: 1rem;
+            height: 200px;
+            overflow-y: auto;
+            font-family: 'Consolas', monospace;
+            font-size: 0.9rem;
+            color: var(--success);
+            border: 1px solid var(--border);
+        }
+
+        .log-entry { margin-bottom: 4px; opacity: 0.8; }
+        .log-error { color: var(--danger); }
+        .log-warn { color: var(--warning); }
+
+        @media (max-width: 600px) {
+            body { padding: 1rem; }
+            .dashboard { padding: 1rem; }
+        }
+    </style>
+</head>
+<body>
+
+<div class="dashboard">
+    <header>
+        <div>
+            <h1>MylesAI System Status</h1>
+            <span style="color: var(--text-secondary); font-size: 0.9rem;">Local Instance • Offline Mode</span>
+        </div>
+        <div class="toggle-container">
+            <label for="liveToggle" class="switch">
+                <span class="slider"></span>
+                <input type="checkbox" id="liveToggle">
+            </label>
+            <span style="font-size: 0.9rem; color: var(--text-secondary);">Simulate Live</span>
+        </div>
+    </header>
+
+    <div class="status-grid">
+        <div class="metric-card">
+            <span class="metric-label">System Load</span>
+            <span class="metric-value" id="loadValue">0<span class="metric-unit">%</span></span>
+        </div>
+        <div class="metric-card">
+            <span class="metric-label">Memory Usage</span>
+            <span class="metric-value" id="memValue">0<span class="metric-unit">MB</span></span>
+        </div>
+        <div class="metric-card">
+            <span class="metric-label">Active Threads</span>
+            <span class="metric-value" id="threadValue">0</span>
+        </div>
+        <div class="metric-card">
+            <span class="metric-label">Uptime</span>
+            <span class="metric-value" id="uptimeValue">0<span class="metric-unit">s</span></span>
+        </div>
+    </div>
+
+    <div class="log-terminal" id="terminal">
+        <!-- Logs injected via JS -->
+    </div>
+</div>
+
+<script>
+    // --- EMBEDDED SYSTEM STATE (Bypassing External Fetch) ---
+    const SYSTEM_STATE = {
+        timestamp: Date.now(),
+        load: 12,
+        memoryMB: 4096,
+        threads: 8,
+        uptimeSeconds: 3450,
+        status: "OPERATIONAL",
+        version: "2.4.1-local",
+        logs: [
+            { time: Date.now() - 10000, msg: "System initialized successfully.", type: "info" },
+            { time: Date.now() - 5000, msg: "Memory pool allocated: 4GB", type: "info" }
+        ]
+    };
+
+    // --- DOM ELEMENTS ---
+    const els = {
+        load: document.getElementById('loadValue'),
+        mem: document.getElementById('memValue'),
+        threads: document.getElementById('threadValue'),
+        uptime: document.getElementById('uptimeValue'),
+        terminal: document.getElementById('terminal'),
+        toggle: document.getElementById('liveToggle')
+    };
+
+    // --- RENDER FUNCTION ---
+    function render() {
+        els.load.innerHTML = `${SYSTEM_STATE.load}<span class="metric-unit">%</span>`;
+        els.mem.innerHTML = `${SYSTEM_STATE.memoryMB}<span class="metric-unit">MB</span>`;
+        els.threads.innerText = SYSTEM_STATE.threads;
+        
+        const now = new Date();
+        const start = new Date(SYSTEM_STATE.timestamp);
+        const diffMs = now - start;
+        els.uptime.innerHTML = `${Math.floor(diffMs / 1000)}<span class="metric-unit">s</span>`;
+
+        // Update terminal if logs exist
+        if (SYSTEM_STATE.logs.length > 0) {
+            const lastLog = SYSTEM_STATE.logs[SYSTEM_STATE.logs.length - 1];
+            const entry = document.createElement('div');
+            entry.className = `log-entry log-${lastLog.type}`;
+            
+            // Format time relative to now
+            const diffSec = Math.floor((Date.now() - lastLog.time) / 1000);
+            const timeStr = diffSec < 60 ? `-${diffSec}s` : `${Math.floor(diffSec/60)}m ago`;
+
+            entry.innerHTML = `<span style="opacity:0.5">[${timeStr}]</span> ${lastLog.msg}`;
+            els.terminal.appendChild(entry);
+            
+            // Keep terminal clean (max 20 lines)
+            if (els.terminal.children.length > 20) {
+                els.terminal.removeChild(els.terminal.firstChild);
+            }
+        }
+    }
+
+    // --- SIMULATION LOOP ---
+    function simulateLive() {
+        if (!els.toggle.checked) return;
+
+        setInterval(() => {
+            // Randomize metrics slightly
+            SYSTEM_STATE.load = Math.max(5, Math.min(95, SYSTEM_STATE.load + (Math.random() * 10 - 5)));
+            SYSTEM_STATE.memoryMB = Math.floor(SYSTEM_STATE.memoryMB + (Math.random() * 20 - 10));
+            SYSTEM_STATE.threads = Math.floor(Math.random() * 16) + 4;
+            
+            // Random log generation
+            if (Math.random() > 0.7) {
+                const msgs = [
+                    "Processing incoming request batch...",
+                    "Garbage collection cycle complete.",
+                    `Network latency check: ${Math.floor(Math.random()*50)}ms`,
+                    "Optimizing memory allocation..."
+                ];
+                SYSTEM_STATE.logs.push({
+                    time: Date.now(),
+                    msg: msgs[Math.floor(Math.random() * msgs.length)],
+                    type: Math.random() > 0.9 ? 'warn' : 'info'
+                });
+            }
+
+            render();
+        }, 1000);
+    }
+
+    // --- INITIALIZATION ---
+    els.toggle.addEventListener('change', () => {
+        if (els.toggle.checked) {
+            simulateLive();
+        } else {
+            // Reset to initial state values on toggle off for clarity
+            SYSTEM_STATE.load = 12;
+            SYSTEM_STATE.memoryMB = 4096;
+            SYSTEM_STATE.threads = 8;
+            SYSTEM_STATE.logs = [
+                { time: Date.now(), msg: "Simulation paused.", type: "info" }
+            ];
+        }
+        render();
+    });
+
+    // Initial Render
+    render();
+
+</script>
+</body>
+</html>

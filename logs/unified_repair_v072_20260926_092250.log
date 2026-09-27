@@ -1,0 +1,25 @@
+==========================================================================
+ MYLES UNIFIED RUNTIME REPAIR v0.7.2
+==========================================================================
+One click. No manual PowerShell. PineTree is never touched.
+Run log: C:\Users\Joshu\AppData\Local\MylesAI\logs\unified_repair_v072_20260926_092250.log
+
+==========================================================================
+ 1. Back up and retire duplicate launchers
+==========================================================================
+PASS: backed up current Myles state at C:\Users\Joshu\AppData\Local\MylesAI\backups\unified_repair_v072_20260926_092250
+PASS: retired 1 Startup item(s), 1 Run/RunOnce value(s), 0 scheduled task(s), 7 old process(es)
+
+==========================================================================
+ 2. Restore the local Myles and trading services
+==========================================================================
+PASS: Myles v9.7.0 healthy / PID 19580
+PASS: Quant v0.6.2 / running / paper
+PASS: GMX v0.6.2 / armed=False / auto=False
+
+==========================================================================
+ 3. Restore the authenticated bridge and public read gateway
+==========================================================================
+PASS: authenticated bridge healthy / 1.8
+
+ERROR: The public dashboard gateway did not become healthy: Health check timed out for http://127.0.0.1:8791/dashboard/health: HTTP Error 502: Bad Gateway

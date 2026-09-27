@@ -1,0 +1,37 @@
+==========================================================================
+ MYLES UNIFIED RUNTIME REPAIR v0.7.5
+==========================================================================
+One click. No manual PowerShell. PineTree is never touched.
+Run log: C:\Users\Joshu\AppData\Local\MylesAI\logs\clean_rebuild_v074_20260926_125700.log
+
+==========================================================================
+ 1. Back up and retire duplicate launchers
+==========================================================================
+PASS: archived stale workspaces outside the live Myles folder
+PASS: backed up current Myles state at C:\Users\Joshu\AppData\Local\MylesAI\backups\clean_rebuild_v074_20260926_125700
+PASS: retired 0 Startup item(s), 1 Run/RunOnce value(s), 0 scheduled task(s), 12 old process(es)
+PASS: archived 2 stale storage/launcher item(s) outside the live Myles folder
+
+==========================================================================
+ 2. Restore the local Myles and trading services
+==========================================================================
+PASS: Myles v9.7.0 healthy / PID 19396
+PASS: Quant v0.6.2 / running / paper
+PASS: GMX v0.6.2 / armed=False / auto=False
+
+==========================================================================
+ 3. Restore the authenticated bridge and public read gateway
+==========================================================================
+PASS: authenticated bridge healthy / 1.8
+PASS: read-only public gateway healthy on 127.0.0.1:8791
+PASS: cloudflared = C:\Program Files (x86)\cloudflared\cloudflared.exe
+NOTICE: public URL appeared on tunnel attempt 1; public health is still warming up
+PASS: public tunnel created: https://diamond-visitors-preferences-peripheral.trycloudflare.com
+NOTICE: tunnel URL created; hidden supervisor will keep checking it
+
+==========================================================================
+ 4. Publish the live dashboard endpoint
+==========================================================================
+PASS: remote bridge.json contains the active public URL and read token
+PASS: GitHub dashboard connection manifest published and verified
+ERROR: name 'index_changed' is not defined

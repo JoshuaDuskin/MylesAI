@@ -1,0 +1,20 @@
+{
+  "version": 4,
+  "canonical": {
+    "owner_ui": "JoshuaDuskin/MylesDashboard",
+    "quant_source": "JoshuaDuskin/trading-dashboard",
+    "live_state": "authenticated tower bridge"
+  },
+  "forbid_duplicate_myles_dashboard_repositories": true,
+  "continuous_remote_github_mutation": false,
+  "legacy_repositories": [
+    "Myles-ControlCenter",
+    "MylesLiveStatus",
+    "M83-dashboard",
+    "my-dashboard",
+    "progress-dashboard",
+    "myles-dashboard",
+    "Myles-AI-Dashboard",
+    "Myles-Ecosystem"
+  ]
+}

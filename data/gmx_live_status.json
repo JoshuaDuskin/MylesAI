@@ -1,0 +1,48 @@
+{
+  "ok": true,
+  "version": "0.6.2",
+  "generated_at": "2026-09-27T05:28:35.901Z",
+  "chain_id": 42161,
+  "venue": "GMX",
+  "mode": "one_click_subaccount",
+  "setup_complete": false,
+  "main_account": null,
+  "subaccount_address": null,
+  "armed": false,
+  "armed_until": 0,
+  "auto_enabled": false,
+  "owner_auth_nonce": 0,
+  "signing_ready": false,
+  "withdrawal_delegated": false,
+  "safety_note": "Trading is delegated to a GMX one-click subaccount. Withdrawals always require the owner wallet signature.",
+  "subaccount_status": null,
+  "usdc": {
+    "address": "0xaf88d065e77c8cC2239327C5EDb3A432268e5831",
+    "balance_raw": "0",
+    "balance": "0",
+    "router_allowance_raw": "0",
+    "router_allowance": "0"
+  },
+  "positions": [],
+  "orders": [],
+  "risk": {
+    "max_margin_usd": 100,
+    "max_order_notional_usd": 250,
+    "max_leverage": 2,
+    "max_open_positions": 2,
+    "min_stop_loss_pct": 0.35,
+    "max_stop_loss_pct": 5,
+    "max_take_profit_pct": 12,
+    "auto_margin_usd": 25,
+    "auto_leverage": 1.5,
+    "auto_stop_loss_pct": 0.75,
+    "auto_take_profit_pct": 1.25
+  },
+  "allowed_symbols": [
+    "BTC/USD",
+    "ETH/USD",
+    "SOL/USD",
+    "XRP/USD",
+    "TAO/USD"
+  ]
+}

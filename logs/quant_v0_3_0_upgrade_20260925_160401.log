@@ -1,0 +1,133 @@
+﻿**********************
+Windows PowerShell transcript start
+Start time: 20260925160401
+Username: DESKTOP-CKIIVNP\Joshu
+RunAs User: DESKTOP-CKIIVNP\Joshu
+Configuration Name: 
+Machine: DESKTOP-CKIIVNP (Microsoft Windows NT 10.0.19045.0)
+Host Application: powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File C:\Users\Joshu\OneDrive\Desktop\MYLES_QUANT_V0_3_0_CONTROL_UPGRADE\myles_quant_v030\PATCH.ps1
+Process ID: 5152
+PSVersion: 5.1.19041.6456
+PSEdition: Desktop
+PSCompatibleVersions: 1.0, 2.0, 3.0, 4.0, 5.0, 5.1.19041.6456
+BuildVersion: 10.0.19041.6456
+CLRVersion: 4.0.30319.42000
+WSManStackVersion: 3.0
+PSRemotingProtocolVersion: 2.3
+SerializationVersion: 1.1.0.1
+**********************
+
+=======================================================================
+ MYLES QUANT v0.3.0 - REAL CONTROLS + PAPER/RESEARCH SEPARATION
+=======================================================================
+This upgrade does NOT enable live trading or signing.
+It replaces the research/paper engine, adds owner controls, and fixes the P&L percentage display.
+Run log: C:\Users\Joshu\AppData\Local\MylesAI\logs\quant_v0_3_0_upgrade_20260925_160401.log
+
+=== Creating rollback backup ===
+PASS: rollback backup created at C:\Users\Joshu\AppData\Local\MylesAI\backups\quant_v0_3_0_20260925_160401
+
+=== Stopping only Quant + dashboard bridge ===
+PASS: Myles core and Cloudflare tunnel were left alone.
+
+=== Installing Myles Quant v0.3.0 ===
+PASS: previous simulated paper state archived; v0.3 will start a fresh clearly labeled simulated account.
+
+PASS: P&L, risk sizing, stop/target and live-lock math invariants passed.
+Running real GMX validation across configured markets...
+{"ok":true,"generated_at":"2026-09-25T21:04:07.250Z","equity":10000,"pnl":0,"positions":0,"backtests":10,"markets":["BTC
+/USD","ETH/USD","SOL/USD","XRP/USD","TAO/USD"],"errors":{}}
+PASS: v0.3.0 telemetry published. GMX marks available: BTC/USD, ETH/USD, SOL/USD, XRP/USD, TAO/USD
+
+=== Installing authenticated Quant controls in the tower bridge ===
+
+PASS: bridge v1.5 supports config, validation, paper reset and emergency-stop routes.
+
+=== Updating the canonical dark dashboard ===
+remote: Enumerating objects: 10, done.
+remote: Counting objects: 100% (10/10), done.
+remote: Compressing objects: 100% (4/4), done.
+remote: Total 8 (delta 4), reused 8 (delta 4), pack-reused 0 (from 0)
+Unpacking objects: 100% (8/8), 7.18 KiB | 272.00 KiB/s, done.
+From https://github.com/JoshuaDuskin/MylesDashboard
+ * branch            main       -> FETCH_HEAD
+   835fa34..1ef14e8  main       -> origin/main
+Already on 'main'
+Your branch is behind 'origin/main' by 2 commits, and can be fast-forwarded.
+  (use "git pull" to update your local branch)
+HEAD is now at 1ef14e8 Update progress dashboard
+
+
+warning: in the working copy of 'AGENTS.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'index.html', LF will be replaced by CRLF the next time Git touches it
+
+[main c171b6d] Add Myles Quant v0.3 trading controls
+ 2 files changed, 54 insertions(+), 421 deletions(-)
+From https://github.com/JoshuaDuskin/MylesDashboard
+ * branch            main       -> FETCH_HEAD
+Current branch main is up to date.
+Enumerating objects: 7, done.
+Counting objects: 100% (7/7), done.
+Delta compression using up to 12 threads
+Compressing objects: 100% (4/4), done.
+Writing objects: 100% (4/4), 4.94 KiB | 1012.00 KiB/s, done.
+Total 4 (delta 3), reused 0 (delta 0), pack-reused 0 (from 0)
+remote: Resolving deltas: 100% (3/3), completed with 3 local objects.
+To https://github.com/JoshuaDuskin/MylesDashboard.git
+   1ef14e8..c171b6d  main -> main
+PASS: trading controls published to the canonical Control Center.
+
+=== Publishing Quant v0.3 source repo ===
+From https://github.com/JoshuaDuskin/trading-dashboard
+ * branch            main       -> FETCH_HEAD
+Already on 'main'
+Your branch is up to date with 'origin/main'.
+HEAD is now at 54e569d Fix GMX live data with Oracle candles endpoint
+
+
+warning: in the working copy of 'README.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'package.json', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'quant_service.mjs', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'quant_config.example.json', LF will be replaced by CRLF the next time Git touches it
+
+[main 0977f54] Upgrade Myles Quant to v0.3.0
+ 4 files changed, 227 insertions(+), 284 deletions(-)
+ create mode 100644 quant_config.example.json
+From https://github.com/JoshuaDuskin/trading-dashboard
+ * branch            main       -> FETCH_HEAD
+Current branch main is up to date.
+Enumerating objects: 10, done.
+Counting objects: 100% (10/10), done.
+Delta compression using up to 12 threads
+Compressing objects: 100% (6/6), done.
+Writing objects: 100% (6/6), 9.58 KiB | 4.79 MiB/s, done.
+Total 6 (delta 1), reused 0 (delta 0), pack-reused 0 (from 0)
+remote: Resolving deltas: 100% (1/1), completed with 1 local object.
+To https://github.com/JoshuaDuskin/trading-dashboard.git
+   54e569d..0977f54  main -> main
+PASS: trading-dashboard source updated.
+
+=== Starting persistent Quant v0.3.0 ===
+PASS: Quant PID 15176 is running; live signing locked=True.
+
+=== Restarting authenticated bridge on the same phone tunnel ===
+PASS: bridge v1.5 PID 11352 is live and Quant controls are authenticated.
+
+=======================================================================
+ MYLES QUANT v0.3.0: COMPLETE
+=======================================================================
+Dashboard:      https://joshuaduskin.github.io/MylesDashboard/
+Account:        SIMULATED FORWARD PAPER (fresh v0.3 state)
+Markets:        BTC/USD, ETH/USD, SOL/USD, XRP/USD, TAO/USD
+Controls:       Configure tab -> markets, strategy, timeframe, risk, stops, costs
+Validation:     base backtest + stressed costs + walk-forward + math invariants
+Emergency stop:available for PAPER positions
+Live money:     LOCKED
+Signing:        DISABLED
+Run log:        C:\Users\Joshu\AppData\Local\MylesAI\logs\quant_v0_3_0_upgrade_20260925_160401.log
+
+Refresh the dashboard on your phone, open Trade -> Configure, and tune paper/research settings there.
+**********************
+Windows PowerShell transcript end
+End time: 20260925160420
+**********************

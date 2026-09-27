@@ -1,0 +1,39 @@
+﻿**********************
+Windows PowerShell transcript start
+Start time: 20260925130911
+Username: DESKTOP-CKIIVNP\Joshu
+RunAs User: DESKTOP-CKIIVNP\Joshu
+Configuration Name: 
+Machine: DESKTOP-CKIIVNP (Microsoft Windows NT 10.0.19045.0)
+Host Application: powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File C:\Users\Joshu\OneDrive\Desktop\MYLES_CONTROL_CENTER_V2_1_3_FINALIZE\MYLES_CONTROL_CENTER_V2_1_3_FINALIZE\PATCH.ps1
+Process ID: 4256
+PSVersion: 5.1.19041.6456
+PSEdition: Desktop
+PSCompatibleVersions: 1.0, 2.0, 3.0, 4.0, 5.0, 5.1.19041.6456
+BuildVersion: 10.0.19041.6456
+CLRVersion: 4.0.30319.42000
+WSManStackVersion: 3.0
+PSRemotingProtocolVersion: 2.3
+SerializationVersion: 1.1.0.1
+**********************
+
+=======================================================================
+ MYLES CONTROL CENTER v2.1.3 - FINALIZE QUANT + PHONE BRIDGE
+=======================================================================
+GMX Oracle data already passed in v2.1.2. This patch fixes Git handling and finishes startup/bridge/chat verification.
+Run log: C:\Users\Joshu\AppData\Local\MylesAI\logs\control_center_v2_1_3_20260925_130911.log
+
+=== Backing up important current files ===
+PASS: rollback backup created at C:\Users\Joshu\AppData\Local\MylesAI\backups\control_center_v2_1_3_20260925_130911
+
+=== Verifying Myles Quant v0.2.2 ===
+GMX Oracle live-data verification...
+PASS: live GMX markets verified: BTC/USD, ETH/USD
+
+=== Repairing Git identity ===
+PASS: local Myles-owned repos now use JoshuaDuskin Git identity.
+
+=== Publishing corrected Quant source ===
+PASS: corrected Quant source is synced to GitHub.
+
+=== Starting persistent Myles Quant service ===

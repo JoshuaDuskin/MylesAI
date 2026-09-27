@@ -1,0 +1,19 @@
+{
+  "created_at": "2026-09-27T00:26:58-05:00",
+  "from_version": "9.7.0",
+  "description": "Refined conversational handling for mixed chat/task scenarios",
+  "files": [
+    "myles_common.py",
+    "myles_runtime_v9.py",
+    "myles_capabilities.py",
+    "myles_quick.py",
+    "myles_tools.py",
+    "job_worker.py",
+    "myles_core.py",
+    "myles_console.py",
+    "configure_telegram.py",
+    "restart_helper.py",
+    "self_test.py",
+    "README.txt"
+  ]
+}

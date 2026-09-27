@@ -1,0 +1,72 @@
+=======================================================================
+ MYLES FINAL RUNTIME REPAIR v0.6.8
+=======================================================================
+One-click repair. No manual PowerShell. PineTree is never touched.
+Run log: C:\Users\Joshu\AppData\Local\MylesAI\logs\final_runtime_repair_v068_20260925_231805.log
+
+=======================================================================
+ 1. Backup current Myles runtime state
+=======================================================================
+PASS: backup created at C:\Users\Joshu\AppData\Local\MylesAI\backups\final_runtime_repair_v068_20260925_231805
+
+=======================================================================
+ 2. Verify/install runtime dependencies
+=======================================================================
+PASS: Node = C:\Program Files\nodejs\node.exe
+PASS: cloudflared = C:\Program Files (x86)\cloudflared\cloudflared.exe
+
+=======================================================================
+ 3. Start one healthy Myles core
+=======================================================================
+PASS: Myles v9.7.0 healthy / PID 2440
+Continuous improvement is already OFF or not active.
+
+=======================================================================
+ 4. Start Quant + GMX + authenticated dashboard bridge
+=======================================================================
+PASS: local bridge healthy / v1.8
+PASS: Quant 0.6.2 / running / mode paper
+PASS: GMX adapter 0.6.2 / armed=False / auto=False
+
+=======================================================================
+ 5. Install one synced runtime + restore the visible Myles terminal
+=======================================================================
+PASS: hidden runtime supervisor: C:\Users\Joshu\AppData\Roaming\Microsoft\Windows\Start Menu\Programs\Startup\MylesRuntimeStackV068.vbs
+PASS: visible Myles terminal startup: C:\Users\Joshu\AppData\Roaming\Microsoft\Windows\Start Menu\Programs\Startup\MylesTerminal.cmd
+PASS: manual terminal launcher: C:\Users\Joshu\AppData\Local\MylesAI\OPEN_MYLES_TERMINAL.cmd
+PASS: visible Myles owner terminal launched and connected to the same local runtime
+
+=======================================================================
+ 6. Restore self-healing public phone/dashboard tunnel
+=======================================================================
+PASS: Cloudflare endpoint created: https://mud-spirit-sending-purposes.trycloudflare.com
+Public verification: PENDING / attempt 1: hostname published but local verification is pending (<urlopen error [Errno 11001] getaddrinfo failed>)
+
+=======================================================================
+ 7. Publish the one canonical dashboard and re-lock it
+=======================================================================
+PASS: canonical dashboard published and verified at 23a3fde4ce7740a37393229a831e950f4bd74472
+PASS: stale GitHub status fallback removed; the tower bridge is the runtime truth
+
+=======================================================================
+ 8. End-to-end local verification
+=======================================================================
+
+=======================================================================
+ MYLES + TRADING STACK: HEALTHY
+=======================================================================
+Myles core:       HEALTHY / v9.7.0
+Ollama/model:      existing Myles runtime retained
+Quant bot:         RUNNING / v0.6.2 / paper
+GMX adapter:       v0.6.2 / LIVE DISARMED=True
+Local bridge:      HEALTHY / 127.0.0.1:8790
+Public bridge:     https://mud-spirit-sending-purposes.trycloudflare.com
+Dashboard:         https://joshuaduskin.github.io/MylesDashboard/
+Owner terminal:    INSTALLED / same Myles runtime
+Dashboard writes:  OWNER-LOCKED (supervisor may update bridge.json only)
+Continuous work:   OFF for stability
+PineTree:          UNTOUCHED
+
+Live GMX money execution was NOT enabled. Wallet setup/arming remains an explicit owner action in the dashboard.
+Run log: C:\Users\Joshu\AppData\Local\MylesAI\logs\final_runtime_repair_v068_20260925_231805.log
+Dashboard publish: VERIFIED / 23a3fde4ce7740a37393229a831e950f4bd74472

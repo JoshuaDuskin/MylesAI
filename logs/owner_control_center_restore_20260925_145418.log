@@ -1,0 +1,98 @@
+﻿**********************
+Windows PowerShell transcript start
+Start time: 20260925145418
+Username: DESKTOP-CKIIVNP\Joshu
+RunAs User: DESKTOP-CKIIVNP\Joshu
+Configuration Name: 
+Machine: DESKTOP-CKIIVNP (Microsoft Windows NT 10.0.19045.0)
+Host Application: powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File C:\Users\Joshu\OneDrive\Desktop\MYLES_OWNER_CONTROL_CENTER_RESTORE\MYLES_CONTROL_CENTER_OWNER_RESTORE\PATCH.ps1
+Process ID: 8944
+PSVersion: 5.1.19041.6456
+PSEdition: Desktop
+PSCompatibleVersions: 1.0, 2.0, 3.0, 4.0, 5.0, 5.1.19041.6456
+BuildVersion: 10.0.19041.6456
+CLRVersion: 4.0.30319.42000
+WSManStackVersion: 3.0
+PSRemotingProtocolVersion: 2.3
+SerializationVersion: 1.1.0.1
+**********************
+
+=======================================================================
+ MYLES OWNER CONTROL CENTER - DARK DASHBOARD RESTORE
+=======================================================================
+Restores the canonical dark Control Center, full Trading Bot workspace, live tracking, chat ingress, tool health, and local Git guardrails.
+Run log: C:\Users\Joshu\AppData\Local\MylesAI\logs\owner_control_center_restore_20260925_145418.log
+
+=== Preparing canonical dashboard repository ===
+PASS: rollback backup created at C:\Users\Joshu\AppData\Local\MylesAI\backups\owner_control_center_restore_20260925_145418
+From https://github.com/JoshuaDuskin/MylesDashboard
+ * branch            main       -> FETCH_HEAD
+Already on 'main'
+Your branch is up to date with 'origin/main'.
+From https://github.com/JoshuaDuskin/MylesDashboard
+ * branch            main       -> FETCH_HEAD
+Already up to date.
+
+=== Installing dark Control Center ===
+PASS: dark dashboard has no mock data, light mode, or merge markers.
+
+=== Installing dashboard protection ===
+
+
+
+warning: in the working copy of 'index.html', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.githooks/pre-commit', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.githooks/pre-push', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'AGENTS.md', LF will be replaced by CRLF the next time Git touches it
+
+[main 835fa34] Restore owner Control Center and protect canonical dashboard
+ 4 files changed, 428 insertions(+), 452 deletions(-)
+ create mode 100644 .githooks/pre-commit
+ create mode 100644 .githooks/pre-push
+ create mode 100644 AGENTS.md
+PASS: local Git hooks now reject mock/light/conflicted dashboard pushes from this canonical clone.
+
+=== Upgrading live tower bridge ===
+
+PASS: bridge v1.4 is healthy locally (PID 1808).
+
+=== Verifying native Myles chat ===
+PASS: dashboard chat reaches Myles through native POST /api/send.
+
+=== Checking public phone tunnel ===
+PASS: public phone bridge is healthy at https://shaft-delete-toolkit-counties.trycloudflare.com
+
+=== Publishing canonical dashboard ===
+
+
+From https://github.com/JoshuaDuskin/MylesDashboard
+ * branch            main       -> FETCH_HEAD
+Current branch main is up to date.
+Enumerating objects: 9, done.
+Counting objects: 100% (9/9), done.
+Delta compression using up to 12 threads
+Compressing objects: 100% (7/7), done.
+Writing objects: 100% (7/7), 22.38 KiB | 5.60 MiB/s, done.
+Total 7 (delta 0), reused 0 (delta 0), pack-reused 0 (from 0)
+To https://github.com/JoshuaDuskin/MylesDashboard.git
+   5fc2697..835fa34  main -> main
+PASS: canonical Control Center pushed to JoshuaDuskin/MylesDashboard.
+
+=======================================================================
+ MYLES OWNER CONTROL CENTER: RESTORED
+=======================================================================
+Dashboard:   https://joshuaduskin.github.io/MylesDashboard/
+Bridge:      https://shaft-delete-toolkit-counties.trycloudflare.com
+Pair code:   J5VDG42T
+Dark mode:   LOCKED ON
+Mock data:   NONE
+Trading Bot: FULL WORKSPACE
+Live money:  LOCKED until real execution backend is explicitly configured
+Chat route:  POST /api/send
+Tool health: LIVE CAPABILITY FEED when Myles publishes it
+Run log:     C:\Users\Joshu\AppData\Local\MylesAI\logs\owner_control_center_restore_20260925_145418.log
+
+**********************
+Windows PowerShell transcript end
+End time: 20260925145505
+**********************

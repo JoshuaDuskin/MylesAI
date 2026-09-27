@@ -1,0 +1,125 @@
+﻿**********************
+Windows PowerShell transcript start
+Start time: 20260925173102
+Username: DESKTOP-CKIIVNP\Joshu
+RunAs User: DESKTOP-CKIIVNP\Joshu
+Configuration Name: 
+Machine: DESKTOP-CKIIVNP (Microsoft Windows NT 10.0.19045.0)
+Host Application: powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File C:\Users\Joshu\OneDrive\Desktop\MYLES_QUANT_V0_5_0_SCALP_TERMINAL\MYLES_QUANT_V0_5_0_SCALP_TERMINAL\PATCH.ps1
+Process ID: 4056
+PSVersion: 5.1.19041.6456
+PSEdition: Desktop
+PSCompatibleVersions: 1.0, 2.0, 3.0, 4.0, 5.0, 5.1.19041.6456
+BuildVersion: 10.0.19041.6456
+CLRVersion: 4.0.30319.42000
+WSManStackVersion: 3.0
+PSRemotingProtocolVersion: 2.3
+SerializationVersion: 1.1.0.1
+**********************
+
+=======================================================================
+ MYLES QUANT v0.5.0 - SCALP TERMINAL + MANUAL ORDER FIX
+=======================================================================
+This upgrade does NOT enable live trading or signing.
+It fixes the manual paper-order path and adds the live-data Scalp Terminal. Live trading remains locked.
+Run log: C:\Users\Joshu\AppData\Local\MylesAI\logs\quant_v0_5_0_upgrade_20260925_173101.log
+
+=== Creating rollback backup ===
+PASS: rollback backup created at C:\Users\Joshu\AppData\Local\MylesAI\backups\quant_v0_5_0_20260925_173101
+
+=== Stopping only Quant + dashboard bridge ===
+PASS: Myles core and Cloudflare tunnel were left alone.
+
+=== Installing Myles Quant v0.5.0 ===
+PASS: current simulated forward-paper account preserved; v0.5 preserves the paper account and fixes manual-order handling without resetting it.
+
+PASS: P&L, risk sizing, stop/target and live-lock math invariants passed.
+Running real GMX validation across configured markets...
+{"ok":true,"generated_at":"2026-09-25T22:31:10.176Z","equity":9970.66,"pnl":-29.34,"positions":2,"backtests":15,"markets
+":["BTC/USD","ETH/USD","SOL/USD","XRP/USD","TAO/USD"],"errors":{}}
+PASS: v0.5.0 telemetry published. GMX marks available: BTC/USD, ETH/USD, SOL/USD, XRP/USD, TAO/USD
+
+=== Installing authenticated Quant controls in the tower bridge ===
+
+PASS: bridge v1.7 supports config, validation, manual orders, GMX candle charts, paper reset and emergency-stop routes.
+
+=== Updating the canonical dark dashboard ===
+From https://github.com/JoshuaDuskin/MylesDashboard
+ * branch            main       -> FETCH_HEAD
+Already on 'main'
+Your branch is up to date with 'origin/main'.
+HEAD is now at e8f18f0 Add Myles Quant v0.4 simple trade controls
+
+
+warning: in the working copy of 'AGENTS.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'index.html', LF will be replaced by CRLF the next time Git touches it
+
+[main a3c8a43] Add Myles Quant v0.5 scalp terminal
+ 2 files changed, 62 insertions(+), 24 deletions(-)
+From https://github.com/JoshuaDuskin/MylesDashboard
+ * branch            main       -> FETCH_HEAD
+Current branch main is up to date.
+Enumerating objects: 7, done.
+Counting objects: 100% (7/7), done.
+Delta compression using up to 12 threads
+Compressing objects: 100% (4/4), done.
+Writing objects: 100% (4/4), 5.21 KiB | 2.60 MiB/s, done.
+Total 4 (delta 2), reused 0 (delta 0), pack-reused 0 (from 0)
+remote: Resolving deltas: 100% (2/2), completed with 2 local objects.
+To https://github.com/JoshuaDuskin/MylesDashboard.git
+   e8f18f0..a3c8a43  main -> main
+PASS: trading controls published to the canonical Control Center.
+
+=== Publishing Quant v0.5 source repo ===
+From https://github.com/JoshuaDuskin/trading-dashboard
+ * branch            main       -> FETCH_HEAD
+Already on 'main'
+Your branch is up to date with 'origin/main'.
+HEAD is now at 375c8a8 Upgrade Myles Quant to v0.4.0
+
+
+warning: in the working copy of 'README.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'package.json', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'quant_config.example.json', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'quant_service.mjs', LF will be replaced by CRLF the next time Git touches it
+
+[main 4e4a086] Upgrade Myles Quant to v0.5.0
+ 4 files changed, 65 insertions(+), 24 deletions(-)
+From https://github.com/JoshuaDuskin/trading-dashboard
+ * branch            main       -> FETCH_HEAD
+Current branch main is up to date.
+Enumerating objects: 11, done.
+Counting objects: 100% (11/11), done.
+Delta compression using up to 12 threads
+Compressing objects: 100% (6/6), done.
+Writing objects: 100% (6/6), 2.33 KiB | 793.00 KiB/s, done.
+Total 6 (delta 3), reused 0 (delta 0), pack-reused 0 (from 0)
+remote: Resolving deltas: 100% (3/3), completed with 3 local objects.
+To https://github.com/JoshuaDuskin/trading-dashboard.git
+   375c8a8..4e4a086  main -> main
+PASS: trading-dashboard source updated.
+
+=== Starting persistent Quant v0.5.0 ===
+PASS: Quant PID 6924 is running; live signing locked=True.
+
+=== Restarting authenticated bridge on the same phone tunnel ===
+PASS: bridge v1.7 PID 9796 is live and Quant controls are authenticated.
+
+=======================================================================
+ MYLES QUANT v0.5.0: COMPLETE
+=======================================================================
+Dashboard:      https://joshuaduskin.github.io/MylesDashboard/
+Account:        SIMULATED FORWARD PAPER (preserved)
+Markets:        BTC/USD, ETH/USD, SOL/USD, XRP/USD, TAO/USD
+Controls:       Scalp Terminal -> live GMX chart + asset/Long-Short/margin/leverage/stop/target
+Validation:     base backtest + stressed costs + walk-forward + math invariants
+Emergency stop:available for PAPER positions
+Live money:     LOCKED
+Signing:        DISABLED
+Run log:        C:\Users\Joshu\AppData\Local\MylesAI\logs\quant_v0_5_0_upgrade_20260925_173101.log
+
+Refresh the dashboard on your phone. Use Trade -> Trade for the Scalp Terminal and Trade -> Auto Bot for bot performance/settings.
+**********************
+Windows PowerShell transcript end
+End time: 20260925173124
+**********************

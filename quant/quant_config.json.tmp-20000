@@ -1,0 +1,88 @@
+{
+  "schema_version": 3,
+  "venue": "GMX",
+  "chain_id": 42161,
+  "timeframe": "1h",
+  "history_limit": 1000,
+  "poll_seconds": 60,
+  "starting_equity": 10000,
+  "market_settings": {
+    "BTC/USD": {
+      "enabled": true,
+      "auto_trade_enabled": true,
+      "paper_strategy": "trend_momentum"
+    },
+    "ETH/USD": {
+      "enabled": true,
+      "auto_trade_enabled": true,
+      "paper_strategy": "trend_momentum"
+    },
+    "SOL/USD": {
+      "enabled": true,
+      "auto_trade_enabled": true,
+      "paper_strategy": "trend_momentum"
+    },
+    "XRP/USD": {
+      "enabled": true,
+      "auto_trade_enabled": true,
+      "paper_strategy": "trend_momentum"
+    },
+    "TAO/USD": {
+      "enabled": true,
+      "auto_trade_enabled": true,
+      "paper_strategy": "trend_momentum"
+    }
+  },
+  "strategies": {
+    "scalp_trend": {
+      "enabled": true
+    },
+    "trend_momentum": {
+      "enabled": true
+    },
+    "mean_reversion": {
+      "enabled": true
+    }
+  },
+  "paper": {
+    "enabled": true,
+    "auto_trading_enabled": true,
+    "emergency_stop": false,
+    "strategy": "trend_momentum",
+    "symbol": "BTC/USD"
+  },
+  "risk": {
+    "max_risk_per_trade_pct": 1,
+    "max_notional_leverage": 2,
+    "stop_loss_pct": 1.5,
+    "take_profit_pct": 3,
+    "max_daily_loss_pct": 3,
+    "max_drawdown_pct": 10,
+    "max_concurrent_positions": 2,
+    "max_market_allocation_pct": 35
+  },
+  "research_costs": {
+    "position_fee_bps_per_side": 6,
+    "slippage_bps_per_side": 5,
+    "impact_bps_per_side": 20,
+    "holding_cost_bps_per_day": 5,
+    "fee_bps_per_side": 10
+  },
+  "validation": {
+    "min_trades": 12,
+    "max_drawdown_pct": 12,
+    "min_walk_forward_positive_pct": 50,
+    "min_base_return_pct": 0,
+    "min_stress_return_pct": -3,
+    "stress_cost_multiplier": 2.5
+  },
+  "live_execution": {
+    "enabled": false,
+    "signing_enabled": false,
+    "reason": "Live execution remains hard-locked until owner review, forward-paper validation, and a dedicated execution wallet are complete."
+  },
+  "symbols": [
+    "BTC/USD",
+    "ETH/USD"
+  ]
+}

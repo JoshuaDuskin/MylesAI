@@ -1,0 +1,363 @@
+﻿**********************
+Windows PowerShell transcript start
+Start time: 20260925134254
+Username: DESKTOP-CKIIVNP\Joshu
+RunAs User: DESKTOP-CKIIVNP\Joshu
+Configuration Name: 
+Machine: DESKTOP-CKIIVNP (Microsoft Windows NT 10.0.19045.0)
+Host Application: powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File C:\Users\Joshu\OneDrive\Desktop\MYLES_CONTROL_CENTER_V2_1_6_CHAT_AUTODISCOVERY\MYLES_CONTROL_CENTER_V2_1_6_CHAT_AUTODISCOVERY\PATCH.ps1
+Process ID: 7468
+PSVersion: 5.1.19041.6456
+PSEdition: Desktop
+PSCompatibleVersions: 1.0, 2.0, 3.0, 4.0, 5.0, 5.1.19041.6456
+BuildVersion: 10.0.19041.6456
+CLRVersion: 4.0.30319.42000
+WSManStackVersion: 3.0
+PSRemotingProtocolVersion: 2.3
+SerializationVersion: 1.1.0.1
+**********************
+
+=======================================================================
+ MYLES CONTROL CENTER v2.1.6 - CHAT CONTRACT AUTODISCOVERY
+=======================================================================
+Quant and Cloudflare are already working. This patch discovers Myles's actual local chat POST contract and teaches the bridge to use it.
+Run log: C:\Users\Joshu\AppData\Local\MylesAI\logs\control_center_v2_1_6_20260925_134254.log
+
+=== Backing up bridge + existing chat contract ===
+PASS: rollback backup created at C:\Users\Joshu\AppData\Local\MylesAI\backups\control_center_v2_1_6_20260925_134254
+
+=== Discovering installed Myles chat contract ===
+Myles core: HTTP 200; GET /api/messages: HTTP 200
+Discovered 1 chat-like route literal(s) in installed runtime and 0 OpenAPI POST route(s).
+probe /api/messages template=message origin=none -> HTTP 404
+probe /api/messages template=message origin=dashboard -> HTTP 404
+probe /api/messages template=text origin=none -> HTTP 404
+probe /api/messages template=text origin=dashboard -> HTTP 404
+probe /api/messages template=prompt origin=none -> HTTP 404
+probe /api/messages template=prompt origin=dashboard -> HTTP 404
+probe /api/messages template=content origin=none -> HTTP 404
+probe /api/messages template=content origin=dashboard -> HTTP 404
+probe /api/messages template=query origin=none -> HTTP 404
+probe /api/messages template=query origin=dashboard -> HTTP 404
+probe /api/messages template=input origin=none -> HTTP 404
+probe /api/messages template=input origin=dashboard -> HTTP 404
+probe /api/messages template=message_text origin=none -> HTTP 404
+probe /api/messages template=message_text origin=dashboard -> HTTP 404
+probe /api/messages template=messages_user origin=none -> HTTP 404
+probe /api/messages template=messages_user origin=dashboard -> HTTP 404
+probe /api/messages template=message_source origin=none -> HTTP 404
+probe /api/messages template=message_source origin=dashboard -> HTTP 404
+probe /api/messages template=text_source origin=none -> HTTP 404
+probe /api/messages template=text_source origin=dashboard -> HTTP 404
+probe /api/messages template=prompt_source origin=none -> HTTP 404
+probe /api/messages template=prompt_source origin=dashboard -> HTTP 404
+probe /api/messages template=message_text_source origin=none -> HTTP 404
+probe /api/messages template=message_text_source origin=dashboard -> HTTP 404
+probe /api/chat template=message origin=none -> HTTP 404
+probe /api/chat template=message origin=dashboard -> HTTP 404
+probe /api/chat template=text origin=none -> HTTP 404
+probe /api/chat template=text origin=dashboard -> HTTP 404
+probe /api/chat template=prompt origin=none -> HTTP 404
+probe /api/chat template=prompt origin=dashboard -> HTTP 404
+probe /api/chat template=content origin=none -> HTTP 404
+probe /api/chat template=content origin=dashboard -> HTTP 404
+probe /api/chat template=query origin=none -> HTTP 404
+probe /api/chat template=query origin=dashboard -> HTTP 404
+probe /api/chat template=input origin=none -> HTTP 404
+probe /api/chat template=input origin=dashboard -> HTTP 404
+probe /api/chat template=message_text origin=none -> HTTP 404
+probe /api/chat template=message_text origin=dashboard -> HTTP 404
+probe /api/chat template=messages_user origin=none -> HTTP 404
+probe /api/chat template=messages_user origin=dashboard -> HTTP 404
+probe /api/chat template=message_source origin=none -> HTTP 404
+probe /api/chat template=message_source origin=dashboard -> HTTP 404
+probe /api/chat template=text_source origin=none -> HTTP 404
+probe /api/chat template=text_source origin=dashboard -> HTTP 404
+probe /api/chat template=prompt_source origin=none -> HTTP 404
+probe /api/chat template=prompt_source origin=dashboard -> HTTP 404
+probe /api/chat template=message_text_source origin=none -> HTTP 404
+probe /api/chat template=message_text_source origin=dashboard -> HTTP 404
+probe /chat template=message origin=none -> HTTP 404
+probe /chat template=message origin=dashboard -> HTTP 404
+probe /chat template=text origin=none -> HTTP 404
+probe /chat template=text origin=dashboard -> HTTP 404
+probe /chat template=prompt origin=none -> HTTP 404
+probe /chat template=prompt origin=dashboard -> HTTP 404
+probe /chat template=content origin=none -> HTTP 404
+probe /chat template=content origin=dashboard -> HTTP 404
+probe /chat template=query origin=none -> HTTP 404
+probe /chat template=query origin=dashboard -> HTTP 404
+probe /chat template=input origin=none -> HTTP 404
+probe /chat template=input origin=dashboard -> HTTP 404
+probe /chat template=message_text origin=none -> HTTP 404
+probe /chat template=message_text origin=dashboard -> HTTP 404
+probe /chat template=messages_user origin=none -> HTTP 404
+probe /chat template=messages_user origin=dashboard -> HTTP 404
+probe /chat template=message_source origin=none -> HTTP 404
+probe /chat template=message_source origin=dashboard -> HTTP 404
+probe /chat template=text_source origin=none -> HTTP 404
+probe /chat template=text_source origin=dashboard -> HTTP 404
+probe /chat template=prompt_source origin=none -> HTTP 404
+probe /chat template=prompt_source origin=dashboard -> HTTP 404
+probe /chat template=message_text_source origin=none -> HTTP 404
+probe /chat template=message_text_source origin=dashboard -> HTTP 404
+probe /api/message template=message origin=none -> HTTP 404
+probe /api/message template=message origin=dashboard -> HTTP 404
+probe /api/message template=text origin=none -> HTTP 404
+probe /api/message template=text origin=dashboard -> HTTP 404
+probe /api/message template=prompt origin=none -> HTTP 404
+probe /api/message template=prompt origin=dashboard -> HTTP 404
+probe /api/message template=content origin=none -> HTTP 404
+probe /api/message template=content origin=dashboard -> HTTP 404
+probe /api/message template=query origin=none -> HTTP 404
+probe /api/message template=query origin=dashboard -> HTTP 404
+probe /api/message template=input origin=none -> HTTP 404
+probe /api/message template=input origin=dashboard -> HTTP 404
+probe /api/message template=message_text origin=none -> HTTP 404
+probe /api/message template=message_text origin=dashboard -> HTTP 404
+probe /api/message template=messages_user origin=none -> HTTP 404
+probe /api/message template=messages_user origin=dashboard -> HTTP 404
+probe /api/message template=message_source origin=none -> HTTP 404
+probe /api/message template=message_source origin=dashboard -> HTTP 404
+probe /api/message template=text_source origin=none -> HTTP 404
+probe /api/message template=text_source origin=dashboard -> HTTP 404
+probe /api/message template=prompt_source origin=none -> HTTP 404
+probe /api/message template=prompt_source origin=dashboard -> HTTP 404
+probe /api/message template=message_text_source origin=none -> HTTP 404
+probe /api/message template=message_text_source origin=dashboard -> HTTP 404
+probe /message template=message origin=none -> HTTP 404
+probe /message template=message origin=dashboard -> HTTP 404
+probe /message template=text origin=none -> HTTP 404
+probe /message template=text origin=dashboard -> HTTP 404
+probe /message template=prompt origin=none -> HTTP 404
+probe /message template=prompt origin=dashboard -> HTTP 404
+probe /message template=content origin=none -> HTTP 404
+probe /message template=content origin=dashboard -> HTTP 404
+probe /message template=query origin=none -> HTTP 404
+probe /message template=query origin=dashboard -> HTTP 404
+probe /message template=input origin=none -> HTTP 404
+probe /message template=input origin=dashboard -> HTTP 404
+probe /message template=message_text origin=none -> HTTP 404
+probe /message template=message_text origin=dashboard -> HTTP 404
+probe /message template=messages_user origin=none -> HTTP 404
+probe /message template=messages_user origin=dashboard -> HTTP 404
+probe /message template=message_source origin=none -> HTTP 404
+probe /message template=message_source origin=dashboard -> HTTP 404
+probe /message template=text_source origin=none -> HTTP 404
+probe /message template=text_source origin=dashboard -> HTTP 404
+probe /message template=prompt_source origin=none -> HTTP 404
+probe /message template=prompt_source origin=dashboard -> HTTP 404
+probe /message template=message_text_source origin=none -> HTTP 404
+probe /message template=message_text_source origin=dashboard -> HTTP 404
+probe /api/input template=message origin=none -> HTTP 404
+probe /api/input template=message origin=dashboard -> HTTP 404
+probe /api/input template=text origin=none -> HTTP 404
+probe /api/input template=text origin=dashboard -> HTTP 404
+probe /api/input template=prompt origin=none -> HTTP 404
+probe /api/input template=prompt origin=dashboard -> HTTP 404
+probe /api/input template=content origin=none -> HTTP 404
+probe /api/input template=content origin=dashboard -> HTTP 404
+probe /api/input template=query origin=none -> HTTP 404
+probe /api/input template=query origin=dashboard -> HTTP 404
+probe /api/input template=input origin=none -> HTTP 404
+probe /api/input template=input origin=dashboard -> HTTP 404
+probe /api/input template=message_text origin=none -> HTTP 404
+probe /api/input template=message_text origin=dashboard -> HTTP 404
+probe /api/input template=messages_user origin=none -> HTTP 404
+probe /api/input template=messages_user origin=dashboard -> HTTP 404
+probe /api/input template=message_source origin=none -> HTTP 404
+probe /api/input template=message_source origin=dashboard -> HTTP 404
+probe /api/input template=text_source origin=none -> HTTP 404
+probe /api/input template=text_source origin=dashboard -> HTTP 404
+probe /api/input template=prompt_source origin=none -> HTTP 404
+probe /api/input template=prompt_source origin=dashboard -> HTTP 404
+probe /api/input template=message_text_source origin=none -> HTTP 404
+probe /api/input template=message_text_source origin=dashboard -> HTTP 404
+probe /input template=message origin=none -> HTTP 404
+probe /input template=message origin=dashboard -> HTTP 404
+probe /input template=text origin=none -> HTTP 404
+probe /input template=text origin=dashboard -> HTTP 404
+probe /input template=prompt origin=none -> HTTP 404
+probe /input template=prompt origin=dashboard -> HTTP 404
+probe /input template=content origin=none -> HTTP 404
+probe /input template=content origin=dashboard -> HTTP 404
+probe /input template=query origin=none -> HTTP 404
+probe /input template=query origin=dashboard -> HTTP 404
+probe /input template=input origin=none -> HTTP 404
+probe /input template=input origin=dashboard -> HTTP 404
+probe /input template=message_text origin=none -> HTTP 404
+probe /input template=message_text origin=dashboard -> HTTP 404
+probe /input template=messages_user origin=none -> HTTP 404
+probe /input template=messages_user origin=dashboard -> HTTP 404
+probe /input template=message_source origin=none -> HTTP 404
+probe /input template=message_source origin=dashboard -> HTTP 404
+probe /input template=text_source origin=none -> HTTP 404
+probe /input template=text_source origin=dashboard -> HTTP 404
+probe /input template=prompt_source origin=none -> HTTP 404
+probe /input template=prompt_source origin=dashboard -> HTTP 404
+probe /input template=message_text_source origin=none -> HTTP 404
+probe /input template=message_text_source origin=dashboard -> HTTP 404
+probe /api/prompt template=message origin=none -> HTTP 404
+probe /api/prompt template=message origin=dashboard -> HTTP 404
+probe /api/prompt template=text origin=none -> HTTP 404
+probe /api/prompt template=text origin=dashboard -> HTTP 404
+probe /api/prompt template=prompt origin=none -> HTTP 404
+probe /api/prompt template=prompt origin=dashboard -> HTTP 404
+probe /api/prompt template=content origin=none -> HTTP 404
+probe /api/prompt template=content origin=dashboard -> HTTP 404
+probe /api/prompt template=query origin=none -> HTTP 404
+probe /api/prompt template=query origin=dashboard -> HTTP 404
+probe /api/prompt template=input origin=none -> HTTP 404
+probe /api/prompt template=input origin=dashboard -> HTTP 404
+probe /api/prompt template=message_text origin=none -> HTTP 404
+probe /api/prompt template=message_text origin=dashboard -> HTTP 404
+probe /api/prompt template=messages_user origin=none -> HTTP 404
+probe /api/prompt template=messages_user origin=dashboard -> HTTP 404
+probe /api/prompt template=message_source origin=none -> HTTP 404
+probe /api/prompt template=message_source origin=dashboard -> HTTP 404
+probe /api/prompt template=text_source origin=none -> HTTP 404
+probe /api/prompt template=text_source origin=dashboard -> HTTP 404
+probe /api/prompt template=prompt_source origin=none -> HTTP 404
+probe /api/prompt template=prompt_source origin=dashboard -> HTTP 404
+probe /api/prompt template=message_text_source origin=none -> HTTP 404
+probe /api/prompt template=message_text_source origin=dashboard -> HTTP 404
+probe /prompt template=message origin=none -> HTTP 404
+probe /prompt template=message origin=dashboard -> HTTP 404
+probe /prompt template=text origin=none -> HTTP 404
+probe /prompt template=text origin=dashboard -> HTTP 404
+probe /prompt template=prompt origin=none -> HTTP 404
+probe /prompt template=prompt origin=dashboard -> HTTP 404
+probe /prompt template=content origin=none -> HTTP 404
+probe /prompt template=content origin=dashboard -> HTTP 404
+probe /prompt template=query origin=none -> HTTP 404
+probe /prompt template=query origin=dashboard -> HTTP 404
+probe /prompt template=input origin=none -> HTTP 404
+probe /prompt template=input origin=dashboard -> HTTP 404
+probe /prompt template=message_text origin=none -> HTTP 404
+probe /prompt template=message_text origin=dashboard -> HTTP 404
+probe /prompt template=messages_user origin=none -> HTTP 404
+probe /prompt template=messages_user origin=dashboard -> HTTP 404
+probe /prompt template=message_source origin=none -> HTTP 404
+probe /prompt template=message_source origin=dashboard -> HTTP 404
+probe /prompt template=text_source origin=none -> HTTP 404
+probe /prompt template=text_source origin=dashboard -> HTTP 404
+probe /prompt template=prompt_source origin=none -> HTTP 404
+probe /prompt template=prompt_source origin=dashboard -> HTTP 404
+probe /prompt template=message_text_source origin=none -> HTTP 404
+probe /prompt template=message_text_source origin=dashboard -> HTTP 404
+probe /api/dashboard/chat template=message origin=none -> HTTP 404
+probe /api/dashboard/chat template=message origin=dashboard -> HTTP 404
+probe /api/dashboard/chat template=text origin=none -> HTTP 404
+probe /api/dashboard/chat template=text origin=dashboard -> HTTP 404
+probe /api/dashboard/chat template=prompt origin=none -> HTTP 404
+probe /api/dashboard/chat template=prompt origin=dashboard -> HTTP 404
+probe /api/dashboard/chat template=content origin=none -> HTTP 404
+probe /api/dashboard/chat template=content origin=dashboard -> HTTP 404
+probe /api/dashboard/chat template=query origin=none -> HTTP 404
+probe /api/dashboard/chat template=query origin=dashboard -> HTTP 404
+probe /api/dashboard/chat template=input origin=none -> HTTP 404
+probe /api/dashboard/chat template=input origin=dashboard -> HTTP 404
+probe /api/dashboard/chat template=message_text origin=none -> HTTP 404
+probe /api/dashboard/chat template=message_text origin=dashboard -> HTTP 404
+probe /api/dashboard/chat template=messages_user origin=none -> HTTP 404
+probe /api/dashboard/chat template=messages_user origin=dashboard -> HTTP 404
+probe /api/dashboard/chat template=message_source origin=none -> HTTP 404
+probe /api/dashboard/chat template=message_source origin=dashboard -> HTTP 404
+probe /api/dashboard/chat template=text_source origin=none -> HTTP 404
+probe /api/dashboard/chat template=text_source origin=dashboard -> HTTP 404
+probe /api/dashboard/chat template=prompt_source origin=none -> HTTP 404
+probe /api/dashboard/chat template=prompt_source origin=dashboard -> HTTP 404
+probe /api/dashboard/chat template=message_text_source origin=none -> HTTP 404
+probe /api/dashboard/chat template=message_text_source origin=dashboard -> HTTP 404
+probe /api/dashboard/messages template=message origin=none -> HTTP 404
+probe /api/dashboard/messages template=message origin=dashboard -> HTTP 404
+probe /api/dashboard/messages template=text origin=none -> HTTP 404
+probe /api/dashboard/messages template=text origin=dashboard -> HTTP 404
+probe /api/dashboard/messages template=prompt origin=none -> HTTP 404
+probe /api/dashboard/messages template=prompt origin=dashboard -> HTTP 404
+probe /api/dashboard/messages template=content origin=none -> HTTP 404
+probe /api/dashboard/messages template=content origin=dashboard -> HTTP 404
+probe /api/dashboard/messages template=query origin=none -> HTTP 404
+probe /api/dashboard/messages template=query origin=dashboard -> HTTP 404
+probe /api/dashboard/messages template=input origin=none -> HTTP 404
+probe /api/dashboard/messages template=input origin=dashboard -> HTTP 404
+probe /api/dashboard/messages template=message_text origin=none -> HTTP 404
+probe /api/dashboard/messages template=message_text origin=dashboard -> HTTP 404
+probe /api/dashboard/messages template=messages_user origin=none -> HTTP 404
+probe /api/dashboard/messages template=messages_user origin=dashboard -> HTTP 404
+probe /api/dashboard/messages template=message_source origin=none -> HTTP 404
+probe /api/dashboard/messages template=message_source origin=dashboard -> HTTP 404
+probe /api/dashboard/messages template=text_source origin=none -> HTTP 404
+probe /api/dashboard/messages template=text_source origin=dashboard -> HTTP 404
+probe /api/dashboard/messages template=prompt_source origin=none -> HTTP 404
+probe /api/dashboard/messages template=prompt_source origin=dashboard -> HTTP 404
+probe /api/dashboard/messages template=message_text_source origin=none -> HTTP 404
+probe /api/dashboard/messages template=message_text_source origin=dashboard -> HTTP 404
+probe /dashboard/chat template=message origin=none -> HTTP 404
+probe /dashboard/chat template=message origin=dashboard -> HTTP 404
+probe /dashboard/chat template=text origin=none -> HTTP 404
+probe /dashboard/chat template=text origin=dashboard -> HTTP 404
+probe /dashboard/chat template=prompt origin=none -> HTTP 404
+probe /dashboard/chat template=prompt origin=dashboard -> HTTP 404
+probe /dashboard/chat template=content origin=none -> HTTP 404
+probe /dashboard/chat template=content origin=dashboard -> HTTP 404
+probe /dashboard/chat template=query origin=none -> HTTP 404
+probe /dashboard/chat template=query origin=dashboard -> HTTP 404
+probe /dashboard/chat template=input origin=none -> HTTP 404
+probe /dashboard/chat template=input origin=dashboard -> HTTP 404
+probe /dashboard/chat template=message_text origin=none -> HTTP 404
+probe /dashboard/chat template=message_text origin=dashboard -> HTTP 404
+probe /dashboard/chat template=messages_user origin=none -> HTTP 404
+probe /dashboard/chat template=messages_user origin=dashboard -> HTTP 404
+probe /dashboard/chat template=message_source origin=none -> HTTP 404
+probe /dashboard/chat template=message_source origin=dashboard -> HTTP 404
+probe /dashboard/chat template=text_source origin=none -> HTTP 404
+probe /dashboard/chat template=text_source origin=dashboard -> HTTP 404
+probe /dashboard/chat template=prompt_source origin=none -> HTTP 404
+probe /dashboard/chat template=prompt_source origin=dashboard -> HTTP 404
+probe /dashboard/chat template=message_text_source origin=none -> HTTP 404
+probe /dashboard/chat template=message_text_source origin=dashboard -> HTTP 404
+probe /dashboard/messages template=message origin=none -> HTTP 404
+probe /dashboard/messages template=message origin=dashboard -> HTTP 404
+probe /dashboard/messages template=text origin=none -> HTTP 404
+probe /dashboard/messages template=text origin=dashboard -> HTTP 404
+probe /dashboard/messages template=prompt origin=none -> HTTP 404
+probe /dashboard/messages template=prompt origin=dashboard -> HTTP 404
+probe /dashboard/messages template=content origin=none -> HTTP 404
+probe /dashboard/messages template=content origin=dashboard -> HTTP 404
+probe /dashboard/messages template=query origin=none -> HTTP 404
+probe /dashboard/messages template=query origin=dashboard -> HTTP 404
+probe /dashboard/messages template=input origin=none -> HTTP 404
+probe /dashboard/messages template=input origin=dashboard -> HTTP 404
+probe /dashboard/messages template=message_text origin=none -> HTTP 404
+probe /dashboard/messages template=message_text origin=dashboard -> HTTP 404
+probe /dashboard/messages template=messages_user origin=none -> HTTP 404
+probe /dashboard/messages template=messages_user origin=dashboard -> HTTP 404
+probe /dashboard/messages template=message_source origin=none -> HTTP 404
+probe /dashboard/messages template=message_source origin=dashboard -> HTTP 404
+probe /dashboard/messages template=text_source origin=none -> HTTP 404
+probe /dashboard/messages template=text_source origin=dashboard -> HTTP 404
+probe /dashboard/messages template=prompt_source origin=none -> HTTP 404
+probe /dashboard/messages template=prompt_source origin=dashboard -> HTTP 404
+probe /dashboard/messages template=message_text_source origin=none -> HTTP 404
+probe /dashboard/messages template=message_text_source origin=dashboard -> HTTP 404
+NO_COMPATIBLE_POST_CONTRACT
+Diagnostic report: C:\Users\Joshu\AppData\Local\MylesAI\logs\dashboard_chat_discovery.json
+
+The installed Myles core does not currently expose any compatible POST contract that the bridge can safely discover.
+Discovery report: C:\Users\Joshu\AppData\Local\MylesAI\logs\dashboard_chat_discovery.json
+
+=======================================================================
+ MYLES CONTROL CENTER v2.1.6 STOPPED
+=======================================================================
+Chat contract discovery returned exit code 10. The report now contains the exact installed routes/statuses needed for a core ingress patch.
+At C:\Users\Joshu\OneDrive\Desktop\MYLES_CONTROL_CENTER_V2_1_6_CHAT_AUTODISCOVERY\MYLES_CONTROL_CENTER_V2_1_6_CHAT_AUTODISCOVERY\PATCH.ps1:83 char:9
++         throw "Chat contract discovery returned exit code $discoverEx ...
++         ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+If discovery could not find a write route, do NOT rerun older dashboard patches.
+Send me this file if present: C:\Users\Joshu\AppData\Local\MylesAI\logs\dashboard_chat_discovery.json
+**********************
+Windows PowerShell transcript end
+End time: 20260925134303
+**********************

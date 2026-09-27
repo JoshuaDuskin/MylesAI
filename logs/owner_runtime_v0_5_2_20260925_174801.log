@@ -1,0 +1,69 @@
+﻿**********************
+Windows PowerShell transcript start
+Start time: 20260925174801
+Username: DESKTOP-CKIIVNP\Joshu
+RunAs User: DESKTOP-CKIIVNP\Joshu
+Configuration Name: 
+Machine: DESKTOP-CKIIVNP (Microsoft Windows NT 10.0.19045.0)
+Host Application: powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File C:\Users\Joshu\OneDrive\Desktop\MYLES_OWNER_RUNTIME_V0_5_2_FIRST_PERSON_LOCK\MYLES_OWNER_RUNTIME_V0_5_2_FIRST_PERSON_LOCK\PATCH.ps1
+Process ID: 11084
+PSVersion: 5.1.19041.6456
+PSEdition: Desktop
+PSCompatibleVersions: 1.0, 2.0, 3.0, 4.0, 5.0, 5.1.19041.6456
+BuildVersion: 10.0.19041.6456
+CLRVersion: 4.0.30319.42000
+WSManStackVersion: 3.0
+PSRemotingProtocolVersion: 2.3
+SerializationVersion: 1.1.0.1
+**********************
+
+=======================================================================
+ MYLES OWNER RUNTIME v0.5.2 - FIRST PERSON + DURABLE DASHBOARD LOCK
+=======================================================================
+Runtime-only repair. The v0.5.1 dashboard publish already succeeded and will not be rebuilt.
+Run log: C:\Users\Joshu\AppData\Local\MylesAI\logs\owner_runtime_v0_5_2_20260925_174801.log
+
+=== Verifying existing dashboard owner lock ===
+PASS: v0.5.1 repo-level dashboard lock is already installed.
+
+=== Patching current installed Myles runtime ===
+C:\Users\Joshu\AppData\Local\MylesAI\myles_core.py
+PASS: Myles first-person conversation rule installed
+PASS: Myles first-person speaking-stage rule installed
+PASS: every continuous job now receives the dashboard owner-lock rule
+PASS: installed myles_core.py compiles
+
+=== Restarting only Myles core ===
+PS>TerminatingError(Invoke-RestMethod): "Unable to connect to the remote server"
+PS>TerminatingError(Invoke-RestMethod): "Unable to connect to the remote server"
+PS>TerminatingError(Invoke-RestMethod): "Unable to connect to the remote server"
+PS>TerminatingError(Invoke-RestMethod): "Unable to connect to the remote server"
+PS>TerminatingError(Invoke-RestMethod): "Unable to connect to the remote server"
+PS>TerminatingError(Invoke-RestMethod): "Unable to connect to the remote server"
+PS>TerminatingError(Invoke-RestMethod): "Unable to connect to the remote server"
+PS>TerminatingError(Invoke-RestMethod): "Unable to connect to the remote server"
+PS>TerminatingError(Invoke-RestMethod): "Unable to connect to the remote server"
+PS>TerminatingError(Invoke-RestMethod): "Unable to connect to the remote server"
+PS>TerminatingError(Invoke-RestMethod): "Unable to connect to the remote server"
+PS>TerminatingError(Invoke-RestMethod): "Unable to connect to the remote server"
+PASS: Myles core is healthy after restart.
+
+=== Verifying installed source guards ===
+PASS: all first-person and continuous dashboard-lock guards are present in installed runtime.
+
+=======================================================================
+ MYLES OWNER RUNTIME v0.5.2: COMPLETE
+=======================================================================
+Dashboard UI:      v0.5.1 remains published
+Dashboard Git:     OWNER-LOCKED
+Continuous jobs:   dashboard mutation forbidden at job creation
+Myles voice:       FIRST PERSON (I / me / my)
+Quant / GMX:       untouched
+Phone bridge:      untouched
+Backup:            C:\Users\Joshu\AppData\Local\MylesAI\backups\owner_runtime_v0_5_2_20260925_174801
+Run log:           C:\Users\Joshu\AppData\Local\MylesAI\logs\owner_runtime_v0_5_2_20260925_174801.log
+
+**********************
+Windows PowerShell transcript end
+End time: 20260925174842
+**********************

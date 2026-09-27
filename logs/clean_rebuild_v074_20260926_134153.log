@@ -1,0 +1,33 @@
+==========================================================================
+ MYLES UNIFIED RUNTIME REPAIR v0.7.5
+==========================================================================
+One click. No manual PowerShell. PineTree is never touched.
+Run log: C:\Users\Joshu\AppData\Local\MylesAI\logs\clean_rebuild_v074_20260926_134153.log
+
+==========================================================================
+ 1. Back up and retire duplicate launchers
+==========================================================================
+PASS: archived stale workspaces outside the live Myles folder
+PASS: backed up current Myles state at C:\Users\Joshu\AppData\Local\MylesAI\backups\clean_rebuild_v074_20260926_134153
+PASS: retired 0 Startup item(s), 0 Run/RunOnce value(s), 0 scheduled task(s), 6 old process(es)
+PASS: archived 2 stale storage/launcher item(s) outside the live Myles folder
+
+==========================================================================
+ 2. Restore the local Myles and trading services
+==========================================================================
+PASS: Myles v9.7.0 healthy / PID 9796
+PASS: Quant v0.6.2 / running / paper
+PASS: GMX v0.6.2 / armed=False / auto=False
+
+==========================================================================
+ 3. Restore the authenticated bridge and public read gateway
+==========================================================================
+PASS: authenticated bridge healthy / 1.8
+PASS: read-only public gateway healthy on 127.0.0.1:8791
+NOTICE: Tailscale Funnel could not start: Logged out.
+PASS: cloudflared = C:\Program Files (x86)\cloudflared\cloudflared.exe
+ERROR: cloudflared did not publish a trycloudflare.com URL after three attempts.
+
+2026-09-26T18:43:50Z INF Thank you for trying Cloudflare Tunnel. Doing so, without a Cloudflare account, is a quick way to experiment and try it out. However, be aware that these account-less Tunnels have no uptime guarantee, are subject to the Cloudflare Online Services Terms of Use (https://www.cloudflare.com/website-terms/), and Cloudflare reserves the right to investigate your use of Tunnels for violations of such terms. If you intend to use Tunnels in production you should use a pre-created named tunnel by following: https://developers.cloudflare.com/cloudflare-one/connections/connect-apps
+2026-09-26T18:43:50Z INF Requesting new quick Tunnel on trycloudflare.com...
+quick tunnel provisioning failed with status 429

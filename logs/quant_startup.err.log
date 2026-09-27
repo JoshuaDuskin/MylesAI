@@ -1,0 +1,68 @@
+Error: EPERM: operation not permitted, rename 'C:\Users\Joshu\AppData\Local\MylesAI\data\quant_paper_state_v3.json.tmp-5692' -> 'C:\Users\Joshu\AppData\Local\MylesAI\data\quant_paper_state_v3.json'
+    at Object.renameSync (node:fs:1074:11)
+    at writeJsonAtomic (file:///C:/Users/Joshu/AppData/Local/MylesAI/quant/quant_service.mjs:73:192)
+    at cycle (file:///C:/Users/Joshu/AppData/Local/MylesAI/quant/quant_service.mjs:289:193)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async main (file:///C:/Users/Joshu/AppData/Local/MylesAI/quant/quant_service.mjs:3node:fs:1074
+  binding.rename(
+          ^
+
+Error: EPERM: operation not permitted, rename 'C:\Users\Joshu\AppData\Local\MylesAI\quant\quant_config.json.tmp-17944' -> 'C:\Users\Joshu\AppData\Local\MylesAI\quant\quant_config.json'
+    at Object.renameSync (node:fs:1074:11)
+    at writeJsonAtomic (file:///C:/Users/Joshu/AppData/Local/MylesAI/quant/quant_service.mjs:73:192)
+    at loadConfig (file:///C:/Users/Joshu/AppData/Local/MylesAI/quant/quant_service.mjs:122:89)
+    at main (file:///C:/Users/Joshu/AppData/Local/MylesAI/quant/quant_service.mjs:303:632)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5) {
+  errno: -4048,
+  code: 'EPERM',
+  syscall: 'rename',
+  path: 'C:\\Users\\Joshu\\AppData\\Local\\MylesAI\\quant\\quant_config.json.tmp-17944',
+  dest: 'C:\\Users\\Joshu\\AppData\\Local\\MylesAI\\quant\\quant_config.json'
+}
+
+Node.js v24.19.0
+Error: EPERM: operation not permitted, rename 'C:\Users\Joshu\AppData\Local\MylesAI\data\quant_paper_state_v3.json.tmp-4364' -> 'C:\Users\Joshu\AppData\Local\MylesAI\data\quant_paper_state_v3.json'
+    at Object.renameSync (node:fs:1074:11)
+    at writeJsonAtomic (file:///C:/Users/Joshu/AppData/Local/MylesAI/quant/quant_service.mjs:73:192)
+    at cycle (file:///C:/Users/Joshu/AppData/Local/MylesAI/quant/quant_service.mjs:289:193)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async main (file:///C:/Users/Joshu/AppData/Local/MylesAI/quant/quant_service.mjs:303:23)
+node:fs:1074
+  binding.rename(
+          ^
+
+Error: EPERM: operation not permitted, rename 'C:\Users\Joshu\AppData\Local\MylesAI\data\trading_status.json.tmp-4296' -> 'C:\Users\Joshu\AppData\Local\MylesAI\data\trading_status.json'
+    at Object.renameSync (node:fs:1074:11)
+    at writeJsonAtomic (file:///C:/Users/Joshu/AppData/Local/MylesAI/quant/quant_service.mjs:73:192)
+    at main (file:///C:/Users/Joshu/AppData/Local/MylesAI/quant/quant_service.mjs:303:517)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5) {
+  errno: -4048,
+  code: 'EPERM',
+  syscall: 'rename',
+  path: 'C:\\Users\\Joshu\\AppData\\Local\\MylesAI\\data\\trading_status.json.tmp-4296',
+  dest: 'C:\\Users\\Joshu\\AppData\\Local\\MylesAI\\data\\trading_status.json'
+}
+
+Node.js v24.19.0
+t.renameSync (node:fs:1074:11)
+    at writeJsonAtomic (file:///C:/Users/Joshu/AppData/Local/MylesAI/quant/quant_service.mjs:73:192)
+    at loadConfig (file:///C:/Users/Joshu/AppData/Local/MylesAI/quant/quant_service.mjs:122:89)
+    at cycle (file:///C:/Users/Joshu/AppData/Local/MylesAI/quant/quant_service.mjs:287:60)
+    at main (file:///C:/Users/Joshu/AppData/Local/MylesAI/quant/quant_service.mjs:303:29)
+node:fs:1074
+  binding.rename(
+          ^
+
+Error: EPERM: operation not permitted, rename 'C:\Users\Joshu\AppData\Local\MylesAI\quant\quant_config.json.tmp-5224' -> 'C:\Users\Joshu\AppData\Local\MylesAI\quant\quant_config.json'
+    at Object.renameSync (node:fs:1074:11)
+    at writeJsonAtomic (file:///C:/Users/Joshu/AppData/Local/MylesAI/quant/quant_service.mjs:73:192)
+    at loadConfig (file:///C:/Users/Joshu/AppData/Local/MylesAI/quant/quant_service.mjs:122:89)
+    at main (file:///C:/Users/Joshu/AppData/Local/MylesAI/quant/quant_service.mjs:303:632) {
+  errno: -4048,
+  code: 'EPERM',
+  syscall: 'rename',
+  path: 'C:\\Users\\Joshu\\AppData\\Local\\MylesAI\\quant\\quant_config.json.tmp-5224',
+  dest: 'C:\\Users\\Joshu\\AppData\\Local\\MylesAI\\quant\\quant_config.json'
+}
+
+Node.js v24.19.0

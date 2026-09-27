@@ -1,0 +1,404 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Myles Trading Dashboard</title>
+    <style>
+        :root {
+            --bg-color: #0f172a;
+            --card-bg: #1e293b;
+            --text-primary: #f8fafc;
+            --text-secondary: #94a3b8;
+            --accent-green: #10b981;
+            --accent-red: #ef4444;
+            --accent-blue: #3b82f6;
+            --border-color: #334155;
+            --font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+
+        body {
+            font-family: var(--font-family);
+            background-color: var(--bg-color);
+            color: var(--text-primary);
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        /* Header */
+        header {
+            background-color: var(--card-bg);
+            border-bottom: 1px solid var(--border-color);
+            padding: 1rem 2rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            height: 60px;
+        }
+
+        .logo { font-weight: 700; font-size: 1.5rem; color: var(--accent-blue); letter-spacing: -0.5px; }
+        
+        .deploy-btn {
+            background-color: #e11d48; /* Netlify Red */
+            color: white;
+            border: none;
+            padding: 0.6rem 1.2rem;
+            border-radius: 6px;
+            font-weight: 600;
+            cursor: pointer;
+            text-decoration: none;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            transition: opacity 0.2s;
+        }
+        .deploy-btn:hover { opacity: 0.9; }
+
+        /* Main Layout */
+        .dashboard-container {
+            flex: 1;
+            display: grid;
+            grid-template-columns: 3fr 1fr;
+            gap: 1rem;
+            padding: 1rem;
+            overflow: hidden;
+        }
+
+        @media (max-width: 900px) {
+            .dashboard-container { grid-template-columns: 1fr; }
+        }
+
+        /* Chart Section */
+        .chart-section {
+            background-color: var(--card-bg);
+            border-radius: 12px;
+            padding: 1rem;
+            display: flex;
+            flex-direction: column;
+            border: 1px solid var(--border-color);
+            position: relative;
+        }
+
+        .chart-header {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 1rem;
+        }
+
+        .asset-info h2 { font-size: 1.5rem; margin-bottom: 0.2rem; }
+        .asset-meta { font-size: 0.9rem; color: var(--text-secondary); display: flex; gap: 1rem; }
+        
+        .price-display {
+            font-size: 2.5rem;
+            font-weight: 700;
+            margin-top: auto;
+            padding-bottom: 1rem;
+        }
+
+        /* Canvas for Chart */
+        #chartCanvas {
+            width: 100%;
+            height: 400px;
+            background-color: #0f172a;
+            border-radius: 8px;
+            cursor: crosshair;
+        }
+
+        /* Sidebar / Order Book */
+        .sidebar {
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+        }
+
+        .panel {
+            background-color: var(--card-bg);
+            border-radius: 12px;
+            padding: 1rem;
+            border: 1px solid var(--border-color);
+            display: flex;
+            flex-direction: column;
+        }
+
+        .panel h3 { font-size: 1.1rem; margin-bottom: 0.8rem; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 1px; }
+
+        /* Order Book */
+        .order-book { flex: 1; overflow-y: auto; }
+        
+        .ob-header { display: grid; grid-template-columns: 2fr 1fr 1fr; padding: 0.5rem; color: var(--text-secondary); font-size: 0.8rem; text-align: right; }
+        .ob-row { display: grid; grid-template-columns: 2fr 1fr 1fr; padding: 4px 0; font-size: 0.9rem; cursor: pointer; transition: background 0.1s; }
+        .ob-row:hover { background-color: rgba(255,255,255,0.05); }
+        .ask { color: var(--accent-red); text-align: right; }
+        .bid { color: var(--accent-green); text-align: left; }
+        .volume { text-align: center; }
+
+        /* Trade Form */
+        .trade-form { height: 200px; }
+        
+        .input-group { margin-bottom: 1rem; }
+        .input-group label { display: block; font-size: 0.8rem; color: var(--text-secondary); margin-bottom: 0.4rem; }
+        .input-group input { 
+            width: 100%; 
+            background-color: #0f172a; 
+            border: 1px solid var(--border-color); 
+            color: white; 
+            padding: 0.8rem; 
+            border-radius: 6px; 
+            font-size: 1rem;
+        }
+        .input-group input:focus { outline: none; border-color: var(--accent-blue); }
+
+        .btn-trade {
+            width: 100%;
+            padding: 0.8rem;
+            background-color: var(--accent-green);
+            color: #064e3b;
+            border: none;
+            border-radius: 6px;
+            font-weight: 700;
+            cursor: pointer;
+            margin-top: 0.5rem;
+        }
+        .btn-trade:hover { background-color: #34d399; }
+
+        /* Stats Grid */
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 1rem;
+            margin-bottom: 1rem;
+        }
+        .stat-card {
+            background-color: #0f172a;
+            padding: 1rem;
+            border-radius: 8px;
+            text-align: center;
+        }
+        .stat-val { font-size: 1.2rem; font-weight: 600; }
+        .stat-label { font-size: 0.8rem; color: var(--text-secondary); }
+
+        /* Toast Notification */
+        #toast {
+            position: fixed;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background-color: #334155;
+            color: white;
+            padding: 1rem 2rem;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+            opacity: 0;
+            transition: opacity 0.3s;
+            pointer-events: none;
+            z-index: 100;
+        }
+        #toast.show { opacity: 1; }
+
+    </style>
+</head>
+<body>
+
+    <header>
+        <div class="logo">Myles<span style="color:white">Trade</span></div>
+        <button class="deploy-btn" onclick="window.open('https://app.netlify.com/drop', '_blank')">
+            <svg width="20" height="20" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 14.5v-9l6 4.5-6 4.5z"/></svg>
+            Deploy to Netlify
+        </button>
+    </header>
+
+    <div class="dashboard-container">
+        <!-- Main Chart Area -->
+        <section class="chart-section">
+            <div class="chart-header">
+                <div class="asset-info">
+                    <h2 id="ticker">BTC/USD</h2>
+                    <div class="asset-meta">
+                        <span id="vol-24h">Vol: $1.2B</span>
+                        <span id="mkt-cap">Cap: $500B</span>
+                    </div>
+                </div>
+                <div style="text-align: right;">
+                    <div class="price-display" id="current-price">$64,230.50</div>
+                    <div id="price-change" style="color: var(--accent-green); font-weight: 600;">+2.45%</div>
+                </div>
+            </div>
+            
+            <canvas id="chartCanvas"></canvas>
+        </section>
+
+        <!-- Sidebar -->
+        <aside class="sidebar">
+            <!-- Order Book -->
+            <div class="panel order-book">
+                <h3>Order Book</h3>
+                <div class="ob-header">
+                    <span>Price (USD)</span>
+                    <span style="text-align: right;">Size</span>
+                    <span style="text-align: right;">%</span>
+                </div>
+                <div id="asks-container"></div>
+                <div class="ob-row" style="font-weight: bold; color: white; text-align: center;">
+                    <span id="spread-price">$64,230.50</span>
+                    <span>-</span>
+                    <span>-</span>
+                </div>
+                <div id="bids-container"></div>
+            </div>
+
+            <!-- Trade Form -->
+            <div class="panel trade-form">
+                <h3>Place Order</h3>
+                <div class="input-group">
+                    <label>Order Type</label>
+                    <select id="order-type" style="width: 100%; background: #0f172a; color: white; border: 1px solid var(--border-color); padding: 0.5rem; border-radius: 4px;">
+                        <option value="limit">Limit</option>
+                        <option value="market">Market</option>
+                    </select>
+                </div>
+                <div class="input-group">
+                    <label>Price (USD)</label>
+                    <input type="number" id="trade-price" placeholder="0.00">
+                </div>
+                <div class="input-group">
+                    <label>Amount (BTC)</label>
+                    <input type="number" id="trade-amount" placeholder="0.00">
+                </div>
+                <button class="btn-trade" onclick="executeTrade()">Buy BTC</button>
+            </div>
+
+            <!-- Stats -->
+            <div class="panel">
+                <h3>Market Stats</h3>
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <div class="stat-val" id="high-24h">$65,100</div>
+                        <div class="stat-label">High (24h)</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-val" id="low-24h">$63,800</div>
+                        <div class="stat-label">Low (24h)</div>
+                    </div>
+                </div>
+            </div>
+        </aside>
+    </div>
+
+    <div id="toast">Order Executed Successfully</div>
+
+    <script>
+        // --- Configuration & State ---
+        const canvas = document.getElementById('chartCanvas');
+        const ctx = canvas.getContext('2d');
+        
+        // Resize canvas for high DPI displays
+        function resizeCanvas() {
+            const dpr = window.devicePixelRatio || 1;
+            const rect = canvas.getBoundingClientRect();
+            canvas.width = rect.width * dpr;
+            canvas.height = rect.height * dpr;
+            ctx.scale(dpr, dpr);
+        }
+        window.addEventListener('resize', resizeCanvas);
+        resizeCanvas();
+
+        // Mock Data Generator
+        let priceHistory = [];
+        let currentPrice = 64230.50;
+        
+        // Initialize History
+        for(let i=0; i<100; i++) {
+            priceHistory.push(currentPrice);
+        }
+
+        // --- Chart Rendering Logic ---
+        function drawChart() {
+            const width = canvas.width / (window.devicePixelRatio || 1);
+            const height = canvas.height / (window.devicePixelRatio || 1);
+            
+            ctx.clearRect(0, 0, width, height);
+
+            // Draw Grid
+            ctx.strokeStyle = '#334155';
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            for(let i=0; i<width; i+=50) { ctx.moveTo(i, 0); ctx.lineTo(i, height); }
+            for(let i=0; i<height; i+=50) { ctx.moveTo(0, i); ctx.lineTo(width, i); }
+            ctx.stroke();
+
+            // Draw Price Line
+            ctx.beginPath();
+            const step = width / priceHistory.length;
+            
+            // Find min/max for scaling
+            let minP = Math.min(...priceHistory.slice(-50)) * 0.99;
+            let maxP = Math.max(...priceHistory.slice(-50)) * 1.01;
+
+            priceHistory.forEach((p, i) => {
+                const x = i * step;
+                const y = height - ((p - minP) / (maxP - minP)) * height;
+                if (i === 0) ctx.moveTo(x, y);
+                else ctx.lineTo(x, y);
+            });
+
+            // Gradient Fill
+            const gradient = ctx.createLinearGradient(0, 0, 0, height);
+            gradient.addColorStop(0, 'rgba(16, 185, 129, 0.2)');
+            gradient.addColorStop(1, 'rgba(16, 185, 129, 0)');
+            
+            ctx.fillStyle = gradient;
+            ctx.fill();
+
+            // Stroke Line
+            ctx.strokeStyle = '#10b981';
+            ctx.lineWidth = 3;
+            ctx.stroke();
+
+            // Draw Current Price Dot
+            const lastX = (priceHistory.length - 1) * step;
+            const lastY = height - ((currentPrice - minP) / (maxP - minP)) * height;
+            
+            ctx.beginPath();
+            ctx.arc(lastX, lastY, 4, 0, Math.PI * 2);
+            ctx.fillStyle = '#fff';
+            ctx.fill();
+        }
+
+        // --- Simulation Loop ---
+        function simulateMarket() {
+            // Random walk
+            const volatility = currentPrice * 0.0005; // 0.05% volatility per tick
+            const change = (Math.random() - 0.5) * volatility;
+            currentPrice += change;
+            
+            priceHistory.push(currentPrice);
+            if(priceHistory.length > 100) priceHistory.shift();
+
+            // Update DOM
+            document.getElementById('current-price').innerText = formatMoney(currentPrice);
+            document.getElementById('spread-price').innerText = formatMoney(currentPrice);
+            
+            // Randomize color based on trend
+            const prevPrice = priceHistory[priceHistory.length - 2];
+            const changePct = ((currentPrice - prevPrice) / prevPrice) * 100;
+            const changeEl = document.getElementById('price-change');
+            if(changePct > 0) {
+                changeEl.style.color = 'var(--accent-green)';
+                changeEl.innerText = `+${changePct.toFixed(2)}%`;
+            } else {
+                changeEl.style.color = 'var(--accent-red)';
+                changeEl.innerText = `${changePct.toFixed(2)}%`;
+            }
+
+            drawChart();
+            updateOrderBook();
+        }
+
+        // --- Order Book Logic ---
+        function generateOrders() {
+            const asks = [];
+            const bids

@@ -1,0 +1,24 @@
+----------------------------------------
+Exception occurred during processing of request from ('127.0.0.1', 23261)
+Traceback (most recent call last):
+  File "C:\Users\Joshu\AppData\Roaming\uv\python\cpython-3.12-windows-x86_64-none\Lib\socketserver.py", line 697, in process_request_thread
+    self.finish_request(request, client_address)
+  File "C:\Users\Joshu\AppData\Roaming\uv\python\cpython-3.12-windows-x86_64-none\Lib\socketserver.py", line 362, in finish_request
+    self.RequestHandlerClass(request, client_address, self)
+  File "C:\Users\Joshu\AppData\Roaming\uv\python\cpython-3.12-windows-x86_64-none\Lib\socketserver.py", line 766, in __init__
+    self.handle()
+  File "C:\Users\Joshu\AppData\Roaming\uv\python\cpython-3.12-windows-x86_64-none\Lib\http\server.py", line 440, in handle
+    self.handle_one_request()
+  File "C:\Users\Joshu\AppData\Roaming\uv\python\cpython-3.12-windows-x86_64-none\Lib\http\server.py", line 428, in handle_one_request
+    method()
+  File "C:\Users\Joshu\AppData\Local\MylesAI\myles_core.py", line 1448, in do_GET
+    return self._json(200, {
+           ^^^^^^^^^^^^^^^^^
+  File "C:\Users\Joshu\AppData\Local\MylesAI\myles_core.py", line 1442, in _json
+    self._send(code, json.dumps(obj, indent=2).encode("utf-8"), "application/json; charset=utf-8")
+  File "C:\Users\Joshu\AppData\Local\MylesAI\myles_core.py", line 1433, in _send
+    self.wfile.write(data)
+  File "C:\Users\Joshu\AppData\Roaming\uv\python\cpython-3.12-windows-x86_64-none\Lib\socketserver.py", line 845, in write
+    self._sock.sendall(b)
+ConnectionAbortedError: [WinError 10053] An established connection was aborted by the software in your host machine
+----------------------------------------

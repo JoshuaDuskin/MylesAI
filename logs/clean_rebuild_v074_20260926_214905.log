@@ -1,0 +1,60 @@
+==========================================================================
+ MYLES UNIFIED RUNTIME REPAIR v0.7.5
+==========================================================================
+One click. No manual PowerShell. PineTree is never touched.
+Run log: C:\Users\Joshu\AppData\Local\MylesAI\logs\clean_rebuild_v074_20260926_214905.log
+
+==========================================================================
+ 1. Back up and retire duplicate launchers
+==========================================================================
+PASS: installed natural conversation/context patch (3 core file(s))
+PASS: archived stale workspaces outside the live Myles folder
+PASS: backed up current Myles state at C:\Users\Joshu\AppData\Local\MylesAI\backups\clean_rebuild_v074_20260926_214905
+PASS: retired 0 Startup item(s), 1 Run/RunOnce value(s), 0 scheduled task(s), 8 old process(es)
+PASS: archived 2 stale storage/launcher item(s) outside the live Myles folder
+
+==========================================================================
+ 2. Restore the local Myles and trading services
+==========================================================================
+PASS: Myles v9.7.0 healthy / PID 12644
+PASS: Quant v0.6.2 / running / paper
+PASS: GMX v0.6.2 / armed=False / auto=False
+PASS: Quant paper simulator validation completed; results retained for review
+
+==========================================================================
+ 3. Restore the authenticated bridge and public read gateway
+==========================================================================
+PASS: authenticated bridge healthy / 1.8
+PASS: read-only public gateway healthy on 127.0.0.1:8791
+TUNNEL: starting authenticated Tailscale Funnel on 8791...
+TUNNEL: reading Tailscale public URL...
+TUNNEL: checking public health at https://desktop-ckiivnp.taildc4191.ts.net...
+PASS: Tailscale Funnel = https://desktop-ckiivnp.taildc4191.ts.net
+PASS: public tunnel created: https://desktop-ckiivnp.taildc4191.ts.net
+PASS: tunnel registered with Cloudflare
+
+==========================================================================
+ 4. Publish the live dashboard endpoint
+==========================================================================
+PASS: canonical dashboard index installed and queued for publication
+PASS: remote bridge.json contains the active public URL and read token
+PASS: GitHub dashboard connection manifest published and verified
+PASS: canonical dashboard index was installed
+
+==========================================================================
+ 5. Install the classic console and one hidden supervisor
+==========================================================================
+PASS: Myles terminal installed in canonical folder: C:\Users\Joshu\AppData\Local\MylesAI\myles_terminal.py
+PASS: manual terminal shortcut installed: C:\Users\Joshu\Desktop\Myles.lnk
+PASS: one hidden pythonw supervisor installed; no visible console launches at Windows startup
+PASS: old Myles CMD/PowerShell/VBS wrappers are no longer active
+
+==========================================================================
+ 6. Final verification
+==========================================================================
+MYLES: ONLINE
+QUANT BOT: PAPER MODE
+GMX LIVE: DISARMED / SAFE
+DASHBOARD: LIVE READ FEED PUBLISHED
+POPUPS: DUPLICATE MYLES SHELL LAUNCHERS REMOVED
+PineTree: UNTOUCHED

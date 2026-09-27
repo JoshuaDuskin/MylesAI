@@ -1,0 +1,332 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MylesAI Trading Research Dashboard</title>
+    <style>
+        :root {
+            --bg-color: #121212;
+            --card-bg: #1e1e1e;
+            --text-primary: #e0e0e0;
+            --text-secondary: #a0a0a0;
+            --accent-green: #00c853;
+            --accent-red: #ff3d00;
+            --accent-blue: #2979ff;
+            --border-color: #333;
+            --font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+        }
+
+        body {
+            background-color: var(--bg-color);
+            color: var(--text-primary);
+            font-family: var(--font-family);
+            margin: 0;
+            padding: 20px;
+            line-height: 1.6;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 30px;
+            padding-bottom: 20px;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        h1 {
+            font-size: 1.8rem;
+            margin: 0;
+            color: var(--text-primary);
+        }
+
+        .status-badge {
+            padding: 5px 12px;
+            border-radius: 4px;
+            font-weight: bold;
+            font-size: 0.9rem;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .status-active {
+            background-color: rgba(0, 200, 83, 0.2);
+            color: var(--accent-green);
+            border: 1px solid var(--accent-green);
+        }
+
+        .status-idle {
+            background-color: rgba(255, 61, 0, 0.2);
+            color: var(--accent-red);
+            border: 1px solid var(--accent-red);
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+        }
+
+        .card {
+            background-color: var(--card-bg);
+            border-radius: 8px;
+            padding: 20px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+            border: 1px solid var(--border-color);
+        }
+
+        .card h2 {
+            margin-top: 0;
+            font-size: 1.2rem;
+            color: var(--accent-blue);
+            border-bottom: 1px solid var(--border-color);
+            padding-bottom: 10px;
+            margin-bottom: 15px;
+        }
+
+        .job-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px 0;
+            border-bottom: 1px solid #333;
+        }
+
+        .job-item:last-child {
+            border-bottom: none;
+        }
+
+        .job-info h4 {
+            margin: 0;
+            font-size: 0.95rem;
+        }
+
+        .job-meta {
+            font-size: 0.8rem;
+            color: var(--text-secondary);
+        }
+
+        .metric-row {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 12px;
+        }
+
+        .metric-label {
+            color: var(--text-secondary);
+            font-size: 0.9rem;
+        }
+
+        .metric-value {
+            font-weight: bold;
+            font-family: monospace;
+        }
+
+        .positive { color: var(--accent-green); }
+        .negative { color: var(--accent-red); }
+
+        .tool-list {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+        }
+
+        .tool-item {
+            display: flex;
+            align-items: center;
+            padding: 8px 0;
+            font-size: 0.9rem;
+        }
+
+        .tool-icon {
+            width: 24px;
+            height: 24px;
+            background-color: #333;
+            border-radius: 4px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-right: 10px;
+            font-size: 0.8rem;
+            color: var(--text-secondary);
+        }
+
+        .no-data {
+            text-align: center;
+            color: var(--text-secondary);
+            font-style: italic;
+            padding: 20px;
+        }
+
+        @media (max-width: 768px) {
+            header {
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 10px;
+            }
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <header>
+        <div>
+            <h1>MylesAI Research Dashboard</h1>
+            <span style="color: var(--text-secondary); font-size: 0.9rem;">Personal Trading System Monitor</span>
+        </div>
+        <div id="system-status" class="status-badge status-active">System Active</div>
+    </header>
+
+    <div class="grid">
+        <!-- Section 1: Recent Job Summary -->
+        <div class="card">
+            <h2>Recent Job Summary</h2>
+            <div id="jobs-container">
+                <!-- Jobs will be injected here via JS or static placeholder -->
+            </div>
+        </div>
+
+        <!-- Section 2: Trading Research Metrics -->
+        <div class="card" style="grid-column: span / span 2;">
+            <h2>Trading Research Metrics</h2>
+            <div id="metrics-container">
+                <!-- Metrics will be injected here via JS or static placeholder -->
+            </div>
+        </div>
+
+        <!-- Section 3: Tool Inventory Snapshot -->
+        <div class="card">
+            <h2>Tool Inventory Snapshot</h2>
+            <ul id="tools-container" class="tool-list">
+                <!-- Tools will be injected here via JS or static placeholder -->
+            </ul>
+        </div>
+    </div>
+</div>
+
+<script>
+    // Mock Data Simulation (In a real environment, this would fetch from C:\Users\Joshu\AppData\Local\MylesAI\data\)
+    
+    const mockJobs = [
+        { id: "JOB-8921", strategy: "Mean Reversion EURUSD M5", status: "Completed", result: "+1.24%", time: "2 mins ago" },
+        { id: "JOB-8920", strategy: "Trend Following NQ100 H1", status: "Running", result: "N/A", time: "15 mins ago" },
+        { id: "JOB-8919", strategy: "Volatility Breakout SPX 4H", status: "Failed", result: "-0.05%", time: "1 hour ago" }
+    ];
+
+    const mockMetrics = {
+        backtest: {
+            total_trades: 1245,
+            win_rate: "62.4%",
+            profit_factor: "1.85",
+            max_drawdown: "-8.2%",
+            sharpe_ratio: "2.1"
+        },
+        paper_trade: {
+            pnl_today: "+$342.50",
+            pnl_total: "+$4,120.00",
+            open_positions: 2,
+            daily_target: "$500.00"
+        }
+    };
+
+    const mockTools = [
+        { name: "Data Feed Connector (Binance/Coinbase)", status: "Connected" },
+        { name: "Technical Analysis Engine (TA-Lib)", status: "Ready" },
+        { name: "Risk Management Module", status: "Active" },
+        { name: "News Sentiment API", status: "Latency High" }
+    ];
+
+    // Render Jobs
+    const jobsContainer = document.getElementById('jobs-container');
+    if (mockJobs.length > 0) {
+        mockJobs.forEach(job => {
+            const jobHtml = `
+                <div class="job-item">
+                    <div class="job-info">
+                        <h4>${job.strategy}</h4>
+                        <div class="job-meta">${job.id} • ${job.time}</div>
+                    </div>
+                    <div style="text-align: right;">
+                        <div style="font-weight:bold; color: ${job.status === 'Completed' ? 'var(--accent-green)' : (job.status === 'Failed' ? 'var(--accent-red)' : 'var(--accent-blue)')}">${job.status}</div>
+                        <div class="job-meta">${job.result}</div>
+                    </div>
+                </div>
+            `;
+            jobsContainer.innerHTML += jobHtml;
+        });
+    } else {
+        jobsContainer.innerHTML = '<div class="no-data">No recent jobs found.</div>';
+    }
+
+    // Render Metrics
+    const metricsContainer = document.getElementById('metrics-container');
+    if (mockMetrics) {
+        metricsContainer.innerHTML = `
+            <h3 style="margin-top:0; font-size:1rem; color:#fff;">Backtest Results</h3>
+            <div class="metric-row">
+                <span class="metric-label">Total Trades</span>
+                <span class="metric-value">${mockMetrics.backtest.total_trades}</span>
+            </div>
+            <div class="metric-row">
+                <span class="metric-label">Win Rate</span>
+                <span class="metric-value ${parseFloat(mockMetrics.backtest.win_rate.replace('%','')) > 50 ? 'positive' : ''}">${mockMetrics.backtest.win_rate}</span>
+            </div>
+            <div class="metric-row">
+                <span class="metric-label">Profit Factor</span>
+                <span class="metric-value positive">${mockMetrics.backtest.profit_factor}</span>
+            </div>
+            <div class="metric-row">
+                <span class="metric-label">Max Drawdown</span>
+                <span class="metric-value negative">${mockMetrics.backtest.max_drawdown}</span>
+            </div>
+            <div class="metric-row">
+                <span class="metric-label">Sharpe Ratio</span>
+                <span class="metric-value">${mockMetrics.backtest.sharpe_ratio}</span>
+            </div>
+
+            <h3 style="margin-top:20px; font-size:1rem; color:#fff;">Paper Trade PnL</h3>
+            <div class="metric-row">
+                <span class="metric-label">Total PnL</span>
+                <span class="metric-value positive">${mockMetrics.paper_trade.pnl_total}</span>
+            </div>
+            <div class="metric-row">
+                <span class="metric-label">Today's PnL</span>
+                <span class="metric-value ${parseFloat(mockMetrics.paper_trade.pnl_today.replace('$','').replace(',','')) > 0 ? 'positive' : ''}">${mockMetrics.paper_trade.pnl_today}</span>
+            </div>
+            <div class="metric-row">
+                <span class="metric-label">Open Positions</span>
+                <span class="metric-value">${mockMetrics.paper_trade.open_positions}</span>
+            </div>
+        `;
+    } else {
+        metricsContainer.innerHTML = '<div class="no-data">Metrics pending initialization.</div>';
+    }
+
+    // Render Tools
+    const toolsContainer = document.getElementById('tools-container');
+    if (mockTools.length > 0) {
+        mockTools.forEach(tool => {
+            const toolHtml = `
+                <li class="tool-item">
+                    <div class="tool-icon">${tool.name.charAt(0)}</div>
+                    <div style="flex-grow:1;">${tool.name}</div>
+                    <span style="font-size:0.8rem; padding:2px 6px; border-radius:3px; background:#333; color:#fff;">${tool.status}</span>
+                </li>
+            `;
+            toolsContainer.innerHTML += toolHtml;
+        });
+    } else {
+        toolsContainer.innerHTML = '<div class="no-data">Inventory empty.</div>';
+    }
+
+</script>
+
+</body>
+</html>

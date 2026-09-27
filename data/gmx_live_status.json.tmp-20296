@@ -1,0 +1,6 @@
+{
+  "ok": false,
+  "version": "0.6.2",
+  "generated_at": "2026-09-27T02:28:39.983Z",
+  "error": "EPERM: operation not permitted, rename 'C:\\Users\\Joshu\\AppData\\Local\\MylesAI\\data\\gmx_live_status.json.tmp-20296' -> 'C:\\Users\\Joshu\\AppData\\Local\\MylesAI\\data\\gmx_live_status.json'"
+}

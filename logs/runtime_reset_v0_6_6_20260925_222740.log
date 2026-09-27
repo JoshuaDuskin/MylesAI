@@ -1,0 +1,62 @@
+﻿**********************
+Windows PowerShell transcript start
+Start time: 20260925222740
+Username: DESKTOP-CKIIVNP\Joshu
+RunAs User: DESKTOP-CKIIVNP\Joshu
+Configuration Name: 
+Machine: DESKTOP-CKIIVNP (Microsoft Windows NT 10.0.19045.0)
+Host Application: powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File C:\Users\Joshu\OneDrive\Desktop\MYLES_RUNTIME_RESET_V0_6_6\MYLES_RUNTIME_RESET_V0_6_6\RESET_RUNTIME.ps1
+Process ID: 9580
+PSVersion: 5.1.19041.6456
+PSEdition: Desktop
+PSCompatibleVersions: 1.0, 2.0, 3.0, 4.0, 5.0, 5.1.19041.6456
+BuildVersion: 10.0.19041.6456
+CLRVersion: 4.0.30319.42000
+WSManStackVersion: 3.0
+PSRemotingProtocolVersion: 2.3
+SerializationVersion: 1.1.0.1
+**********************
+=======================================================================
+ MYLES RUNTIME RESET v0.6.6
+=======================================================================
+Collapses the current mess to one healthy Myles core, one Quant engine, one GMX daemon, one bridge and one supervisor.
+It does not redesign the dashboard or modify trading/wallet data.
+Run log: C:\Users\Joshu\AppData\Local\MylesAI\logs\runtime_reset_v0_6_6_20260925_222740.log
+
+=== Current state before reset ===
+myles_core processes:      2
+job_worker processes:      0
+quant_service processes:   1
+gmx_live processes:        1
+dashboard_bridge processes:2
+cloudflared processes:     0
+
+=== Removing duplicate recovery loops ===
+PASS: old guardian/supervisor/startup loops removed.
+
+=== Stopping duplicate Myles runtime processes ===
+PASS: duplicate runtime processes stopped.
+
+=== Starting one Ollama service ===
+PASS: Ollama online. qwen3.5:9b, gpt-oss:20b
+
+=== Starting one Myles core ===
+PASS: Myles core healthy. Version=9.7.0 PID=2920
+
+=== Pausing continuous self-improvement to remove background model load ===
+PASS: continuous improvement is OFF while we stabilize performance.
+
+=== Starting exactly one Quant + GMX + local bridge stack ===
+PS>TerminatingError(Invoke-RestMethod): "Unable to connect to the remote server"
+
+=======================================================================
+ MYLES RUNTIME RESET v0.6.6 STOPPED
+=======================================================================
+Dashboard bridge did not become healthy on 127.0.0.1:8790
+At C:\Users\Joshu\OneDrive\Desktop\MYLES_RUNTIME_RESET_V0_6_6\MYLES_RUNTIME_RESET_V0_6_6\RESET_RUNTIME.ps1:200 char:31
++ ... not$bridge){throw "Dashboard bridge did not become healthy on 127.0.0 ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+**********************
+Windows PowerShell transcript end
+End time: 20260925222953
+**********************

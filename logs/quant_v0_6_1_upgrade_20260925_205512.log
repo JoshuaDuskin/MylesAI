@@ -1,0 +1,55 @@
+﻿**********************
+Windows PowerShell transcript start
+Start time: 20260925205512
+Username: DESKTOP-CKIIVNP\Joshu
+RunAs User: DESKTOP-CKIIVNP\Joshu
+Configuration Name: 
+Machine: DESKTOP-CKIIVNP (Microsoft Windows NT 10.0.19045.0)
+Host Application: powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File C:\Users\Joshu\OneDrive\Desktop\MYLES_QUANT_V0_6_1_GMX_LIVE_FIXED\PATCH.ps1
+Process ID: 8532
+PSVersion: 5.1.19041.6456
+PSEdition: Desktop
+PSCompatibleVersions: 1.0, 2.0, 3.0, 4.0, 5.0, 5.1.19041.6456
+BuildVersion: 10.0.19041.6456
+CLRVersion: 4.0.30319.42000
+WSManStackVersion: 3.0
+PSRemotingProtocolVersion: 2.3
+SerializationVersion: 1.1.0.1
+**********************
+
+=======================================================================
+ MYLES QUANT v0.6.1 - OWNER-GATED GMX LIVE EXECUTION
+=======================================================================
+Installs real GMX execution infrastructure. It does NOT arm live trading, enable live Auto, or move funds.
+Run log: C:\Users\Joshu\AppData\Local\MylesAI\logs\quant_v0_6_1_upgrade_20260925_205512.log
+
+=== Creating rollback backup ===
+PASS: rollback backup created at C:\Users\Joshu\AppData\Local\MylesAI\backups\quant_v0_6_1_20260925_205512
+
+=== Stopping only Quant + live adapter + dashboard bridge ===
+PASS: Myles core and Cloudflare tunnel were left alone.
+
+=== Installing Quant v0.6.1 + GMX SDK v2 (clean runtime rebuild) ===
+npm warn deprecated crypto-js@4.2.0: Active development of CryptoJS has been discontinued. This library is no longer mai
+ntained.
+
+added 65 packages in 19s
+PASS: GMX SDK v2 CommonJS runtime resolved cleanly.
+
+
+Validating current GMX SDK/API read path (no transaction is sent)...
+Running current GMX candle/backtest validation...
+{"ok":true,"generated_at":"2026-09-26T01:56:15.752Z","equity":9925.68,"pnl":-74.32,"positions":2,"backtests":15,"markets
+":["BTC/USD","ETH/USD","SOL/USD","XRP/USD","TAO/USD"],"errors":{}}
+
+=======================================================================
+ MYLES QUANT v0.6.1 STOPPED
+=======================================================================
+Paper Quant telemetry did not verify as v0.6.1.
+At C:\Users\Joshu\OneDrive\Desktop\MYLES_QUANT_V0_6_1_GMX_LIVE_FIXED\PATCH.ps1:147 char:86
++ ... ne $true) { throw "Paper Quant telemetry did not verify as v0.6.1." } ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+**********************
+Windows PowerShell transcript end
+End time: 20260925205615
+**********************

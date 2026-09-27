@@ -3,331 +3,359 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Myles AI Dashboard</title>
+    <title>Myles AI Worker Status Dashboard</title>
     <style>
         :root {
-            --bg-color: #121212;
-            --card-bg: #1e1e1e;
-            --text-primary: #ffffff;
-            --text-secondary: #b0b0b0;
-            --accent-purple: #bb86fc;
-            --accent-green: #03dac6;
-            --danger-red: #cf6679;
-            --font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            --bg-color: #0f172a;
+            --card-bg: #1e293b;
+            --text-primary: #f8fafc;
+            --text-secondary: #94a3b8;
+            --accent: #38bdf8;
+            --success: #22c55e;
+            --warning: #eab308;
+            --error: #ef4444;
+            --border: #334155;
         }
 
-        * {
-            box-sizing: border-box;
-            margin: 0;
-            padding: 0;
-        }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
 
         body {
+            font-family: 'Segoe UI', system-ui, sans-serif;
             background-color: var(--bg-color);
             color: var(--text-primary);
-            font-family: var(--font-family);
-            line-height: 1.6;
             min-height: 100vh;
             display: flex;
             flex-direction: column;
         }
 
-        /* Sticky Header */
         header {
-            background-color: rgba(30, 30, 30, 0.95);
+            background: rgba(30, 41, 59, 0.8);
             backdrop-filter: blur(10px);
+            border-bottom: 1px solid var(--border);
             padding: 1rem 2rem;
-            position: sticky;
-            top: 0;
-            z-index: 100;
-            border-bottom: 1px solid #333;
             display: flex;
             justify-content: space-between;
             align-items: center;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+            position: sticky;
+            top: 0;
+            z-index: 100;
         }
 
-        .brand {
-            font-size: 1.5rem;
-            font-weight: 700;
-            color: var(--accent-purple);
-            display: flex;
+        h1 { font-size: 1.5rem; font-weight: 600; letter-spacing: -0.025em; }
+
+        .status-badge {
+            display: inline-flex;
             align-items: center;
-            gap: 10px;
+            gap: 0.5rem;
+            padding: 0.5rem 1rem;
+            border-radius: 999px;
+            font-size: 0.875rem;
+            font-weight: 600;
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid var(--border);
         }
 
-        /* Pulsing Status Dot */
-        .status-dot {
-            width: 12px;
-            height: 12px;
-            background-color: var(--accent-green);
+        .pulse-dot {
+            width: 8px;
+            height: 8px;
             border-radius: 50%;
-            display: inline-block;
-            box-shadow: 0 0 0 rgba(3, 218, 198, 0.4);
+            background-color: var(--success);
+            box-shadow: 0 0 0 rgba(34, 197, 94, 0.4);
             animation: pulse 2s infinite;
         }
 
         @keyframes pulse {
-            0% {
-                transform: scale(0.95);
-                box-shadow: 0 0 0 0 rgba(3, 218, 198, 0.7);
-            }
-            70% {
-                transform: scale(1);
-                box-shadow: 0 0 0 10px rgba(3, 218, 198, 0);
-            }
-            100% {
-                transform: scale(0.95);
-                box-shadow: 0 0 0 0 rgba(3, 218, 198, 0);
-            }
+            0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.7); }
+            70% { transform: scale(1); box-shadow: 0 0 0 10px rgba(34, 197, 94, 0); }
+            100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(34, 197, 94, 0); }
         }
 
-        /* Main Layout */
         main {
             flex: 1;
             padding: 2rem;
-            max-width: 1200px;
+            max-width: 1600px;
             margin: 0 auto;
             width: 100%;
         }
 
-        h1, h2, h3 {
-            color: var(--text-primary);
-            margin-bottom: 1rem;
-        }
-
-        h2 {
-            font-size: 1.5rem;
-            border-bottom: 2px solid var(--accent-purple);
-            display: inline-block;
-            padding-bottom: 0.5rem;
-            margin-bottom: 1.5rem;
-        }
-
-        /* Grid Layout */
-        .dashboard-grid {
+        .grid {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-            gap: 2rem;
-            margin-bottom: 2rem;
+            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+            gap: 1.5rem;
         }
 
-        /* Cards */
         .card {
             background-color: var(--card-bg);
-            border-radius: 12px;
-            padding: 1.5rem;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.2);
-            transition: transform 0.3s ease, box-shadow 0.3s ease;
-            border: 1px solid #333;
+            border: 1px solid var(--border);
+            border-radius: 0.75rem;
+            padding: 1.25rem;
+            transition: transform 0.2s, box-shadow 0.2s;
+            display: flex;
+            flex-direction: column;
+            gap: 0.75rem;
         }
 
         .card:hover {
-            transform: translateY(-5px);
-            box-shadow: 0 8px 15px rgba(187, 134, 252, 0.15);
-            border-color: var(--accent-purple);
+            transform: translateY(-2px);
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.3);
+            border-color: var(--accent);
         }
 
-        /* System Status Specifics */
-        .status-indicator {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            margin-bottom: 1rem;
-            font-weight: bold;
-        }
-
-        .metric-row {
+        .card-header {
             display: flex;
             justify-content: space-between;
-            padding: 0.5rem 0;
-            border-bottom: 1px solid #333;
-        }
-
-        .metric-label { color: var(--text-secondary); }
-        .metric-value { font-family: monospace; color: var(--accent-purple); }
-
-        /* Recent Activity Specifics */
-        .activity-list {
-            list-style: none;
-        }
-
-        .activity-item {
-            display: flex;
             align-items: center;
-            padding: 0.8rem 0;
-            border-bottom: 1px solid #333;
-            gap: 1rem;
+            margin-bottom: 0.5rem;
         }
 
-        .activity-item:last-child { border-bottom: none; }
+        .worker-name { font-weight: 600; font-size: 1.1rem; }
+        
+        .status-indicator {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background-color: var(--success);
+        }
 
-        .icon-box {
-            width: 40px;
-            height: 40px;
-            background-color: rgba(187, 134, 252, 0.1);
-            border-radius: 8px;
+        .status-indicator.offline { background-color: var(--error); box-shadow: none; }
+        .status-indicator.warning { background-color: var(--warning); }
+
+        .stats-row {
             display: flex;
-            align-items: center;
-            justify-content: center;
-            color: var(--accent-purple);
-            font-size: 1.2rem;
-        }
-
-        .activity-info h4 {
-            font-size: 0.95rem;
-            margin-bottom: 0.2rem;
-        }
-
-        .activity-time {
-            font-size: 0.8rem;
+            justify-content: space-between;
+            font-size: 0.875rem;
             color: var(--text-secondary);
+            padding-top: 0.5rem;
+            border-top: 1px solid rgba(255,255,255,0.05);
         }
 
-        /* Quick Actions Specifics */
-        .action-grid {
-            display: grid;
-            grid-template-columns: repeat(2, 1fr);
-            gap: 1rem;
-            margin-top: 1rem;
-        }
+        .stat-value { font-weight: 600; color: var(--text-primary); }
 
-        .action-btn {
-            background-color: #2c2c2c;
-            border: 1px solid #444;
-            color: var(--text-primary);
-            padding: 1rem;
-            border-radius: 8px;
-            cursor: pointer;
-            text-align: center;
-            transition: all 0.2s ease;
-            font-weight: 600;
-        }
-
-        .action-btn:hover {
-            background-color: var(--accent-purple);
-            color: #121212;
-            border-color: var(--accent-purple);
-        }
-
-        /* Footer */
-        footer {
-            text-align: center;
-            padding: 2rem;
-            color: var(--text-secondary);
-            font-size: 0.9rem;
-            border-top: 1px solid #333;
+        .last-update {
             margin-top: auto;
+            padding-top: 1rem;
+            font-size: 0.75rem;
+            color: var(--text-secondary);
+            text-align: center;
         }
 
-        /* Responsive Adjustments */
-        @media (max-width: 768px) {
-            header {
-                padding: 1rem;
-            }
-            main {
-                padding: 1rem;
-            }
-            .action-grid {
-                grid-template-columns: 1fr;
-            }
+        .loading-overlay {
+            position: fixed;
+            inset: 0;
+            background: rgba(15, 23, 42, 0.9);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+            transition: opacity 0.3s;
         }
+
+        .spinner {
+            width: 48px;
+            height: 48px;
+            border: 4px solid var(--border);
+            border-top-color: var(--accent);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        .hidden { opacity: 0; pointer-events: none; }
     </style>
 </head>
 <body>
 
     <header>
-        <div class="brand">
-            <span class="status-dot"></span>
-            Myles AI
+        <h1>Myles AI Core Status</h1>
+        <div class="status-badge">
+            <div class="pulse-dot" id="global-status-dot"></div>
+            <span id="global-status-text">Connecting...</span>
         </div>
-        <nav style="color: var(--text-secondary); font-size: 0.9rem;">
-            <a href="#" style="color: inherit; text-decoration: none; margin-right: 15px;">Dashboard</a>
-            <a href="#" style="color: inherit; text-decoration: none;">Settings</a>
-        </nav>
     </header>
 
     <main>
-        <!-- System Status Section -->
-        <section class="dashboard-grid">
-            <div class="card">
-                <h2>System Status</h2>
-                <div class="status-indicator">
-                    <span style="color: var(--accent-green);">●</span>
-                    All Systems Operational
-                </div>
-                
-                <div class="metric-row">
-                    <span class="metric-label">CPU Load</span>
-                    <span class="metric-value">12%</span>
-                </div>
-                <div class="metric-row">
-                    <span class="metric-label">Memory Usage</span>
-                    <span class="metric-value">4.2 GB / 16 GB</span>
-                </div>
-                <div class="metric-row">
-                    <span class="metric-label">Network Latency</span>
-                    <span class="metric-value">24ms</span>
-                </div>
-                <div class="metric-row">
-                    <span class="metric-label">API Uptime</span>
-                    <span class="metric-value">99.98%</span>
-                </div>
-            </div>
-
-            <!-- Recent Activity Section -->
-            <div class="card">
-                <h2>Recent Activity</h2>
-                <ul class="activity-list">
-                    <li class="activity-item">
-                        <div class="icon-box">⚡</div>
-                        <div class="activity-info">
-                            <h4>Model Update Deployed</h4>
-                            <span class="activity-time">2 minutes ago</span>
-                        </div>
-                    </li>
-                    <li class="activity-item">
-                        <div class="icon-box">🔒</div>
-                        <div class="activity-info">
-                            <h4>Security Scan Completed</h4>
-                            <span class="activity-time">1 hour ago</span>
-                        </div>
-                    </li>
-                    <li class="activity-item">
-                        <div class="icon-box">💾</div>
-                        <div class="activity-info">
-                            <h4>Backup Synced</h4>
-                            <span class="activity-time">3 hours ago</span>
-                        </div>
-                    </li>
-                    <li class="activity-item">
-                        <div class="icon-box">👤</div>
-                        <div class="activity-info">
-                            <h4>New User Registered</h4>
-                            <span class="activity-time">5 hours ago</span>
-                        </div>
-                    </li>
-                </ul>
-            </div>
-
-            <!-- Quick Actions Section -->
-            <div class="card">
-                <h2>Quick Actions</h2>
-                <p style="color: var(--text-secondary); font-size: 0.9rem;">Common tasks for system administration.</p>
-                
-                <div class="action-grid">
-                    <button class="action-btn" onclick="alert('Restarting services...')">Restart Services</button>
-                    <button class="action-btn" onclick="alert('Clearing cache...')">Clear Cache</button>
-                    <button class="action-btn" onclick="alert('Generating report...')">Generate Report</button>
-                    <button class="action-btn" onclick="alert('Opening logs...')">View Logs</button>
-                </div>
-            </div>
-        </section>
+        <div id="grid-container" class="grid">
+            <!-- Worker Cards injected here -->
+        </div>
+        <div id="loading-overlay" class="loading-overlay">
+            <div class="spinner"></div>
+        </div>
     </main>
 
-    <footer>
-        &copy; 2023 Myles AI Dashboard. All rights reserved.
-    </footer>
+    <script>
+        // Configuration
+        const CONFIG = {
+            apiEndpoint: window.MYLES_RAW_STATUS_URL || 'http://localhost:8080/api/status',
+            refreshInterval: 3000, // ms
+            maxRetries: 3
+        };
 
+        // State
+        let lastData = null;
+        let retryCount = 0;
+
+        // DOM Elements
+        const gridContainer = document.getElementById('grid-container');
+        const loadingOverlay = document.getElementById('loading-overlay');
+        const globalStatusText = document.getElementById('global-status-text');
+        const globalStatusDot = document.getElementById('global-status-dot');
+
+        /**
+         * Fetches raw status data from the Myles core.
+         */
+        async function fetchStatus() {
+            try {
+                const response = await fetch(CONFIG.apiEndpoint);
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+
+                const data = await response.json();
+                return data;
+            } catch (error) {
+                console.warn(`Fetch failed: ${error.message}. Retrying...`);
+                retryCount++;
+                
+                if (retryCount < CONFIG.maxRetries) {
+                    setTimeout(fetchStatus, 2000 * retryCount);
+                } else {
+                    throw error;
+                }
+            }
+        }
+
+        /**
+         * Renders the dashboard based on fetched data.
+         */
+        function renderDashboard(data) {
+            if (!data.workers || !Array.isArray(data.workers)) {
+                console.error('Invalid worker data structure');
+                return;
+            }
+
+            // Update Global Status
+            const isOnline = data.status === 'online' || data.status === 'healthy';
+            globalStatusText.textContent = isOnline ? 'System Online' : 'System Offline';
+            
+            if (isOnline) {
+                globalStatusDot.className = 'pulse-dot';
+                globalStatusDot.style.backgroundColor = 'var(--success)';
+            } else {
+                globalStatusDot.className = '';
+                globalStatusDot.style.backgroundColor = 'var(--error)';
+            }
+
+            // Clear existing cards
+            gridContainer.innerHTML = '';
+
+            // Create cards for each worker
+            data.workers.forEach(worker => {
+                const card = document.createElement('div');
+                card.className = 'card';
+                
+                // Determine status class and text
+                let statusClass = 'online';
+                let statusText = 'Active';
+                let color = 'var(--success)';
+
+                if (worker.status === 'idle') {
+                    statusClass = 'warning';
+                    statusText = 'Idle';
+                    color = 'var(--warning)';
+                } else if (worker.status === 'offline' || !worker.status) {
+                    statusClass = 'offline';
+                    statusText = 'Offline';
+                    color = 'var(--error)';
+                }
+
+                // Format memory usage
+                const memUsage = worker.memory ? formatBytes(worker.memory.used) : '-';
+                const cpuUsage = worker.cpu ? `${worker.cpu}%` : '-';
+
+                card.innerHTML = `
+                    <div class="card-header">
+                        <span class="worker-name">${escapeHtml(worker.name || 'Unknown Worker')}</span>
+                        <div class="status-indicator ${statusClass}" style="background-color: ${color}"></div>
+                    </div>
+                    <div class="stats-row">
+                        <span>CPU Load:</span>
+                        <span class="stat-value" style="color: ${color}">${cpuUsage}</span>
+                    </div>
+                    <div class="stats-row">
+                        <span>Memory:</span>
+                        <span class="stat-value" style="color: ${color}">${memUsage}</span>
+                    </div>
+                    <div class="last-update">
+                        Last Heartbeat: ${formatTime(worker.last_seen || new Date())}
+                    </div>
+                `;
+
+                gridContainer.appendChild(card);
+            });
+
+            // Hide loading overlay if it's still visible
+            if (loadingOverlay.classList.contains('hidden') === false) {
+                loadingOverlay.classList.add('hidden');
+            }
+        }
+
+        /**
+         * Helper: Format bytes to human readable string.
+         */
+        function formatBytes(bytes, decimals = 2) {
+            if (!+bytes) return '0 Bytes';
+            const k = 1024;
+            const dm = decimals < 0 ? 0 : decimals;
+            const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return `${parseFloat((bytes / Math.pow(k, i)).toFixed(dm))} ${sizes[i]}`;
+        }
+
+        /**
+         * Helper: Format timestamp.
+         */
+        function formatTime(dateString) {
+            const date = new Date(dateString);
+            return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+        }
+
+        /**
+         * Helper: Escape HTML to prevent XSS.
+         */
+        function escapeHtml(text) {
+            if (text === null || text === undefined) return '';
+            const map = {
+                '&': '&amp;',
+                '<': '&lt;',
+                '>': '&gt;',
+                '"': '&quot;',
+                "'": '&#039;'
+            };
+            return String(text).replace(/[&<>"']/g, function(m) { return map[m]; });
+        }
+
+        /**
+         * Initialize Dashboard
+         */
+        async function init() {
+            try {
+                const data = await fetchStatus();
+                renderDashboard(data);
+                
+                // Start polling loop
+                setInterval(fetchStatus, CONFIG.refreshInterval);
+            } catch (error) {
+                console.error('Failed to initialize dashboard:', error);
+                globalStatusText.textContent = 'Connection Failed';
+                globalStatusDot.style.backgroundColor = 'var(--error)';
+                gridContainer.innerHTML = '<div style="grid-column: 1/-1; text-align: center; padding: 2rem;">Unable to connect to Myles Core. Please check your network or API endpoint.</div>';
+            }
+        }
+
+        // Start the application
+        init();
+    </script>
 </body>
 </html>

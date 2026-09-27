@@ -1,0 +1,49 @@
+{
+  "version": 1,
+  "equity": 10000,
+  "cash": 10000,
+  "realized_pnl": 0,
+  "position": {
+    "symbol": "BTC/USD",
+    "direction": -1,
+    "side": "short",
+    "entry": 83660.48,
+    "units": 0.05976537631181011,
+    "notional": 5000,
+    "entry_cost": 5,
+    "opened_at": "2026-09-25T17:00:00.000Z",
+    "mark": 83866.16,
+    "unrealized_pnl": -17.29
+  },
+  "wins": 0,
+  "losses": 0,
+  "trades": [],
+  "equity_curve": [
+    {
+      "timestamp": 1790355600,
+      "equity": 9992.5
+    },
+    {
+      "timestamp": 1790359200,
+      "equity": 9982.81
+    },
+    {
+      "timestamp": 1790362800,
+      "equity": 9976.59
+    },
+    {
+      "timestamp": 1790366400,
+      "equity": 9975.81
+    },
+    {
+      "timestamp": 1790370000,
+      "equity": 9982.71
+    }
+  ],
+  "day_start_equity": 10000,
+  "day_key": "2026-09-25",
+  "peak_equity": 10000,
+  "halted": false,
+  "halt_reason": null,
+  "last_candle_ts": 1790370000
+}

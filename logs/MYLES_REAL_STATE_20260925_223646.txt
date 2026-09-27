@@ -1,0 +1,475 @@
+﻿**********************
+Windows PowerShell transcript start
+Start time: 20260925223646
+Username: DESKTOP-CKIIVNP\Joshu
+RunAs User: DESKTOP-CKIIVNP\Joshu
+Configuration Name: 
+Machine: DESKTOP-CKIIVNP (Microsoft Windows NT 10.0.19045.0)
+Host Application: C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe
+Process ID: 11552
+PSVersion: 5.1.19041.6456
+PSEdition: Desktop
+PSCompatibleVersions: 1.0, 2.0, 3.0, 4.0, 5.0, 5.1.19041.6456
+BuildVersion: 10.0.19041.6456
+CLRVersion: 4.0.30319.42000
+WSManStackVersion: 3.0
+PSRemotingProtocolVersion: 2.3
+SerializationVersion: 1.1.0.1
+**********************
+PS C:\Users\Joshu> function Write-Section([string]$Text) {
+    Write-Host ""
+    Write-Host "=======================================================================" -ForegroundColor Cyan
+    Write-Host " $Text" -ForegroundColor Cyan
+    Write-Host "=======================================================================" -ForegroundColor Cyan
+}
+PS C:\Users\Joshu> Write-Section "1. DISK / MACHINE"
+
+=======================================================================
+ 1. DISK / MACHINE
+=======================================================================
+PS C:\Users\Joshu> Get-PSDrive C |
+    Select-Object Name,
+        @{N="UsedGB";E={[math]::Round($_.Used/1GB,2)}},
+        @{N="FreeGB";E={[math]::Round($_.Free/1GB,2)}} |
+    Format-Table -AutoSize
+
+Name UsedGB FreeGB
+---- ------ ------
+C    170.88 782.34
+
+
+PS C:\Users\Joshu> Write-Section "2. MYLES CORE"
+
+=======================================================================
+ 2. MYLES CORE
+=======================================================================
+PS C:\Users\Joshu> foreach ($Url in @(
+    "http://127.0.0.1:8766/health",
+    "http://127.0.0.1:8766/api/public-status",
+    "http://127.0.0.1:8766/api/messages"
+)) {
+    try {
+        $Response = Invoke-WebRequest -Uri $Url -UseBasicParsing -TimeoutSec 5
+        Write-Host "PASS  $Url  HTTP $($Response.StatusCode)" -ForegroundColor Green
+
+        if ($Url -like "*/health") {
+            Write-Host $Response.Content
+        }
+    }
+    catch {
+        Write-Host "FAIL  $Url" -ForegroundColor Red
+        Write-Host $_.Exception.Message -ForegroundColor DarkRed
+    }
+}
+PASS  http://127.0.0.1:8766/health  HTTP 200
+{
+  "ok": true,
+  "version": "9.7.0",
+  "pid": 15040,
+  "time": "2026-09-25T22:36:47-05:00",
+  "telegram_configured": true,
+  "light_mode": false,
+  "status": "Myles is online. No owner task is currently running."
+}
+PASS  http://127.0.0.1:8766/api/public-status  HTTP 200
+PASS  http://127.0.0.1:8766/api/messages  HTTP 200
+PS C:\Users\Joshu> Write-Section "3. OLLAMA / MODEL"
+
+=======================================================================
+ 3. OLLAMA / MODEL
+=======================================================================
+PS C:\Users\Joshu> try {
+    $Tags = Invoke-RestMethod "http://127.0.0.1:11434/api/tags" -TimeoutSec 5
+    Write-Host "PASS: Ollama is online." -ForegroundColor Green
+    $Tags.models | Select-Object name,size | Format-Table -AutoSize
+}
+catch {
+    Write-Host "FAIL: Ollama is not responding." -ForegroundColor Red
+    Write-Host $_.Exception.Message
+}
+PASS: Ollama is online.
+
+name               size
+----               ----
+qwen3.5:9b   6594474711
+gpt-oss:20b 13793441244
+
+
+PS C:\Users\Joshu> Write-Section "4. ALL MYLES-RELATED PROCESSES"
+
+=======================================================================
+ 4. ALL MYLES-RELATED PROCESSES
+=======================================================================
+PS C:\Users\Joshu> $ProcPattern = 'myles_core\.py|job_worker\.py|quant_service\.mjs|gmx_live\.mjs|dashboard_bridge\.py|cloudflared|ollama'
+PS C:\Users\Joshu> $Processes = Get-CimInstance Win32_Process -ErrorAction SilentlyContinue |
+    Where-Object { ([string]$_.CommandLine) -match $ProcPattern }
+PS C:\Users\Joshu> if ($Processes) {
+    foreach ($P in $Processes) {
+        $Cpu = $null
+        $Ram = $null
+
+        try {
+            $GP = Get-Process -Id $P.ProcessId -ErrorAction Stop
+            $Cpu = [math]::Round([double]$GP.CPU,2)
+            $Ram = [math]::Round($GP.WorkingSet64 / 1MB,1)
+        } catch {}
+
+        [PSCustomObject]@{
+            PID       = $P.ProcessId
+            Name      = $P.Name
+            CPU       = $Cpu
+            RAM_MB    = $Ram
+            Command   = ([string]$P.CommandLine).Substring(
+                0,
+                [Math]::Min(180, ([string]$P.CommandLine).Length)
+            )
+        }
+    } | Format-Table -Wrap -AutoSize
+}
+At line:22 char:7
++     } | Format-Table -Wrap -AutoSize
++       ~
+An empty pipe element is not allowed.
+At line:22 char:7
++     } | Format-Table -Wrap -AutoSize
++       ~
+An empty pipe element is not allowed.
+    + CategoryInfo          : ParserError: (:) [], ParentContainsErrorRecordException
+    + FullyQualifiedErrorId : EmptyPipeElement
+
+PS C:\Users\Joshu> else {
+    Write-Host "NO MYLES-RELATED PROCESSES FOUND." -ForegroundColor Red
+}
+else : The term 'else' is not recognized as the name of a cmdlet, function, script file, or operable program. Check the 
+spelling of the name, or if a path was included, verify that the path is correct and try again.
+At line:1 char:1
++ else {
++ ~~~~
+    + CategoryInfo          : ObjectNotFound: (else:String) [], CommandNotFoundException
+    + FullyQualifiedErrorId : CommandNotFoundException
+else : The term 'else' is not recognized as the name of a cmdlet, function, script file, or operable program. Check
+the spelling of the name, or if a path was included, verify that the path is correct and try again.
+At line:1 char:1
++ else {
++ ~~~~
+    + CategoryInfo          : ObjectNotFound: (else:String) [], CommandNotFoundException
+    + FullyQualifiedErrorId : CommandNotFoundException
+
+PS C:\Users\Joshu> Write-Section "5. SCHEDULED TASKS"
+
+=======================================================================
+ 5. SCHEDULED TASKS
+=======================================================================
+PS C:\Users\Joshu> $Tasks = Get-ScheduledTask -ErrorAction SilentlyContinue |
+    Where-Object { $_.TaskName -match 'Myles|Duskin' }
+PS C:\Users\Joshu> if ($Tasks) {
+    foreach ($Task in $Tasks) {
+        $Info = Get-ScheduledTaskInfo -TaskName $Task.TaskName -ErrorAction SilentlyContinue
+
+        [PSCustomObject]@{
+            Task       = $Task.TaskName
+            State      = $Task.State
+            LastRun    = $Info.LastRunTime
+            LastResult = $Info.LastTaskResult
+            Action     = (($Task.Actions | ForEach-Object {
+                "$($_.Execute) $($_.Arguments)"
+            }) -join " | ")
+        }
+    } | Format-List
+}
+At line:14 char:7
++     } | Format-List
++       ~
+An empty pipe element is not allowed.
+At line:14 char:7
++     } | Format-List
++       ~
+An empty pipe element is not allowed.
+    + CategoryInfo          : ParserError: (:) [], ParentContainsErrorRecordException
+    + FullyQualifiedErrorId : EmptyPipeElement
+
+PS C:\Users\Joshu> else {
+    Write-Host "No Myles scheduled tasks found."
+}
+else : The term 'else' is not recognized as the name of a cmdlet, function, script file, or operable program. Check the 
+spelling of the name, or if a path was included, verify that the path is correct and try again.
+At line:1 char:1
++ else {
++ ~~~~
+    + CategoryInfo          : ObjectNotFound: (else:String) [], CommandNotFoundException
+    + FullyQualifiedErrorId : CommandNotFoundException
+else : The term 'else' is not recognized as the name of a cmdlet, function, script file, or operable program. Check
+the spelling of the name, or if a path was included, verify that the path is correct and try again.
+At line:1 char:1
++ else {
++ ~~~~
+    + CategoryInfo          : ObjectNotFound: (else:String) [], CommandNotFoundException
+    + FullyQualifiedErrorId : CommandNotFoundException
+
+PS C:\Users\Joshu> Write-Section "6. WINDOWS STARTUP"
+
+=======================================================================
+ 6. WINDOWS STARTUP
+=======================================================================
+PS C:\Users\Joshu> $Startup = [Environment]::GetFolderPath([Environment+SpecialFolder]::Startup)
+PS C:\Users\Joshu> Write-Host "Startup folder: $Startup"
+Startup folder: C:\Users\Joshu\AppData\Roaming\Microsoft\Windows\Start Menu\Programs\Startup
+PS C:\Users\Joshu> Get-ChildItem -LiteralPath $Startup -Force -ErrorAction SilentlyContinue |
+    Where-Object { $_.Name -match 'Myles|Duskin' } |
+    Select-Object Name,FullName,Length |
+    Format-Table -AutoSize
+
+Name                     FullName
+----                     --------
+Myles.lnk                C:\Users\Joshu\AppData\Roaming\Microsoft\Windows\Start Menu\Programs\Startup\Myles.lnk
+MylesAI.vbs              C:\Users\Joshu\AppData\Roaming\Microsoft\Windows\Start Menu\Programs\Startup\MylesAI.vbs
+MylesDashboardBridge.cmd C:\Users\Joshu\AppData\Roaming\Microsoft\Windows\Start Menu\Programs\Startup\MylesDashboard...
+MylesQuant.cmd           C:\Users\Joshu\AppData\Roaming\Microsoft\Windows\Start Menu\Programs\Startup\MylesQuant.cmd
+
+
+PS C:\Users\Joshu> Write-Section "7. REQUIRED INSTALLED FILES"
+
+=======================================================================
+ 7. REQUIRED INSTALLED FILES
+=======================================================================
+PS C:\Users\Joshu> $Required = @(
+    (Join-Path $Root "myles_core.py"),
+    (Join-Path $Root "runtime\myles_core.py"),
+    (Join-Path $Root "job_worker.py"),
+    (Join-Path $Root "runtime\job_worker.py"),
+    (Join-Path $Quant "quant_service.mjs"),
+    (Join-Path $Quant "gmx_live.mjs"),
+    (Join-Path $Bridge "dashboard_bridge.py"),
+    (Join-Path $Bin "start_trading_stack.ps1"),
+    (Join-Path $Data "dashboard_bridge_token.txt"),
+    (Join-Path $Data "trading_status.json"),
+    (Join-Path $Data "gmx_live_status.json")
+)
+PS C:\Users\Joshu> foreach ($File in $Required) {
+    if (Test-Path -LiteralPath $File) {
+        Write-Host "PASS  $File" -ForegroundColor Green
+    } else {
+        Write-Host "MISS  $File" -ForegroundColor Red
+    }
+}
+PASS  C:\Users\Joshu\AppData\Local\MylesAI\myles_core.py
+MISS  C:\Users\Joshu\AppData\Local\MylesAI\runtime\myles_core.py
+PASS  C:\Users\Joshu\AppData\Local\MylesAI\job_worker.py
+MISS  C:\Users\Joshu\AppData\Local\MylesAI\runtime\job_worker.py
+PASS  C:\Users\Joshu\AppData\Local\MylesAI\quant\quant_service.mjs
+PASS  C:\Users\Joshu\AppData\Local\MylesAI\quant\gmx_live.mjs
+PASS  C:\Users\Joshu\AppData\Local\MylesAI\dashboard_bridge\dashboard_bridge.py
+PASS  C:\Users\Joshu\AppData\Local\MylesAI\bin\start_trading_stack.ps1
+PASS  C:\Users\Joshu\AppData\Local\MylesAI\data\dashboard_bridge_token.txt
+PASS  C:\Users\Joshu\AppData\Local\MylesAI\data\trading_status.json
+PASS  C:\Users\Joshu\AppData\Local\MylesAI\data\gmx_live_status.json
+PS C:\Users\Joshu> Write-Section "8. QUANT / GMX STATE"
+
+=======================================================================
+ 8. QUANT / GMX STATE
+=======================================================================
+PS C:\Users\Joshu> $TradingStatus = Join-Path $Data "trading_status.json"
+PS C:\Users\Joshu> if (Test-Path $TradingStatus) {
+    try {
+        $T = Get-Content $TradingStatus -Raw | ConvertFrom-Json
+
+        Write-Host "Quant version: $($T.engine.version)"
+        Write-Host "Quant status:  $($T.engine.status)"
+        Write-Host "Mode:          $($T.mode)"
+        Write-Host "Equity:        $($T.equity)"
+        Write-Host "PnL:           $($T.pnl)"
+        Write-Host "Positions:     $(@($T.positions).Count)"
+        Write-Host "Markets:       $((@($T.markets.symbol) -join ', '))"
+    }
+    catch {
+        Write-Host "trading_status.json exists but cannot be parsed." -ForegroundColor Red
+        Write-Host $_.Exception.Message
+    }
+}
+Quant version: 0.6.2
+Quant status:  running
+Mode:          paper
+Equity:        9864.39
+PnL:
+Positions:     2
+Markets:       BTC/USD, ETH/USD, SOL/USD, XRP/USD, TAO/USD
+PS C:\Users\Joshu> else {
+    Write-Host "No trading_status.json." -ForegroundColor Red
+}
+else : The term 'else' is not recognized as the name of a cmdlet, function, script file, or operable program. Check the 
+spelling of the name, or if a path was included, verify that the path is correct and try again.
+At line:1 char:1
++ else {
++ ~~~~
+    + CategoryInfo          : ObjectNotFound: (else:String) [], CommandNotFoundException
+    + FullyQualifiedErrorId : CommandNotFoundException
+else : The term 'else' is not recognized as the name of a cmdlet, function, script file, or operable program. Check
+the spelling of the name, or if a path was included, verify that the path is correct and try again.
+At line:1 char:1
++ else {
++ ~~~~
+    + CategoryInfo          : ObjectNotFound: (else:String) [], CommandNotFoundException
+    + FullyQualifiedErrorId : CommandNotFoundException
+
+PS C:\Users\Joshu> $LiveStatus = Join-Path $Data "gmx_live_status.json"
+PS C:\Users\Joshu> if (Test-Path $LiveStatus) {
+    try {
+        $L = Get-Content $LiveStatus -Raw | ConvertFrom-Json
+
+        Write-Host ""
+        Write-Host "GMX adapter version: $($L.version)"
+        Write-Host "GMX setup complete:  $($L.setup_complete)"
+        Write-Host "GMX armed:           $($L.armed)"
+        Write-Host "GMX auto enabled:    $($L.auto_enabled)"
+    }
+    catch {
+        Write-Host "gmx_live_status.json exists but cannot be parsed." -ForegroundColor Red
+    }
+}
+
+GMX adapter version: 0.6.2
+GMX setup complete:  False
+GMX armed:           False
+GMX auto enabled:    False
+PS C:\Users\Joshu> Write-Section "9. LOCAL DASHBOARD BRIDGE"
+
+=======================================================================
+ 9. LOCAL DASHBOARD BRIDGE
+=======================================================================
+PS C:\Users\Joshu> $TokenFile = Join-Path $Data "dashboard_bridge_token.txt"
+PS C:\Users\Joshu> if (Test-Path $TokenFile) {
+    try {
+        $Token = (Get-Content $TokenFile -Raw).Trim()
+
+        $BH = Invoke-RestMethod `
+            -Uri "http://127.0.0.1:8790/dashboard/health" `
+            -Headers @{"X-Myles-Token"=$Token} `
+            -TimeoutSec 5
+
+        Write-Host "PASS: bridge is healthy." -ForegroundColor Green
+        $BH | ConvertTo-Json -Depth 5
+    }
+    catch {
+        Write-Host "FAIL: dashboard bridge is not responding." -ForegroundColor Red
+        Write-Host $_.Exception.Message
+    }
+}
+PASS: bridge is healthy.
+{
+    "ok":  true,
+    "bridge":  {
+                   "ok":  true,
+                   "version":  "1.8",
+                   "time":  "2026-09-25T22:36:49-05:00"
+               },
+    "myles":  {
+                  "ok":  true,
+                  "http_status":  200,
+                  "data":  {
+                               "ok":  true,
+                               "version":  "9.7.0",
+                               "pid":  15040,
+                               "time":  "2026-09-25T22:36:49-05:00",
+                               "telegram_configured":  true,
+                               "light_mode":  false,
+                               "status":  "Myles is online. No owner task is currently running."
+                           }
+              }
+}
+PS C:\Users\Joshu> else {
+    Write-Host "FAIL: bridge token file missing." -ForegroundColor Red
+}
+else : The term 'else' is not recognized as the name of a cmdlet, function, script file, or operable program. Check the 
+spelling of the name, or if a path was included, verify that the path is correct and try again.
+At line:1 char:1
++ else {
++ ~~~~
+    + CategoryInfo          : ObjectNotFound: (else:String) [], CommandNotFoundException
+    + FullyQualifiedErrorId : CommandNotFoundException
+else : The term 'else' is not recognized as the name of a cmdlet, function, script file, or operable program. Check
+the spelling of the name, or if a path was included, verify that the path is correct and try again.
+At line:1 char:1
++ else {
++ ~~~~
+    + CategoryInfo          : ObjectNotFound: (else:String) [], CommandNotFoundException
+    + FullyQualifiedErrorId : CommandNotFoundException
+
+PS C:\Users\Joshu> Write-Section "10. RECENT ERROR LOGS"
+
+=======================================================================
+ 10. RECENT ERROR LOGS
+=======================================================================
+PS C:\Users\Joshu> $ErrorLogs = @(
+    "quant_startup.err.log",
+    "gmx_live_startup.err.log",
+    "dashboard_bridge_startup.err.log",
+    "runtime_supervisor_v066.log",
+    "owner_stack_supervisor.log",
+    "myles_core_guardian.log"
+)
+PS C:\Users\Joshu> foreach ($Name in $ErrorLogs) {
+    $File = Join-Path $Logs $Name
+
+    if (Test-Path $File) {
+        Write-Host ""
+        Write-Host "--- $Name ---" -ForegroundColor Yellow
+        Get-Content $File -Tail 30
+    }
+}
+
+--- quant_startup.err.log ---
+
+--- gmx_live_startup.err.log ---
+
+--- dashboard_bridge_startup.err.log ---
+PS C:\Users\Joshu> Write-Section "11. INSTALLER QUARANTINE SIZE"
+
+=======================================================================
+ 11. INSTALLER QUARANTINE SIZE
+=======================================================================
+PS C:\Users\Joshu> $Quarantine = Join-Path $Root "installer_quarantine"
+PS C:\Users\Joshu> if (Test-Path $Quarantine) {
+    $Bytes = (
+        Get-ChildItem $Quarantine -File -Recurse -ErrorAction SilentlyContinue |
+        Measure-Object Length -Sum
+    ).Sum
+
+    Write-Host ("Quarantine size: {0:N2} MB" -f ($Bytes / 1MB))
+    Write-Host $Quarantine
+}
+Quarantine size: 2.77 MB
+C:\Users\Joshu\AppData\Local\MylesAI\installer_quarantine
+PS C:\Users\Joshu> else {
+    Write-Host "No installer quarantine."
+}
+else : The term 'else' is not recognized as the name of a cmdlet, function, script file, or operable program. Check the 
+spelling of the name, or if a path was included, verify that the path is correct and try again.
+At line:1 char:1
++ else {
++ ~~~~
+    + CategoryInfo          : ObjectNotFound: (else:String) [], CommandNotFoundException
+    + FullyQualifiedErrorId : CommandNotFoundException
+else : The term 'else' is not recognized as the name of a cmdlet, function, script file, or operable program. Check
+the spelling of the name, or if a path was included, verify that the path is correct and try again.
+At line:1 char:1
++ else {
++ ~~~~
+    + CategoryInfo          : ObjectNotFound: (else:String) [], CommandNotFoundException
+    + FullyQualifiedErrorId : CommandNotFoundException
+
+PS C:\Users\Joshu> Write-Section "MYLES AUDIT COMPLETE"
+
+=======================================================================
+ MYLES AUDIT COMPLETE
+=======================================================================
+PS C:\Users\Joshu> Write-Host "Nothing was changed by this audit." -ForegroundColor Green
+Nothing was changed by this audit.
+PS C:\Users\Joshu> Write-Host "Audit saved to:" -ForegroundColor Cyan
+Audit saved to:
+PS C:\Users\Joshu> Write-Host $AuditFile
+C:\Users\Joshu\AppData\Local\MylesAI\logs\MYLES_REAL_STATE_20260925_223646.txt
+PS C:\Users\Joshu> Stop-Transcript | Out-Null
+**********************
+Windows PowerShell transcript end
+End time: 20260925223650
+**********************

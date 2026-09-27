@@ -1,0 +1,34 @@
+{
+  "name": "myles-quant",
+  "version": "0.9.0",
+  "private": true,
+  "type": "module",
+  "description": "Myles Quant: GMX research, owner-gated live and copy execution, one-click subaccount signing, paper/live positions, and Auto Bot telemetry",
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "start": "node quant_service.mjs",
+    "once": "node quant_service.mjs --once",
+    "backtest": "node quant_service.mjs --backtest-only",
+    "self-test": "node quant_service.mjs --self-test",
+    "live:status": "node gmx_live.mjs --status",
+    "live:self-test": "node gmx_live.mjs --self-test",
+    "live:daemon": "node gmx_live.mjs --daemon",
+    "copy:once": "node copy_trader_service.mjs --once",
+    "copy:discover": "node copy_trader_service.mjs --discover",
+    "copy:daemon": "node copy_trader_service.mjs --daemon"
+  },
+  "dependencies": {
+    "@gmx-io/sdk": "2.1.1",
+    "viem": "2.48.11",
+    "cross-fetch": "4.0.0",
+    "crypto-js": "4.2.0",
+    "graphql": "15.8.0",
+    "isomorphic-performance": "5.1.1",
+    "lodash": "4.18.1",
+    "query-string": "7.1.1",
+    "typescript": "5.4.2",
+    "universal-perf-hooks": "1.0.1"
+  }
+}

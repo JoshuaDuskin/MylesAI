@@ -1,0 +1,12 @@
+{
+  "schema_version": 3,
+  "generated_at": "2026-09-27T04:33:31.852Z",
+  "engine": {
+    "name": "Myles Quant",
+    "version": "0.6.2",
+    "status": "error"
+  },
+  "mode": "paper",
+  "execution_locked": true,
+  "error": "Error: EPERM: operation not permitted, rename 'C:\\Users\\Joshu\\AppData\\Local\\MylesAI\\data\\trading_status.json.tmp-4296' -> 'C:\\Users\\Joshu\\AppData\\Local\\MylesAI\\data\\trading_status.json'\n    at Object.renameSync (node:fs:1074:11)\n    at writeJsonAtomic (file:///C:/Users/Joshu/AppData/Local/MylesAI/quant/quant_service.mjs:73:192)\n    at cycle (file:///C:/Users/Joshu/AppData/Local/MylesAI/quant/quant_service.mjs:289:302)\n    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)\n    at async main (file:///C:/Users/Joshu/AppData/Local/MylesAI/quant/quant_service.mjs:303:23)"
+}

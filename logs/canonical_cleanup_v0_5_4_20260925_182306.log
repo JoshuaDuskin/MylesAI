@@ -1,0 +1,117 @@
+﻿**********************
+Windows PowerShell transcript start
+Start time: 20260925182306
+Username: DESKTOP-CKIIVNP\Joshu
+RunAs User: DESKTOP-CKIIVNP\Joshu
+Configuration Name: 
+Machine: DESKTOP-CKIIVNP (Microsoft Windows NT 10.0.19045.0)
+Host Application: powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File C:\Users\Joshu\OneDrive\Desktop\MYLES_CANONICAL_CLEANUP_V0_5_4_RESUME\MYLES_CANONICAL_CLEANUP_V0_5_4_RESUME\PATCH.ps1
+Process ID: 11752
+PSVersion: 5.1.19041.6456
+PSEdition: Desktop
+PSCompatibleVersions: 1.0, 2.0, 3.0, 4.0, 5.0, 5.1.19041.6456
+BuildVersion: 10.0.19041.6456
+CLRVersion: 4.0.30319.42000
+WSManStackVersion: 3.0
+PSRemotingProtocolVersion: 2.3
+SerializationVersion: 1.1.0.1
+**********************
+
+=======================================================================
+ MYLES v0.5.4 - RESUME CANONICAL CLEANUP
+=======================================================================
+v0.5.3 already installed the hard continuous-job GitHub lock. This resumes the failed restore/cleanup and adds duplicate-project prevention.
+Run log: C:\Users\Joshu\AppData\Local\MylesAI\logs\canonical_cleanup_v0_5_4_20260925_182306.log
+
+=== Freezing Myles workers during repository cleanup ===
+PASS: active Myles job workers stopped for cleanup.
+
+=== Verifying v0.5.3 hard runtime lock ===
+PASS: v0.5.3 hard runtime GitHub lock is installed.
+
+=== Adding canonical project-resolution guard ===
+C:\Users\Joshu\AppData\Local\MylesAI\myles_core.py
+C:\Users\Joshu\AppData\Local\MylesAI\job_worker.py
+PASS: canonical repository map injected
+PASS: duplicate Myles dashboard/status repo creation hard-blocked
+PASS: v0.5.3 continuous remote-GitHub hard lock preserved
+PASS: myles_core.py + job_worker.py compile
+
+=== Restoring the one canonical dark Owner Console ===
+
+remote: Enumerating objects: 4, done.
+remote: Counting objects: 100% (4/4), done.
+remote: Compressing objects: 100% (4/4), done.
+remote: Total 4 (delta 0), reused 4 (delta 0), pack-reused 0 (from 0)
+Unpacking objects: 100% (4/4), 4.43 KiB | 252.00 KiB/s, done.
+From https://github.com/JoshuaDuskin/MylesDashboard
+ * branch            main       -> FETCH_HEAD
+ + 10cc7d8...b277058 main       -> origin/main  (forced update)
+Already on 'main'
+Your branch and 'origin/main' have diverged,
+and have 20 and 1 different commits each, respectively.
+  (use "git pull" if you want to integrate the remote branch with yours)
+HEAD is now at b277058 Update progress dashboard
+
+
+
+warning: in the working copy of 'index.html', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.githooks/pre-commit', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '.githooks/pre-push', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'AGENTS.md', LF will be replaced by CRLF the next time Git touches it
+
+[main 33b35c3] Restore one canonical Myles Owner Console and repository map
+ 4 files changed, 547 insertions(+), 364 deletions(-)
+ create mode 100644 .githooks/pre-commit
+ create mode 100644 .githooks/pre-push
+ create mode 100644 AGENTS.md
+Enumerating objects: 8, done.
+Counting objects: 100% (8/8), done.
+Delta compression using up to 12 threads
+Compressing objects: 100% (6/6), done.
+Writing objects: 100% (6/6), 32.82 KiB | 6.56 MiB/s, done.
+Total 6 (delta 0), reused 0 (delta 0), pack-reused 0 (from 0)
+To https://github.com/JoshuaDuskin/MylesDashboard.git
+   b277058..33b35c3  main -> main
+
+PASS: canonical dark dashboard restored at commit 33b35c39ac370559342319a8e596c470fe8701f5
+PASS: canonical push URL owner-locked again.
+
+=== Retiring duplicate Myles dashboard/status repositories ===
+
+>> TerminatingError(git.exe): "The running command stopped because the preference variable "ErrorActionPreference" or common parameter is set to Stop: Cloning into 'C:\Users\Joshu\AppData\Local\MylesAI\legacy_repo_cleanup\Myles-ControlCenter'..."
+WARNING: Myles-ControlCenter cleanup: Cloning into 'C:\Users\Joshu\AppData\Local\MylesAI\legacy_repo_cleanup\Myles-ControlCenter'...
+
+>> TerminatingError(git.exe): "The running command stopped because the preference variable "ErrorActionPreference" or common parameter is set to Stop: Cloning into 'C:\Users\Joshu\AppData\Local\MylesAI\legacy_repo_cleanup\MylesLiveStatus'..."
+WARNING: MylesLiveStatus cleanup: Cloning into 'C:\Users\Joshu\AppData\Local\MylesAI\legacy_repo_cleanup\MylesLiveStatus'...
+
+>> TerminatingError(git.exe): "The running command stopped because the preference variable "ErrorActionPreference" or common parameter is set to Stop: Cloning into 'C:\Users\Joshu\AppData\Local\MylesAI\legacy_repo_cleanup\M83-dashboard'..."
+WARNING: M83-dashboard cleanup: Cloning into 'C:\Users\Joshu\AppData\Local\MylesAI\legacy_repo_cleanup\M83-dashboard'...
+
+>> TerminatingError(git.exe): "The running command stopped because the preference variable "ErrorActionPreference" or common parameter is set to Stop: Cloning into 'C:\Users\Joshu\AppData\Local\MylesAI\legacy_repo_cleanup\my-dashboard'..."
+WARNING: my-dashboard cleanup: Cloning into 'C:\Users\Joshu\AppData\Local\MylesAI\legacy_repo_cleanup\my-dashboard'...
+
+>> TerminatingError(git.exe): "The running command stopped because the preference variable "ErrorActionPreference" or common parameter is set to Stop: Cloning into 'C:\Users\Joshu\AppData\Local\MylesAI\legacy_repo_cleanup\progress-dashboard'..."
+WARNING: progress-dashboard cleanup: Cloning into 'C:\Users\Joshu\AppData\Local\MylesAI\legacy_repo_cleanup\progress-dashboard'...
+
+>> TerminatingError(git.exe): "The running command stopped because the preference variable "ErrorActionPreference" or common parameter is set to Stop: Cloning into 'C:\Users\Joshu\AppData\Local\MylesAI\legacy_repo_cleanup\myles-dashboard'..."
+WARNING: myles-dashboard cleanup: Cloning into 'C:\Users\Joshu\AppData\Local\MylesAI\legacy_repo_cleanup\myles-dashboard'...
+
+>> TerminatingError(git.exe): "The running command stopped because the preference variable "ErrorActionPreference" or common parameter is set to Stop: Cloning into 'C:\Users\Joshu\AppData\Local\MylesAI\legacy_repo_cleanup\Myles-AI-Dashboard'..."
+WARNING: Myles-AI-Dashboard cleanup: Cloning into 'C:\Users\Joshu\AppData\Local\MylesAI\legacy_repo_cleanup\Myles-AI-Dashboard'...
+
+>> TerminatingError(git.exe): "The running command stopped because the preference variable "ErrorActionPreference" or common parameter is set to Stop: Cloning into 'C:\Users\Joshu\AppData\Local\MylesAI\legacy_repo_cleanup\Myles-Ecosystem'..."
+WARNING: Myles-Ecosystem cleanup: Cloning into 'C:\Users\Joshu\AppData\Local\MylesAI\legacy_repo_cleanup\Myles-Ecosystem'...
+PS>TerminatingError(gh.exe): "The running command stopped because the preference variable "ErrorActionPreference" or common parameter is set to Stop: You are not logged into any GitHub hosts. To log in, run: gh auth login"
+
+=======================================================================
+ MYLES v0.5.4 STOPPED
+=======================================================================
+You are not logged into any GitHub hosts. To log in, run: gh auth login
+At C:\Users\Joshu\OneDrive\Desktop\MYLES_CANONICAL_CLEANUP_V0_5_4_RESUME\MYLES_CANONICAL_CLEANUP_V0_5_4_RESUME\PATCH.ps1:110 char:14
++     if($gh){ & gh.exe auth status 1>$null 2>$null; if($LASTEXITCODE - ...
++              ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+**********************
+Windows PowerShell transcript end
+End time: 20260925182317
+**********************

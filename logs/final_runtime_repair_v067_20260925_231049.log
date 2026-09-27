@@ -1,0 +1,40 @@
+=======================================================================
+ MYLES FINAL RUNTIME REPAIR v0.6.7
+=======================================================================
+One-click repair. No manual PowerShell. PineTree is never touched.
+Run log: C:\Users\Joshu\AppData\Local\MylesAI\logs\final_runtime_repair_v067_20260925_231049.log
+
+=======================================================================
+ 1. Backup current Myles runtime state
+=======================================================================
+PASS: backup created at C:\Users\Joshu\AppData\Local\MylesAI\backups\final_runtime_repair_v067_20260925_231049
+
+=======================================================================
+ 2. Verify/install runtime dependencies
+=======================================================================
+PASS: Node = C:\Program Files\nodejs\node.exe
+PASS: cloudflared = C:\Program Files (x86)\cloudflared\cloudflared.exe
+
+=======================================================================
+ 3. Start one healthy Myles core
+=======================================================================
+PASS: Myles v9.7.0 healthy / PID 13476
+Continuous improvement is already OFF or not active.
+
+=======================================================================
+ 4. Start Quant + GMX + authenticated dashboard bridge
+=======================================================================
+PASS: local bridge healthy / v1.8
+PASS: Quant 0.6.2 / running / mode paper
+PASS: GMX adapter 0.6.2 / armed=False / auto=False
+
+=======================================================================
+ 5. Restore public phone/dashboard tunnel
+=======================================================================
+
+=======================================================================
+ REPAIR STOPPED
+=======================================================================
+Health check timed out for https://skip-recommended-forums-note.trycloudflare.com/dashboard/health: <urlopen error [Errno 11001] getaddrinfo failed>
+Nothing in PineTree was touched. Backup: C:\Users\Joshu\AppData\Local\MylesAI\backups\final_runtime_repair_v067_20260925_231049
+Run log: C:\Users\Joshu\AppData\Local\MylesAI\logs\final_runtime_repair_v067_20260925_231049.log

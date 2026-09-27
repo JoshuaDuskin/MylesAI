@@ -1,0 +1,13 @@
+{"ok":true,"generated_at":"2026-09-27T01:38:11.228Z","equity":9728.43,"pnl":-271.57,"positions":1,"backtests":15,"markets":["BTC/USD","ETH/USD","SOL/USD","XRP/USD","TAO/USD"],"errors":{}}
+{"ok":true,"generated_at":"2026-09-27T01:56:40.214Z","equity":9713.73,"pnl":-286.27,"positions":1,"backtests":15,"markets":["BTC/USD","ETH/USD","SOL/USD","XRP/USD","TAO/USD"],"errors":{}}
+{"ok":true,"generated_at":"2026-09-27T02:08:44.279Z","equity":9698.03,"pnl":-301.97,"positions":2,"backtests":15,"markets":["BTC/USD","ETH/USD","SOL/USD","XRP/USD","TAO/USD"],"errors":{}}
+{"ok":true,"generated_at":"2026-09-27T02:22:45.817Z","equity":9695.63,"pnl":-304.37,"positions":2,"backtests":15,"markets":["BTC/USD","ETH/USD","SOL/USD","XRP/USD","TAO/USD"],"errors":{}}
+{"ok":true,"generated_at":"2026-09-27T02:27:53.752Z","equity":9693.08,"pnl":-306.92,"positions":2,"backtests":15,"markets":["BTC/USD","ETH/USD","SOL/USD","XRP/USD","TAO/USD"],"errors":{}}
+{"ok":true,"generated_at":"2026-09-27T02:32:23.811Z","equity":9703.05,"pnl":-296.95,"positions":2,"backtests":15,"markets":["BTC/USD","ETH/USD","SOL/USD","XRP/USD","TAO/USD"],"errors":{}}
+{"ok":true,"generated_at":"2026-09-27T02:37:43.969Z","equity":9702.27,"pnl":-297.73,"positions":2,"backtests":15,"markets":["BTC/USD","ETH/USD","SOL/USD","XRP/USD","TAO/USD"],"errors":{}}
+{"ok":true,"generated_at":"2026-09-27T02:44:24.138Z","equity":9705.52,"pnl":-294.48,"positions":2,"backtests":15,"markets":["BTC/USD","ETH/USD","SOL/USD","XRP/USD","TAO/USD"],"errors":{}}
+{"ok":true,"generated_at":"2026-09-27T02:49:17.606Z","equity":9702.7,"pnl":-297.3,"positions":2,"backtests":15,"markets":["BTC/USD","ETH/USD","SOL/USD","XRP/USD","TAO/USD"],"errors":{}}
+{"ok":true,"generated_at":"2026-09-27T02:53:16.147Z","equity":9704.96,"pnl":-295.04,"positions":2,"backtests":15,"markets":["BTC/USD","ETH/USD","SOL/USD","XRP/USD","TAO/USD"],"errors":{}}
+{"ok":true,"generated_at":"2026-09-27T03:01:40.860Z","equity":9669.67,"pnl":-330.33,"positions":2,"backtests":15,"markets":["BTC/USD","ETH/USD","SOL/USD","XRP/USD","TAO/USD"],"errors":{}}
+{"ok":true,"generated_at":"2026-09-27T03:11:52.582Z","equity":9673.2,"pnl":-326.8,"positions":2,"backtests":15,"markets":["BTC/USD","ETH/USD","SOL/USD","XRP/USD","TAO/USD"],"errors":{}}
+{"ok":true,"generated_at":"2026-09-27T03:21:48.149Z","equity":9675.6,"pnl":-324.4,"positions":2,"backtests":15,"markets":["BTC/USD","ETH/USD","SOL/USD","XRP/USD","TAO/USD"],"errors":{}}

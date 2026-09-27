@@ -1,0 +1,25 @@
+{
+  "version": "0.9.0",
+  "enabled": true,
+  "auto_discovery": true,
+  "auto_select": true,
+  "shadow_copy_enabled": true,
+  "live_copy_enabled": false,
+  "discovery_period_days": 30,
+  "validation_period_days": 90,
+  "max_candidates": 20,
+  "max_selected_traders": 3,
+  "min_closed_trades": 12,
+  "min_win_rate_pct": 52,
+  "min_score": 55,
+  "max_copy_positions": 2,
+  "copy_margin_usd": 25,
+  "copy_leverage": 1.25,
+  "stop_loss_pct": 1,
+  "take_profit_pct": 2,
+  "poll_seconds": 180,
+  "selected_accounts": [
+    "0xa9a94929d7ecbf0cb1191c08386e64146c76b9be",
+    "0x960aa71129997c96a0ee28e8d3674534137781b5"
+  ]
+}

@@ -1,0 +1,150 @@
+﻿**********************
+Windows PowerShell transcript start
+Start time: 20260925205848
+Username: DESKTOP-CKIIVNP\Joshu
+RunAs User: DESKTOP-CKIIVNP\Joshu
+Configuration Name: 
+Machine: DESKTOP-CKIIVNP (Microsoft Windows NT 10.0.19045.0)
+Host Application: powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File C:\Users\Joshu\OneDrive\Desktop\MYLES_QUANT_V0_6_2_GMX_LIVE_COMPLETE\MYLES_QUANT_V0_6_2_GMX_LIVE_COMPLETE\PATCH.ps1
+Process ID: 1652
+PSVersion: 5.1.19041.6456
+PSEdition: Desktop
+PSCompatibleVersions: 1.0, 2.0, 3.0, 4.0, 5.0, 5.1.19041.6456
+BuildVersion: 10.0.19041.6456
+CLRVersion: 4.0.30319.42000
+WSManStackVersion: 3.0
+PSRemotingProtocolVersion: 2.3
+SerializationVersion: 1.1.0.1
+**********************
+
+=======================================================================
+ MYLES QUANT v0.6.2 - OWNER-GATED GMX LIVE EXECUTION
+=======================================================================
+Installs real GMX execution infrastructure. It does NOT arm live trading, enable live Auto, or move funds.
+Run log: C:\Users\Joshu\AppData\Local\MylesAI\logs\quant_v0_6_2_upgrade_20260925_205848.log
+
+=== Creating rollback backup ===
+PASS: rollback backup created at C:\Users\Joshu\AppData\Local\MylesAI\backups\quant_v0_6_2_20260925_205848
+
+=== Stopping only Quant + live adapter + dashboard bridge ===
+PASS: Myles core and Cloudflare tunnel were left alone.
+
+=== Installing Quant v0.6.2 + GMX SDK v2 (clean runtime rebuild) ===
+PASS: GMX SDK v2 CommonJS runtime resolved cleanly.
+
+
+Validating current GMX SDK/API read path (no transaction is sent)...
+Running current GMX candle/backtest validation...
+{"ok":true,"generated_at":"2026-09-26T01:58:57.982Z","equity":9930.52,"pnl":-69.48,"positions":2,"backtests":15,"markets
+":["BTC/USD","ETH/USD","SOL/USD","XRP/USD","TAO/USD"],"errors":{}}
+PASS: paper/research engine v0.6.2 validated; closed-candle signals published.
+PASS: version contract verified end-to-end: 0.6.2
+PASS: GMX live adapter safety tests + public SDK read validation passed.
+
+=== Installing authenticated live routes in the tower bridge ===
+
+PASS: bridge v1.8 includes live status/setup/arm/order/approve/withdraw routes.
+
+=== Installing restart-safe trading stack startup ===
+PASS: startup launcher installed at C:\Users\Joshu\AppData\Roaming\Microsoft\Windows\Start Menu\Programs\Startup\MylesTradingStack.cmd
+PASS: any future live-adapter restart fails closed and returns LIVE + LIVE Auto to DISARMED/OFF.
+
+=== Publishing the explicit owner-approved canonical dashboard update ===
+
+From https://github.com/JoshuaDuskin/MylesDashboard
+ * branch            main       -> FETCH_HEAD
+Already on 'main'
+Your branch is up to date with 'origin/main'.
+HEAD is now at 33b35c3 Restore one canonical Myles Owner Console and repository map
+
+
+warning: in the working copy of 'AGENTS.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'index.html', LF will be replaced by CRLF the next time Git touches it
+
+[main 94db3c9] Myles-Quant-v0.6.2-live-execution
+ 2 files changed, 101 insertions(+), 40 deletions(-)
+From https://github.com/JoshuaDuskin/MylesDashboard
+ * branch            main       -> FETCH_HEAD
+Current branch main is up to date.
+Enumerating objects: 7, done.
+Counting objects: 100% (7/7), done.
+Delta compression using up to 12 threads
+Compressing objects: 100% (4/4), done.
+Writing objects: 100% (4/4), 10.06 KiB | 3.35 MiB/s, done.
+Total 4 (delta 1), reused 0 (delta 0), pack-reused 0 (from 0)
+remote: Resolving deltas: 100% (1/1), completed with 1 local object.
+To https://github.com/JoshuaDuskin/MylesDashboard.git
+   33b35c3..94db3c9  main -> main
+PASS: canonical dashboard published at 94db3c9e6cbaf21e88a5ba3ec28c9f5b4a6838e0
+
+PASS: canonical dashboard push URL owner-locked again.
+
+=== Publishing v0.6 source to the one Quant repository ===
+From https://github.com/JoshuaDuskin/trading-dashboard
+ * branch            main       -> FETCH_HEAD
+Already on 'main'
+Your branch is up to date with 'origin/main'.
+HEAD is now at 4e4a086 Upgrade Myles Quant to v0.5.0
+
+
+warning: in the working copy of 'README.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'package.json', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'quant_config.example.json', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'quant_service.mjs', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'gmx_live.mjs', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'gmx_module_probe.mjs', LF will be replaced by CRLF the next time Git touches it
+
+[main 04c1bec] Myles-Quant-v0.6.2
+ 5 files changed, 239 insertions(+), 24 deletions(-)
+ create mode 100644 gmx_live.mjs
+ create mode 100644 gmx_module_probe.mjs
+From https://github.com/JoshuaDuskin/trading-dashboard
+ * branch            main       -> FETCH_HEAD
+Current branch main is up to date.
+Enumerating objects: 11, done.
+Counting objects: 100% (11/11), done.
+Delta compression using up to 12 threads
+Compressing objects: 100% (7/7), done.
+Writing objects: 100% (7/7), 14.02 KiB | 4.67 MiB/s, done.
+Total 7 (delta 1), reused 0 (delta 0), pack-reused 0 (from 0)
+remote: Resolving deltas: 100% (1/1), completed with 1 local object.
+To https://github.com/JoshuaDuskin/trading-dashboard.git
+   4e4a086..04c1bec  main -> main
+PASS: trading-dashboard is the only active Quant source repository and is updated to v0.6.2.
+
+=== Starting Quant + owner-gated GMX live daemon ===
+PS>TerminatingError(Get-Content): "The running command stopped because the preference variable "ErrorActionPreference" or common parameter is set to Stop: Cannot find path 'C:\Users\Joshu\AppData\Local\MylesAI\data\gmx_live_status.json' because it does not exist."
+PASS: Quant PID 14976; live adapter PID 10408; LIVE DISARMED; LIVE AUTO OFF.
+
+=== Restarting authenticated phone bridge ===
+PASS: bridge v1.8 PID 7976 serves paper + live controls on the existing phone tunnel.
+
+=== Verifying public canonical dashboard ===
+PASS: public Control Center is serving the v0.6 owner-gated live UI.
+
+=======================================================================
+ MYLES QUANT v0.6.2: INSTALLED
+=======================================================================
+Production UI:       JoshuaDuskin/MylesDashboard
+Quant source:         JoshuaDuskin/trading-dashboard
+GMX SDK:              @gmx-io/sdk 2.1.1 / SDK v2
+Network:              Arbitrum One (42161)
+Collateral:           USDC
+Paper engine:         preserved + running
+Live adapter:         installed + running
+Owner wallet:         NOT configured until you sign setup in Funding
+LIVE execution:       DISARMED (8-hour owner-armed sessions)
+LIVE Auto Bot:        OFF (validation-passing signals only when separately enabled)
+Manual live orders:   ONE-CLICK while the owner-armed session is active
+Restart behavior:     FAIL-CLOSED -> DISARMED/OFF
+Withdrawal authority: OWNER WALLET ONLY
+Owner private key:    NEVER requested/stored
+Phone bridge:         v1.8 on the existing tunnel
+PineTree:             untouched
+Run log:              C:\Users\Joshu\AppData\Local\MylesAI\logs\quant_v0_6_2_upgrade_20260925_205848.log
+
+NEXT: Refresh the Control Center -> Trading Bot -> Funding. Connect your wallet and choose Set up one-click. Setup will remain DISARMED until you separately sign ARM LIVE EXECUTION.
+**********************
+Windows PowerShell transcript end
+End time: 20260925205940
+**********************

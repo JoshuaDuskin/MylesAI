@@ -1,0 +1,52 @@
+==========================================================================
+ MYLES UNIFIED RUNTIME REPAIR v0.7.3
+==========================================================================
+One click. No manual PowerShell. PineTree is never touched.
+Run log: C:\Users\Joshu\AppData\Local\MylesAI\logs\unified_repair_v073_20260926_092558.log
+
+==========================================================================
+ 1. Back up and retire duplicate launchers
+==========================================================================
+PASS: backed up current Myles state at C:\Users\Joshu\AppData\Local\MylesAI\backups\unified_repair_v073_20260926_092558
+PASS: retired 0 Startup item(s), 0 Run/RunOnce value(s), 0 scheduled task(s), 2 old process(es)
+
+==========================================================================
+ 2. Restore the local Myles and trading services
+==========================================================================
+PASS: Myles v9.7.0 healthy / PID 2696
+PASS: Quant v0.6.2 / running / paper
+PASS: GMX v0.6.2 / armed=False / auto=False
+
+==========================================================================
+ 3. Restore the authenticated bridge and public read gateway
+==========================================================================
+PASS: authenticated bridge healthy / 1.8
+PASS: read-only public gateway healthy on 127.0.0.1:8791
+PASS: cloudflared = C:\Program Files (x86)\cloudflared\cloudflared.exe
+NOTICE: public URL appeared on tunnel attempt 1; public health is still warming up
+PASS: public tunnel created: https://faster-dad-allan-tiger.trycloudflare.com
+NOTICE: tunnel URL created; hidden supervisor will keep checking it
+
+==========================================================================
+ 4. Publish the live dashboard endpoint
+==========================================================================
+PASS: remote bridge.json contains the active public URL and read token
+PASS: GitHub dashboard connection manifest published and verified
+PASS: existing dashboard design preserved
+
+==========================================================================
+ 5. Install the classic console and one hidden supervisor
+==========================================================================
+PASS: direct console shortcut installed: C:\Users\Joshu\AppData\Roaming\Microsoft\Windows\Start Menu\Programs\Startup\Myles.lnk
+PASS: one hidden pythonw supervisor installed
+PASS: old Myles CMD/PowerShell/VBS wrappers are no longer active
+
+==========================================================================
+ 6. Final verification
+==========================================================================
+MYLES: ONLINE
+QUANT BOT: PAPER MODE
+GMX LIVE: DISARMED / SAFE
+DASHBOARD: LIVE READ FEED PUBLISHED
+POPUPS: DUPLICATE MYLES SHELL LAUNCHERS REMOVED
+PineTree: UNTOUCHED
