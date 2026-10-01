@@ -318,13 +318,31 @@ def save_quant_config(payload: Any) -> dict[str, Any]:
         "stress_cost_multiplier": clamp_num(val_new.get("stress_cost_multiplier", val_old.get("stress_cost_multiplier", 2.5)), 1, 10, 2.5),
     }
 
+    # MYLES_INDEPENDENT_RESEARCH_BOT_CONFIG_V01060
+    # Preserve owner-selected paper and research controls independently. The old
+    # bridge rebuilt only three paper keys and silently discarded research config.
     paper_old = cfg.get("paper") if isinstance(cfg.get("paper"), dict) else {}
     paper_new = incoming.get("paper") if isinstance(incoming.get("paper"), dict) else {}
-    cfg["paper"] = {
-        "enabled": bool(paper_new.get("enabled", paper_old.get("enabled", True))),
-        "auto_trading_enabled": bool(paper_new.get("auto_trading_enabled", paper_old.get("auto_trading_enabled", True))),
-        "emergency_stop": bool(paper_new.get("emergency_stop", paper_old.get("emergency_stop", False))),
-    }
+    paper = dict(paper_old)
+    paper.update(paper_new)
+    paper["enabled"] = bool(paper_new.get("enabled", paper_old.get("enabled", True)))
+    paper["auto_trading_enabled"] = bool(paper_new.get("auto_trading_enabled", paper_old.get("auto_trading_enabled", True)))
+    paper["adaptive_strategy_selection"] = bool(paper_new.get("adaptive_strategy_selection", paper_old.get("adaptive_strategy_selection", True)))
+    paper["emergency_stop"] = bool(paper_new.get("emergency_stop", paper_old.get("emergency_stop", False)))
+    paper["entry_cooldown_bars"] = int(clamp_num(paper_new.get("entry_cooldown_bars", paper_old.get("entry_cooldown_bars", 0)), 0, 50, 0))
+    cfg["paper"] = paper
+
+    research_old = cfg.get("research_exploration") if isinstance(cfg.get("research_exploration"), dict) else {}
+    research_new = incoming.get("research_exploration") if isinstance(incoming.get("research_exploration"), dict) else {}
+    research = dict(research_old)
+    research.update(research_new)
+    research["enabled"] = bool(research_new.get("enabled", research_old.get("enabled", True)))
+    research["continuous_market_research_enabled"] = bool(research_new.get("continuous_market_research_enabled", research_old.get("continuous_market_research_enabled", True)))
+    research["paper_lab_enabled"] = bool(research_new.get("paper_lab_enabled", research_old.get("paper_lab_enabled", True)))
+    research["tournament_enabled"] = bool(research_new.get("tournament_enabled", research_old.get("tournament_enabled", True)))
+    research["entry_cooldown_bars"] = int(clamp_num(research_new.get("entry_cooldown_bars", research_old.get("entry_cooldown_bars", paper["entry_cooldown_bars"])), 0, 50, paper["entry_cooldown_bars"]))
+    cfg["research_exploration"] = research
+
     cfg["strategies"] = {"trend_momentum": {"enabled": True}, "mean_reversion": {"enabled": True}}
     cfg["live_execution"] = {
         "enabled": False,
