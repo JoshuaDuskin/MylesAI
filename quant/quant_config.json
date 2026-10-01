@@ -2,8 +2,8 @@
   "schema_version": 3,
   "venue": "GMX",
   "chain_id": 42161,
-  "timeframe": "1h",
-  "history_limit": 1000,
+  "timeframe": "5m",
+  "history_limit": 5000,
   "poll_seconds": 60,
   "starting_equity": 10000,
   "market_settings": {
@@ -49,7 +49,9 @@
     "auto_trading_enabled": true,
     "emergency_stop": false,
     "strategy": "trend_momentum",
-    "symbol": "BTC/USD"
+    "symbol": "BTC/USD",
+    "adaptive_strategy_selection": true,
+    "entry_cooldown_bars": 0
   },
   "risk": {
     "max_risk_per_trade_pct": 1,
@@ -84,5 +86,11 @@
   "symbols": [
     "BTC/USD",
     "ETH/USD"
-  ]
+  ],
+  "research_exploration": {
+    "enabled": true,
+    "continuous_market_research_enabled": true,
+    "paper_lab_enabled": true,
+    "tournament_enabled": true
+  }
 }

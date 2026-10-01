@@ -1,0 +1,24 @@
+# Myles local runtime only
+.venv/
+**/__pycache__/
+*.pyc
+logs/
+backups/
+dashboard_backups/
+workspaces/
+workspace/
+job_workspace/
+outputs/
+temp/
+data/*.pid
+data/*.db
+data/*.sqlite
+data/*.sqlite3
+data/*token*
+data/*pair_code*
+data/tunnel_state.json
+data/gmx_live_audit.jsonl
+data/*status.json
+data/*paper_state*.json
+data/browser_profile/
+data/secrets/

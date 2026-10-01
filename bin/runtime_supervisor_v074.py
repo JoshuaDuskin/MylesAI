@@ -26,7 +26,7 @@ REPO = ROOT / "dashboard_site"
 VENV = ROOT / ".venv" / "Scripts"
 PY = VENV / "python.exe"
 PYW = VENV / "pythonw.exe"
-DASHBOARD_REPO = "https://github.com/JoshuaDuskin/MylesDashboard.git"
+DASHBOARD_REPO = "https://github.com/JoshuaDuskin/MylesAI.git"
 LOG = LOGS / "runtime_supervisor_v074.log"
 
 for directory in (DATA, BIN, LOGS):
@@ -272,8 +272,36 @@ def ensure_tailscale_funnel(read: str) -> str:
     return url
 
 
+def ensure_dashboard_checkout() -> bool:
+    """Keep the dashboard deployment checkout on the canonical MylesAI repo."""
+    git = shutil.which("git.exe") or shutil.which("git")
+    if not git:
+        return False
+    try:
+        if (REPO / ".git").exists():
+            origin = run([git, "-C", REPO, "remote", "get-url", "origin"], timeout=30)
+            current = ((origin.stdout if origin else "") or "").strip()
+            if "JoshuaDuskin/MylesAI.git" not in current:
+                stamp = dt.datetime.now().strftime("%Y%m%d_%H%M%S")
+                legacy = ROOT / f"dashboard_site_legacy_{stamp}"
+                REPO.replace(legacy)
+                log(f"retired legacy dashboard checkout to {legacy}")
+        if not (REPO / ".git").exists():
+            clone = run([git, "clone", "--depth", "1", "--filter=blob:none", DASHBOARD_REPO, REPO], cwd=ROOT, timeout=180)
+            if not clone or clone.returncode != 0:
+                return False
+        for args in (("remote", "set-url", "origin", DASHBOARD_REPO), ("fetch", "origin", "main"), ("checkout", "main"), ("pull", "--ff-only", "origin", "main")):
+            result = run([git, "-C", REPO, *args], timeout=120)
+            if not result or result.returncode != 0:
+                return False
+        return True
+    except Exception as exc:
+        log(f"dashboard checkout repair failed: {exc}")
+        return False
+
+
 def publish_bridge(url: str, read: str) -> bool:
-    if not (REPO / ".git").exists():
+    if not ensure_dashboard_checkout():
         return False
     git = shutil.which("git.exe") or shutil.which("git")
     if not git:
@@ -293,6 +321,10 @@ def publish_bridge(url: str, read: str) -> bool:
         if not run([git, "-C", REPO, "add", "--", "bridge.json"]):
             return False
         diff = run([git, "-C", REPO, "diff", "--cached", "--quiet"])
+        # Unlock only this dedicated deployment checkout for the bridge publish.
+        unlock = run([git, "-C", REPO, "remote", "set-url", "--push", "origin", DASHBOARD_REPO], timeout=30)
+        if not unlock or unlock.returncode != 0:
+            return False
         env = os.environ.copy()
         env["MYLES_DASHBOARD_OWNER_UNLOCK"] = "1"
         if diff and diff.returncode == 1:
@@ -307,7 +339,7 @@ def publish_bridge(url: str, read: str) -> bool:
         log(f"bridge publish failed: {exc}")
         return False
     finally:
-        run([git, "-C", REPO, "remote", "set-url", "--push", "origin", "owner-locked://MylesDashboard"], timeout=30)
+        run([git, "-C", REPO, "remote", "set-url", "--push", "origin", "owner-locked://MylesAI"], timeout=30)
 
 
 def ensure_tunnel(read: str) -> str:
@@ -375,8 +407,8 @@ def ensure_tunnel(read: str) -> str:
 
 def lock_repo() -> None:
     git = shutil.which("git.exe") or shutil.which("git")
-    if git and (REPO / ".git").exists():
-        run([git, "-C", REPO, "remote", "set-url", "--push", "origin", "owner-locked://MylesDashboard"], timeout=30)
+    if git and ensure_dashboard_checkout():
+        run([git, "-C", REPO, "remote", "set-url", "--push", "origin", "owner-locked://MylesAI"], timeout=30)
 
 
 log("supervisor started")
