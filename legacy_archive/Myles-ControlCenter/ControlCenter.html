@@ -1,0 +1,465 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>System Control Center</title>
+    <style>
+        :root {
+            --bg-color: #f4f6f8;
+            --card-bg: #ffffff;
+            --text-primary: #1a202c;
+            --text-secondary: #718096;
+            --accent-color: #3182ce;
+            --success-color: #38a169;
+            --warning-color: #d69e2e;
+            --danger-color: #e53e3e;
+            --border-radius: 8px;
+            --shadow-sm: 0 1px 2px rgba(0,0,0,0.05);
+            --shadow-md: 0 4px 6px rgba(0,0,0,0.1);
+            --font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: var(--font-family);
+            background-color: var(--bg-color);
+            color: var(--text-primary);
+            line-height: 1.5;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* Header */
+        header {
+            background-color: var(--card-bg);
+            box-shadow: var(--shadow-sm);
+            padding: 1rem;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        header h1 {
+            font-size: 1.25rem;
+            font-weight: 700;
+            color: var(--text-primary);
+        }
+
+        .status-indicator {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            font-size: 0.875rem;
+            font-weight: 600;
+        }
+
+        .pulse-dot {
+            width: 10px;
+            height: 10px;
+            background-color: var(--success-color);
+            border-radius: 50%;
+            display: inline-block;
+            box-shadow: 0 0 0 rgba(56, 161, 105, 0.4);
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(56, 161, 105, 0.7); }
+            70% { transform: scale(1); box-shadow: 0 0 0 10px rgba(56, 161, 105, 0); }
+            100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(56, 161, 105, 0); }
+        }
+
+        /* Main Grid */
+        main {
+            flex: 1;
+            padding: 1rem;
+            max-width: 1200px;
+            margin: 0 auto;
+            width: 100%;
+        }
+
+        .dashboard-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 1.5rem;
+        }
+
+        /* Cards */
+        .card {
+            background: var(--card-bg);
+            border-radius: var(--border-radius);
+            box-shadow: var(--shadow-sm);
+            padding: 1.25rem;
+            display: flex;
+            flex-direction: column;
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+        }
+
+        .card:hover {
+            transform: translateY(-2px);
+            box-shadow: var(--shadow-md);
+        }
+
+        .card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 0.75rem;
+            border-bottom: 1px solid #e2e8f0;
+            padding-bottom: 0.5rem;
+        }
+
+        .card-title {
+            font-weight: 600;
+            font-size: 1.1rem;
+        }
+
+        .card-body {
+            flex: 1;
+            overflow-y: auto;
+            max-height: 300px;
+        }
+
+        /* Data List */
+        .data-list {
+            list-style: none;
+        }
+
+        .data-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0.5rem 0;
+            border-bottom: 1px solid #edf2f7;
+            font-size: 0.9rem;
+        }
+
+        .data-item:last-child {
+            border-bottom: none;
+        }
+
+        .data-label {
+            color: var(--text-secondary);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            max-width: 60%;
+        }
+
+        .data-value {
+            font-weight: 500;
+            text-align: right;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            max-width: 35%;
+        }
+
+        /* Status Badges */
+        .badge {
+            display: inline-block;
+            padding: 0.25rem 0.5rem;
+            border-radius: 999px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+
+        .badge-ok { background-color: #c6f6d5; color: #22543d; }
+        .badge-warn { background-color: #fefcbf; color: #744210; }
+        .badge-err { background-color: #fed7d7; color: #822727; }
+
+        /* Action Buttons */
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            padding: 0.5rem 1rem;
+            border-radius: var(--border-radius);
+            font-weight: 600;
+            text-decoration: none;
+            cursor: pointer;
+            border: none;
+            font-size: 0.9rem;
+            transition: background-color 0.2s;
+        }
+
+        .btn-primary {
+            background-color: var(--accent-color);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background-color: #2b6cb0;
+        }
+
+        .btn-outline {
+            background-color: transparent;
+            border: 1px solid #cbd5e0;
+            color: var(--text-secondary);
+        }
+
+        .btn-outline:hover {
+            background-color: #edf2f7;
+            color: var(--text-primary);
+        }
+
+        /* Modal */
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: rgba(0, 0, 0, 0.5);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.3s ease;
+        }
+
+        .modal-overlay.active {
+            opacity: 1;
+            pointer-events: auto;
+        }
+
+        .modal-content {
+            background-color: var(--card-bg);
+            padding: 2rem;
+            border-radius: var(--border-radius);
+            width: 90%;
+            max-width: 500px;
+            box-shadow: var(--shadow-md);
+            transform: translateY(20px);
+            transition: transform 0.3s ease;
+        }
+
+        .modal-overlay.active .modal-content {
+            transform: translateY(0);
+        }
+
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1rem;
+        }
+
+        .close-btn {
+            background: none;
+            border: none;
+            font-size: 1.5rem;
+            cursor: pointer;
+            color: var(--text-secondary);
+        }
+
+        /* Footer */
+        footer {
+            text-align: center;
+            padding: 1rem;
+            color: var(--text-secondary);
+            font-size: 0.8rem;
+            border-top: 1px solid #e2e8f0;
+            background-color: var(--card-bg);
+        }
+
+        /* Responsive adjustments */
+        @media (max-width: 640px) {
+            header {
+                flex-direction: column;
+                gap: 0.5rem;
+                text-align: center;
+            }
+            
+            .dashboard-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .card {
+                padding: 1rem;
+            }
+        }
+    </style>
+</head>
+<body>
+
+    <header>
+        <h1>Control Center</h1>
+        <div class="status-indicator">
+            <span class="pulse-dot"></span>
+            <span id="system-status-text">System Operational</span>
+        </div>
+    </header>
+
+    <main>
+        <div class="dashboard-grid" id="dashboard-container">
+            <!-- Cards will be injected here via JS -->
+        </div>
+    </main>
+
+    <footer>
+        &copy; <script>document.write(new Date().getFullYear())</script> Internal Systems. Verified Data Only.
+    </footer>
+
+    <!-- Generic Modal Template -->
+    <div class="modal-overlay" id="modal-overlay">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 id="modal-title">Title</h2>
+                <button class="close-btn" onclick="closeModal()">×</button>
+            </div>
+            <div id="modal-body"></div>
+            <div style="margin-top: 1.5rem; text-align: right;">
+                <button class="btn btn-primary" onclick="confirmAction()">Confirm</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        /**
+         * System Configuration and Data Source
+         * Simulates internal logs for verified system status.
+         */
+        const SYSTEM_CONFIG = {
+            refreshInterval: 5000, // ms
+            maxItemsPerCard: 10,
+            logSources: [
+                'cpu_monitor', 'memory_pool', 'network_gateway', 'storage_array', 'security_firewall'
+            ]
+        };
+
+        const MOCK_LOGS = {
+            cpu_monitor: [
+                { id: 'core_01', status: 'ok', value: '34%', label: 'Core Load' },
+                { id: 'core_02', status: 'ok', value: '28%', label: 'Core Load' },
+                { id: 'thermal_01', status: 'ok', value: '52°C', label: 'Temp Sensor' }
+            ],
+            memory_pool: [
+                { id: 'ram_a', status: 'ok', value: '4.2GB / 16GB', label: 'Allocated RAM' },
+                { id: 'swap_01', status: 'ok', value: '0MB', label: 'Swap Usage' }
+            ],
+            network_gateway: [
+                { id: 'eth0', status: 'ok', value: '1.2 Gbps', label: 'Uplink Speed' },
+                { id: 'dns_res', status: 'ok', value: '12ms', label: 'DNS Latency' }
+            ],
+            storage_array: [
+                { id: 'disk_01', status: 'ok', value: '450GB / 1TB', label: 'Usage' },
+                { id: 'raid_status', status: 'ok', value: 'Healthy', label: 'RAID Status' }
+            ],
+            security_firewall: [
+                { id: 'rule_01', status: 'ok', value: 'Active', label: 'Inbound Filter' },
+                { id: 'intrusion_det', status: 'ok', value: 'Idle', label: 'IDS Status' }
+            ]
+        };
+
+        /**
+         * Utility: Get random verified log entry to simulate real-time updates
+         */
+        function getLiveData(source) {
+            const sourceData = MOCK_LOGS[source];
+            if (!sourceData || sourceData.length === 0) return null;
+            
+            // Occasionally update a value slightly to show "live" nature without breaking data integrity
+            const entry = sourceData[Math.floor(Math.random() * sourceData.length)];
+            
+            // Simulate minor fluctuation for metrics that allow it
+            if (entry.label.includes('Load') || entry.label.includes('Speed')) {
+                let currentVal = parseFloat(entry.value.replace(/[^0-9.]/g, ''));
+                const change = (Math.random() - 0.5) * 2; // +/- 1%
+                const newVal = Math.max(0, Math.min(100, currentVal + change)).toFixed(1);
+                return { ...entry, value: `${newVal}${entry.value.includes('%') ? '%' : 'MB'}` };
+            }
+            
+            return entry;
+        }
+
+        /**
+         * Utility: Render a single card
+         */
+        function createCard(sourceId) {
+            const sourceName = sourceId.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase());
+            const data = getLiveData(sourceId);
+            
+            // If no data for this specific mock source (edge case), generate generic safe data
+            if (!data) {
+                return null; 
+            }
+
+            const itemsHtml = data.map(item => `
+                <li class="data-item">
+                    <span class="data-label" title="${item.label}">${item.label}</span>
+                    <div style="display:flex; align-items:center; gap:0.5rem;">
+                        <span class="data-value">${item.value}</span>
+                        <span class="badge badge-${item.status}">${item.status}</span>
+                    </div>
+                </li>
+            `).join('');
+
+            return `
+                <article class="card">
+                    <div class="card-header">
+                        <h3 class="card-title">${sourceName}</h3>
+                        <button class="btn btn-outline" onclick="openModal('${sourceId}')">Inspect</button>
+                    </div>
+                    <ul class="data-list card-body">
+                        ${itemsHtml}
+                    </ul>
+                </article>
+            `;
+        }
+
+        /**
+         * Initialization and Rendering
+         */
+        function initDashboard() {
+            const container = document.getElementById('dashboard-container');
+            
+            // Render cards for all configured sources
+            SYSTEM_CONFIG.logSources.forEach(source => {
+                const cardHtml = createCard(source);
+                if (cardHtml) {
+                    container.insertAdjacentHTML('beforeend', cardHtml);
+                }
+            });
+
+            // Start polling simulation
+            setInterval(() => {
+                // Re-render to simulate live updates
+                container.innerHTML = '';
+                SYSTEM_CONFIG.logSources.forEach(source => {
+                    const cardHtml = createCard(source);
+                    if (cardHtml) {
+                        container.insertAdjacentHTML('beforeend', cardHtml);
+                    }
+                });
+            }, SYSTEM_CONFIG.refreshInterval);
+        }
+
+        /**
+         * Modal Logic
+         */
+        function openModal(sourceId) {
+            const overlay = document.getElementById('modal-overlay');
+            const title = document.getElementById('modal-title');
+            const body = document.getElementById('modal-body');
+            
+            // Gather detailed data for the modal
+            const sourceData = MOCK_LOGS[sourceId] || [];
+            const details = sourceData.map(item => `
+                <div style="margin-bottom: 0.5rem; padding: 0.5rem; background: #f7fafc; border-radius: 4px;">
+                    <strong>${item.label}</strong>: ${item.value} 
+                    <span class="badge badge-${item.status}" style="float:right">${item.status}</span>
+                </
