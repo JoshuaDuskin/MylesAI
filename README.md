@@ -25,3 +25,9 @@ The tower runtime remains under:
 `%LOCALAPPDATA%\MylesAI`
 
 Runtime state, credentials, logs, databases, generated workspaces, and secrets are local-only and are excluded from Git.
+
+## Dashboard
+
+Canonical GitHub Pages dashboard: https://joshuaduskin.github.io/MylesAI/
+
+All retired MYLES repositories are preserved under `legacy_archive/` for historical reference and are not runtime dependencies.

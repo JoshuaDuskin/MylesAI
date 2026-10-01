@@ -1,0 +1,27 @@
+{
+  "schema_version": 3,
+  "chain_id": 42161,
+  "venue": "GMX",
+  "timeframe": "5m",
+  "history_limit": 5000,
+  "poll_seconds": 60,
+  "starting_equity": 10000,
+  "paper": {
+    "enabled": true,
+    "auto_trading_enabled": true,
+    "adaptive_strategy_selection": true,
+    "emergency_stop": false,
+    "entry_cooldown_bars": 0
+  },
+  "research_exploration": {
+    "enabled": true,
+    "continuous_market_research_enabled": true,
+    "paper_lab_enabled": true,
+    "tournament_enabled": true
+  },
+  "live_execution": {
+    "enabled": false,
+    "signing_enabled": false,
+    "reason": "Locked until the owner explicitly authorizes a reviewed execution session."
+  }
+}

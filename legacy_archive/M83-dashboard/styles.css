@@ -1,0 +1,233 @@
+:root {
+    --bg-primary: #0f172a;
+    --bg-secondary: #1e293b;
+    --text-primary: #f8fafc;
+    --text-secondary: #94a3b8;
+    --accent-color: #38bdf8;
+    --cube-size: 200px;
+    --cube-speed: 10s;
+    --particle-count: 50;
+    --sidebar-width: 280px;
+}
+
+body {
+    margin: 0;
+    padding: 0;
+    font-family: 'Segoe UI', system-ui, sans-serif;
+    background-color: var(--bg-primary);
+    color: var(--text-primary);
+    display: flex;
+    height: 100vh;
+    overflow: hidden;
+}
+
+/* Status Dot Styles */
+.status-dot {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background-color: var(--accent-color);
+    box-shadow: 0 0 10px var(--accent-color), inset 0 0 5px rgba(255, 255, 255, 0.5);
+    animation: pulse 2s infinite;
+}
+
+.status-dot.inactive {
+    background-color: #ef4444;
+    box-shadow: 0 0 10px #ef4444, inset 0 0 5px rgba(255, 255, 255, 0.2);
+}
+
+@keyframes pulse {
+    0% { transform: scale(0.95); opacity: 0.7; }
+    50% { transform: scale(1.1); opacity: 1; }
+    100% { transform: scale(0.95); opacity: 0.7; }
+}
+
+/* Main Layout Grid */
+.app-container {
+    display: grid;
+    grid-template-columns: var(--sidebar-width) 1fr;
+    grid-template-rows: auto 1fr;
+    width: 100%;
+    height: 100%;
+}
+
+/* Sidebar Styles */
+aside {
+    background-color: var(--bg-secondary);
+    border-right: 1px solid rgba(255, 255, 255, 0.1);
+    padding: 2rem;
+    display: flex;
+    flex-direction: column;
+    gap: 2rem;
+    overflow-y: auto;
+}
+
+aside h2 {
+    font-size: 1.25rem;
+    margin: 0 0 1rem 0;
+    color: var(--accent-color);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+
+.control-group {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
+.control-group label {
+    font-size: 0.875rem;
+    color: var(--text-secondary);
+    display: flex;
+    justify-content: space-between;
+}
+
+input[type="range"] {
+    width: 100%;
+    accent-color: var(--accent-color);
+    cursor: pointer;
+}
+
+button {
+    background-color: rgba(56, 189, 248, 0.1);
+    border: 1px solid var(--accent-color);
+    color: var(--accent-color);
+    padding: 0.75rem;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    font-weight: 600;
+}
+
+button:hover {
+    background-color: var(--accent-color);
+    color: var(--bg-primary);
+}
+
+/* Main Content Styles */
+section {
+    padding: 2rem;
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+    overflow-y: auto;
+}
+
+#canvas-container {
+    width: 100%;
+    height: 300px;
+    background-color: rgba(255, 255, 255, 0.03);
+    border-radius: 12px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    position: relative;
+    overflow: hidden;
+}
+
+#particle-canvas {
+    width: 100%;
+    height: 100%;
+    display: block;
+}
+
+.info-panel {
+    background-color: var(--bg-secondary);
+    padding: 1.5rem;
+    border-radius: 12px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.info-panel h3 {
+    margin-top: 0;
+    color: var(--text-primary);
+}
+
+.info-panel p {
+    color: var(--text-secondary);
+    line-height: 1.6;
+    font-size: 0.95rem;
+}
+
+/* 3D Cube Styles */
+.scene {
+    width: var(--cube-size);
+    height: var(--cube-size);
+    perspective: 1000px;
+    margin: 0 auto;
+}
+
+.cube {
+    width: 100%;
+    height: 100%;
+    position: relative;
+    transform-style: preserve-3d;
+    animation: rotateCube var(--cube-speed) infinite linear;
+}
+
+@keyframes rotateCube {
+    from { transform: rotateX(0deg) rotateY(0deg); }
+    to { transform: rotateX(360deg) rotateY(360deg); }
+}
+
+.cube__face {
+    position: absolute;
+    width: var(--cube-size);
+    height: var(--cube-size);
+    border: 2px solid var(--accent-color);
+    background: rgba(56, 189, 248, 0.1);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: bold;
+    color: var(--text-primary);
+    box-shadow: inset 0 0 20px rgba(56, 189, 248, 0.2);
+}
+
+.cube__face--front  { transform: rotateY(  0deg) translateZ(calc(var(--cube-size) / 2)); }
+.cube__face--right   { transform: rotateY( 90deg) translateZ(calc(var(--cube-size) / 2)); }
+.cube__face--back    { transform: rotateY(180deg) translateZ(calc(var(--cube-size) / 2)); }
+.cube__face--left    { transform: rotateY(-90deg) translateZ(calc(var(--cube-size) / 2)); }
+.cube__face--top     { transform: rotateX( 90deg) translateZ(calc(var(--cube-size) / 2)); }
+.cube__face--bottom  { transform: rotateX(-90deg) translateZ(calc(var(--cube-size) / 2)); }
+
+/* Responsive Adjustments */
+@media (max-width: 768px) {
+    .app-container {
+        grid-template-columns: 1fr;
+        grid-template-rows: auto 1fr;
+    }
+
+    aside {
+        flex-direction: row;
+        padding: 1rem;
+        gap: 1.5rem;
+        overflow-x: auto;
+    }
+
+    .control-group {
+        min-width: 200px;
+    }
+
+    #canvas-container {
+        height: 250px;
+    }
+
+    .cube__face {
+        font-size: 0.8rem;
+    }
+}
+
+@media (max-width: 480px) {
+    :root {
+        --sidebar-width: auto;
+    }
+
+    aside h2 {
+        font-size: 1rem;
+    }
+
+    button {
+        padding: 0.5rem;
+        font-size: 0.9rem;
+    }
+}
