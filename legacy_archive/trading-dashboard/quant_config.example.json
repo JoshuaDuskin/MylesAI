@@ -1,0 +1,81 @@
+{
+  "schema_version": 3,
+  "venue": "GMX",
+  "chain_id": 42161,
+  "timeframe": "1h",
+  "history_limit": 3000,
+  "poll_seconds": 60,
+  "starting_equity": 10000,
+  "market_settings": {
+    "BTC/USD": {
+      "enabled": true,
+      "paper_strategy": "trend_momentum",
+      "auto_trade_enabled": true
+    },
+    "ETH/USD": {
+      "enabled": true,
+      "paper_strategy": "trend_momentum",
+      "auto_trade_enabled": true
+    },
+    "SOL/USD": {
+      "enabled": true,
+      "paper_strategy": "trend_momentum",
+      "auto_trade_enabled": true
+    },
+    "XRP/USD": {
+      "enabled": true,
+      "paper_strategy": "trend_momentum",
+      "auto_trade_enabled": true
+    },
+    "TAO/USD": {
+      "enabled": true,
+      "paper_strategy": "trend_momentum",
+      "auto_trade_enabled": true
+    }
+  },
+  "strategies": {
+    "scalp_trend": {
+      "enabled": true
+    },
+    "trend_momentum": {
+      "enabled": true
+    },
+    "mean_reversion": {
+      "enabled": true
+    }
+  },
+  "paper": {
+    "enabled": true,
+    "emergency_stop": false,
+    "auto_trading_enabled": true
+  },
+  "risk": {
+    "max_risk_per_trade_pct": 0.5,
+    "max_notional_leverage": 1.5,
+    "stop_loss_pct": 1.5,
+    "take_profit_pct": 3.0,
+    "max_daily_loss_pct": 2.0,
+    "max_drawdown_pct": 8.0,
+    "max_concurrent_positions": 2,
+    "max_market_allocation_pct": 35.0
+  },
+  "research_costs": {
+    "position_fee_bps_per_side": 6,
+    "slippage_bps_per_side": 5,
+    "impact_bps_per_side": 20,
+    "holding_cost_bps_per_day": 5
+  },
+  "validation": {
+    "min_trades": 12,
+    "max_drawdown_pct": 12,
+    "min_walk_forward_positive_pct": 50,
+    "min_base_return_pct": 0,
+    "min_stress_return_pct": -3,
+    "stress_cost_multiplier": 2.5
+  },
+  "live_execution": {
+    "enabled": false,
+    "signing_enabled": false,
+    "reason": "Live execution remains hard-locked until owner review, forward-paper validation, and a dedicated execution wallet are complete."
+  }
+}
