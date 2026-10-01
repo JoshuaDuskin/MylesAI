@@ -20,6 +20,31 @@ const AUDIT_FILE = path.join(DATA_DIR,'gmx_live_audit.jsonl');
 const QUANT_STATUS_FILE = path.join(DATA_DIR,'trading_status.json');
 const EXEC_LOCK_FILE = path.join(DATA_DIR,'gmx_live_execution.lock');
 const PENDING_ACTIONS_FILE = path.join(DATA_DIR,'gmx_live_pending_actions.json');
+const DAEMON_PID_FILE = path.join(DATA_DIR,'gmx_live_daemon.pid');
+
+function acquireDaemonSingleton(){
+  fs.mkdirSync(DATA_DIR,{recursive:true});
+  const alive=pid=>{try{process.kill(Number(pid),0);return true;}catch{return false;}};
+  for(let attempt=0;attempt<2;attempt++){
+    try{
+      const fd=fs.openSync(DAEMON_PID_FILE,'wx');
+      fs.writeFileSync(fd,String(process.pid),'utf8');
+      fs.closeSync(fd);
+      const cleanup=()=>{try{const owner=String(fs.readFileSync(DAEMON_PID_FILE,'utf8')).trim();if(owner===String(process.pid))fs.rmSync(DAEMON_PID_FILE,{force:true});}catch{}};
+      process.once('exit',cleanup);
+      process.once('SIGINT',()=>{cleanup();process.exit(0);});
+      process.once('SIGTERM',()=>{cleanup();process.exit(0);});
+      return true;
+    }catch(e){
+      if(e?.code!=='EEXIST')throw e;
+      let owner=0;try{owner=Number(String(fs.readFileSync(DAEMON_PID_FILE,'utf8')).trim());}catch{}
+      if(owner&&owner!==process.pid&&alive(owner))return false;
+      try{fs.rmSync(DAEMON_PID_FILE,{force:true});}catch{}
+    }
+  }
+  return false;
+}
+
 const VERSION='0.9.0';
 const CHAIN_ID=42161;
 const USDC='0xaf88d065e77c8cC2239327C5EDb3A432268e5831';
@@ -164,5 +189,5 @@ async function autoCycle(){const c=loadConfig();expireArmIfNeeded(c);if(!c.setup
 
 function selfTest(){const d=defaults(),checks={usd30:usd30(12.34)===12340000000000000000000000000000n,usdc:parseUnits('12.345678',6)===12345678n,action_hash:/^0x[0-9a-f]{64}$/i.test(SUBACCOUNT_ORDER_ACTION),withdraw_not_delegated:true,fail_closed_session:armedNow(d)===false,copy_default_off:d.copy_trading.enabled===false,copy_auth_binds_risk:canonicalCopy({authorized_accounts:['0x0000000000000000000000000000000000000001'],max_margin_usd:25,max_leverage:1.25,max_open_positions:2,stop_loss_pct:1,take_profit_pct:2}).includes('max_margin=25.00'),execution_lock_path:EXEC_LOCK_FILE.endsWith('gmx_live_execution.lock'),pending_journal_path:PENDING_ACTIONS_FILE.endsWith('gmx_live_pending_actions.json')};try{validateOpen(d,{symbol:'BTC/USD',side:'long',margin_usd:25,leverage:1.5,stop_loss_pct:.75,take_profit_pct:1.25});checks.risk_accept=true;}catch{checks.risk_accept=false;}try{validateOpen(d,{symbol:'BTC/USD',side:'long',margin_usd:9999,leverage:9,stop_loss_pct:.75,take_profit_pct:1.25});checks.risk_reject=false;}catch{checks.risk_reject=true;}return{pass:Object.values(checks).every(Boolean),checks,version:VERSION};}
 
-async function main(){const args=process.argv.slice(2),payload=flag=>{const i=args.indexOf(flag);return i>=0?JSON.parse(args[i+1]||'{}'):null;};try{if(args.includes('--self-test')){const r=selfTest();console.log(JSON.stringify(r,null,2));process.exit(r.pass?0:1);}if(args.includes('--public-status')){console.log(JSON.stringify(await publicStatus(),replacer));return;}if(args.includes('--status')){console.log(JSON.stringify(await status(),replacer));return;}let p;if((p=payload('--setup-begin'))!==null){console.log(JSON.stringify(await withExecutionLock('setup-begin',()=>setupBegin(p)),replacer));return;}if((p=payload('--setup-finish'))!==null){console.log(JSON.stringify(await withExecutionLock('setup-finish',()=>setupFinish(p)),replacer));return;}if((p=payload('--arm'))!==null){console.log(JSON.stringify(await withExecutionLock('arm',()=>arm(p)),replacer));return;}if((p=payload('--copy-auth'))!==null){console.log(JSON.stringify(await withExecutionLock('copy-auth',()=>setCopyAuthorization(p)),replacer));return;}if((p=payload('--order'))!==null){console.log(JSON.stringify(await withExecutionLock('order',()=>orderAction(p)),replacer));return;}if(args.includes('--build-approve')){console.log(JSON.stringify(await buildApprove(),replacer));return;}if((p=payload('--build-withdraw'))!==null){console.log(JSON.stringify(await buildWithdraw(p),replacer));return;}if(args.includes('--auto-cycle')){console.log(JSON.stringify(await withExecutionLock('auto-cycle',()=>autoCycle()),replacer));return;}if(args.includes('--daemon')){const boot=loadConfig();if(boot.armed||boot.auto_enabled||boot.copy_trading?.enabled||Number(boot.armed_until||0)>0){boot.armed=false;boot.auto_enabled=false;boot.armed_until=0;boot.copy_trading={...boot.copy_trading,enabled:false,authorized_until:0};saveConfig(boot);audit('daemon_start_fail_closed_disarm');}for(;;){try{await status();await withExecutionLock('daemon-auto-cycle',()=>autoCycle(),5000);}catch(e){audit('daemon_error',{error:String(e?.message||e)});writeJson(STATUS_FILE,{ok:false,version:VERSION,generated_at:iso(),error:String(e?.message||e)});}await new Promise(r=>setTimeout(r,15000));}}console.log(JSON.stringify({ok:true,version:VERSION}));}catch(e){console.error(JSON.stringify({ok:false,error:String(e?.message||e)}));process.exit(2);}}
+async function main(){const args=process.argv.slice(2),payload=flag=>{const i=args.indexOf(flag);return i>=0?JSON.parse(args[i+1]||'{}'):null;};try{if(args.includes('--self-test')){const r=selfTest();console.log(JSON.stringify(r,null,2));process.exit(r.pass?0:1);}if(args.includes('--public-status')){console.log(JSON.stringify(await publicStatus(),replacer));return;}if(args.includes('--status')){console.log(JSON.stringify(await status(),replacer));return;}let p;if((p=payload('--setup-begin'))!==null){console.log(JSON.stringify(await withExecutionLock('setup-begin',()=>setupBegin(p)),replacer));return;}if((p=payload('--setup-finish'))!==null){console.log(JSON.stringify(await withExecutionLock('setup-finish',()=>setupFinish(p)),replacer));return;}if((p=payload('--arm'))!==null){console.log(JSON.stringify(await withExecutionLock('arm',()=>arm(p)),replacer));return;}if((p=payload('--copy-auth'))!==null){console.log(JSON.stringify(await withExecutionLock('copy-auth',()=>setCopyAuthorization(p)),replacer));return;}if((p=payload('--order'))!==null){console.log(JSON.stringify(await withExecutionLock('order',()=>orderAction(p)),replacer));return;}if(args.includes('--build-approve')){console.log(JSON.stringify(await buildApprove(),replacer));return;}if((p=payload('--build-withdraw'))!==null){console.log(JSON.stringify(await buildWithdraw(p),replacer));return;}if(args.includes('--auto-cycle')){console.log(JSON.stringify(await withExecutionLock('auto-cycle',()=>autoCycle()),replacer));return;}if(args.includes('--daemon')){if(!acquireDaemonSingleton()){console.log(JSON.stringify({ok:true,already_running:true,pid:process.pid,version:VERSION}));return;}const boot=loadConfig();if(boot.armed||boot.auto_enabled||boot.copy_trading?.enabled||Number(boot.armed_until||0)>0){boot.armed=false;boot.auto_enabled=false;boot.armed_until=0;boot.copy_trading={...boot.copy_trading,enabled:false,authorized_until:0};saveConfig(boot);audit('daemon_start_fail_closed_disarm');}for(;;){try{await status();await withExecutionLock('daemon-auto-cycle',()=>autoCycle(),5000);}catch(e){audit('daemon_error',{error:String(e?.message||e)});writeJson(STATUS_FILE,{ok:false,version:VERSION,generated_at:iso(),error:String(e?.message||e)});}await new Promise(r=>setTimeout(r,15000));}}console.log(JSON.stringify({ok:true,version:VERSION}));}catch(e){console.error(JSON.stringify({ok:false,error:String(e?.message||e)}));process.exit(2);}}
 main();
