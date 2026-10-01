@@ -321,6 +321,10 @@ def publish_bridge(url: str, read: str) -> bool:
         if not run([git, "-C", REPO, "add", "--", "bridge.json"]):
             return False
         diff = run([git, "-C", REPO, "diff", "--cached", "--quiet"])
+        # Unlock only this dedicated deployment checkout for the bridge publish.
+        unlock = run([git, "-C", REPO, "remote", "set-url", "--push", "origin", DASHBOARD_REPO], timeout=30)
+        if not unlock or unlock.returncode != 0:
+            return False
         env = os.environ.copy()
         env["MYLES_DASHBOARD_OWNER_UNLOCK"] = "1"
         if diff and diff.returncode == 1:
