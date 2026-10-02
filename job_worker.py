@@ -669,14 +669,14 @@ def completion_gaps(job_id: str, prompt: str, workspace: Path, final_text: str) 
 # MYLES_REMOTE_GITHUB_HARD_LOCK_v3
 LEGACY_MYLES_REPOS = {
     "myles-controlcenter", "myleslivestatus", "m83-dashboard", "my-dashboard",
-    "progress-dashboard", "myles-dashboard", "myles-ai-dashboard", "myles-ecosystem",
+    "progress-dashboard", "myles-dashboard", "mylesdashboard", "myles-ai-dashboard",
+    "myles-ecosystem", "trading-dashboard", "tower-bridge",
 }
 
 
 # MYLES_DUPLICATE_REPOSITORY_HARD_BLOCK_v4
 _CANONICAL_MYLES_REPOS = {
-    "joshuaduskin/mylesdashboard",
-    "joshuaduskin/trading-dashboard",
+    "joshuaduskin/mylesai",
 }
 _DASHBOARD_REPO_WORDS = (
     "dashboard", "controlcenter", "control-center", "control_center",
@@ -712,8 +712,8 @@ def _owner_repo_policy_refusal(job_id: str, name: str, args: dict) -> str | None
     if _looks_like_duplicate_myles_repo_creation(name, args):
         return (
             "TOOL_REFUSED CANONICAL_REPO_POLICY: duplicate Myles dashboard/status repositories are forbidden. "
-            "Use JoshuaDuskin/MylesDashboard for the owner UI, JoshuaDuskin/trading-dashboard for Quant source, "
-            "and the authenticated tower bridge for live state."
+            "Use JoshuaDuskin/MylesAI as the only MYLES repository: root index.html for the owner UI, "
+            "MylesAI/quant for Quant source, and the authenticated tower bridge for live state."
         )
     try:
         payload = json.dumps(args or {}, ensure_ascii=False).lower()
