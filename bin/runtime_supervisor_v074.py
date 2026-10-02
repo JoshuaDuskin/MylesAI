@@ -28,6 +28,7 @@ PY = VENV / "python.exe"
 PYW = VENV / "pythonw.exe"
 DASHBOARD_REPO = "https://github.com/JoshuaDuskin/MylesAI.git"
 LOG = LOGS / "runtime_supervisor_v074.log"
+SUPERVISOR_PID_FILE = DATA / "runtime_supervisor_v074.pid"
 
 for directory in (DATA, BIN, LOGS):
     directory.mkdir(parents=True, exist_ok=True)
@@ -434,7 +435,8 @@ def lock_repo() -> None:
         run([git, "-C", REPO, "remote", "set-url", "--push", "origin", "owner-locked://MylesAI"], timeout=30)
 
 
-log("supervisor started")
+SUPERVISOR_PID_FILE.write_text(str(os.getpid()), encoding="utf-8")
+log(f"supervisor started pid={os.getpid()}")
 try:
     while True:
         owner = owner_token()
@@ -446,6 +448,11 @@ try:
         lock_repo()
         time.sleep(30)
 finally:
+    try:
+        if SUPERVISOR_PID_FILE.exists() and SUPERVISOR_PID_FILE.read_text(encoding="utf-8", errors="ignore").strip() == str(os.getpid()):
+            SUPERVISOR_PID_FILE.unlink(missing_ok=True)
+    except Exception:
+        pass
     if mutex is not None:
         try:
             ctypes.windll.kernel32.ReleaseMutex(mutex)

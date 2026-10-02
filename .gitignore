@@ -31,3 +31,6 @@ dashboard_site_legacy_*/
 bin/*.exe
 tools/*.exe
 __pycache__/
+quant/quant_config.json
+legacy_repo_cleanup_v055/
+legacy_repo_cleanup_v056/
