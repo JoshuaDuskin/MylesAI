@@ -5,11 +5,19 @@ on:
     paths:
       - "dashboard_bridge/**/*.py"
       - "quant/**/*.mjs"
+      - "bin/**/*.py"
+      - "myles_core.py"
+      - "myles_tools.py"
+      - "index.html"
       - ".github/workflows/validate-runtime.yml"
   pull_request:
     paths:
       - "dashboard_bridge/**/*.py"
       - "quant/**/*.mjs"
+      - "bin/**/*.py"
+      - "myles_core.py"
+      - "myles_tools.py"
+      - "index.html"
       - ".github/workflows/validate-runtime.yml"
 
 jobs:
@@ -23,11 +31,21 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - name: Compile bridge
-        run: python -m py_compile dashboard_bridge/dashboard_bridge.py
+
+      - name: Compile Python runtime
+        run: python -m py_compile dashboard_bridge/dashboard_bridge.py bin/runtime_supervisor_v074.py bin/game_mode_watch.py myles_core.py myles_tools.py
+
       - name: Verify BOM-safe pairing JSON
         run: python -c "import json,tempfile,pathlib;p=pathlib.Path(tempfile.gettempdir())/'myles_pair_bom.json';p.write_bytes(b'\\xef\\xbb\\xbf{\"code\":\"TEST1234\",\"pinned\":true,\"expires_epoch\":9999999999}');d=json.loads(p.read_text(encoding='utf-8-sig'));assert d['code']=='TEST1234' and d['pinned'] is True;print('BOM pairing JSON OK')"
+
+      - name: Reject stale trading fallback
+        run: python -c "from pathlib import Path;p=Path('dashboard_bridge/dashboard_bridge.py').read_text();assert 'workspaces.rglob' not in p;assert '_verified_source' in p and 'data/trading_status.json' in p;h=Path('index.html').read_text();assert "raw?._verified===true" in h and "data/trading_status.json" in h;print('verified Quant-only dashboard path OK')"
+
+      - name: Verify automatic game-mode contract
+        run: python -c "from pathlib import Path;w=Path('bin/game_mode_watch.py').read_text().lower();s=Path('bin/runtime_supervisor_v074.py').read_text();c=Path('myles_core.py').read_text();assert 'fortniteclient-win64-shipping.exe' in w;assert 'ollama' in w and 'stop_heavy_myles_processes' in w;assert 'light_mode_active' in s and 'stop_heavy_background' in s;assert 'paused_for_game' in c;print('automatic game-mode contract OK')"
+
       - name: Check Quant syntax
         run: node --check quant/quant_service.mjs
+
       - name: Run Quant self-test
         run: node quant/quant_service.mjs --self-test
