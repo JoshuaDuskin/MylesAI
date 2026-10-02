@@ -40,21 +40,24 @@ RATE_LOCK = threading.Lock()
 TOKEN = ""
 PAIR_CODE = ""
 PAIR_EXPIRES = 0.0
+PAIR_PINNED = False
 PAIR_CODE_FILE: Path | None = None
 
 
 def refresh_pair_state() -> None:
     """Reload the pinned/recovery pairing code without restarting the bridge."""
-    global PAIR_CODE, PAIR_EXPIRES
+    global PAIR_CODE, PAIR_EXPIRES, PAIR_PINNED
     if PAIR_CODE_FILE is None:
         return
     try:
         pair_data = json.loads(PAIR_CODE_FILE.read_text(encoding="utf-8"))
         code = str(pair_data.get("code") or "").strip().upper()
         expires = float(pair_data.get("expires_epoch") or 0)
+        pinned = bool(pair_data.get("pinned", False))
         if code:
             PAIR_CODE = code
             PAIR_EXPIRES = expires
+            PAIR_PINNED = pinned
     except Exception:
         pass
 
@@ -844,7 +847,10 @@ class Handler(BaseHTTPRequestHandler):
                 self.deny(400, "Invalid JSON")
                 return
             code = str(payload.get("code") or "").strip().upper() if isinstance(payload, dict) else ""
-            if not PAIR_CODE or not PAIR_EXPIRES or time.time() > PAIR_EXPIRES:
+            if not PAIR_CODE:
+                self.deny(410, "Pairing code unavailable. Generate a new code on the tower.")
+                return
+            if not PAIR_PINNED and (not PAIR_EXPIRES or time.time() > PAIR_EXPIRES):
                 self.deny(410, "Pairing code expired. Generate a new code on the tower.")
                 return
             if not constant_time_equal(code, PAIR_CODE):
@@ -986,7 +992,7 @@ class Handler(BaseHTTPRequestHandler):
 
 
 def main() -> None:
-    global TOKEN, PORT, PAIR_CODE, PAIR_EXPIRES, PAIR_CODE_FILE
+    global TOKEN, PORT, PAIR_CODE, PAIR_EXPIRES, PAIR_PINNED, PAIR_CODE_FILE
     parser = argparse.ArgumentParser(description="Authenticated phone-to-tower bridge for Myles Dashboard")
     parser.add_argument("--token-file", required=True)
     parser.add_argument("--port", type=int, default=8790)
