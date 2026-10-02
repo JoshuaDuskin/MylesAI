@@ -22,3 +22,12 @@ data/*status.json
 data/*paper_state*.json
 data/browser_profile/
 data/secrets/
+node_modules/
+**/node_modules/
+data/
+self_updates/
+dashboard_site/
+dashboard_site_legacy_*/
+bin/*.exe
+tools/*.exe
+__pycache__/

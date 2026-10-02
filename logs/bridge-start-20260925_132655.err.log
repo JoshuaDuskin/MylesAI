@@ -1,7 +1,0 @@
-Tunnel URL exists but did not pass the authenticated bridge health check.
-At C:\Users\Joshu\AppData\Local\MylesAI\dashboard_bridge\start_bridge.ps1:97 char:26
-+ ... licReady) { throw "Tunnel URL exists but did not pass the authenticat ...
-+                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-    + CategoryInfo          : OperationStopped: (Tunnel URL exis...e health check.:String) [], RuntimeException
-    + FullyQualifiedErrorId : Tunnel URL exists but did not pass the authenticated bridge health check.
- 

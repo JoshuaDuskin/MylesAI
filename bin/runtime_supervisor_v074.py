@@ -300,6 +300,19 @@ def ensure_dashboard_checkout() -> bool:
         return False
 
 
+def bridge_manifest_matches(url: str, read: str) -> bool:
+    """Return True only when the deployment manifest matches live tower state."""
+    if not ensure_dashboard_checkout():
+        return False
+    try:
+        value = json.loads((REPO / "bridge.json").read_text(encoding="utf-8", errors="replace"))
+        manifest_url = str(value.get("url") or value.get("bridge_url") or "").rstrip("/")
+        manifest_read = str(value.get("read_token") or "").strip()
+        return manifest_url == str(url or "").rstrip("/") and manifest_read == str(read or "").strip()
+    except Exception:
+        return False
+
+
 def publish_bridge(url: str, read: str) -> bool:
     if not ensure_dashboard_checkout():
         return False
@@ -345,11 +358,14 @@ def publish_bridge(url: str, read: str) -> bool:
 def ensure_tunnel(read: str) -> str:
     old = tunnel_state()
     if old and http_ok(old + "/dashboard/health", {"X-Myles-Read": read}, 8):
+        if not bridge_manifest_matches(old, read):
+            log("bridge manifest stale; publishing current tower endpoint")
+            publish_bridge(old, read)
         return old
     tailscale_url = ensure_tailscale_funnel(read)
     if tailscale_url:
-        if tailscale_url != old:
-            log("public URL changed to Tailscale Funnel; publishing bridge manifest: " + str(publish_bridge(tailscale_url, read)))
+        if tailscale_url != old or not bridge_manifest_matches(tailscale_url, read):
+            log("publishing current Tailscale bridge manifest: " + str(publish_bridge(tailscale_url, read)))
         return tailscale_url
     cloudflared = cloudflared_path()
     if not cloudflared:
