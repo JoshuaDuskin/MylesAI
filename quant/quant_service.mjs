@@ -10,7 +10,7 @@ const STATE_FILE = path.join(DATA_DIR, 'quant_paper_state_v3.json');
 const RESEARCH_FILE = path.join(DATA_DIR, 'quant_research_status_v1.json');
 const STATUS_FILE = path.join(DATA_DIR, 'trading_status.json');
 const CONFIG_FILE = path.join(__dirname, 'quant_config.json');
-const VERSION = '0.7.0';
+const VERSION = '0.7.1';
 const VALID_PERIODS = new Set(['1m','5m','15m','1h','4h','1d']);
 const SUPPORTED_RESEARCH_MARKETS = ['BTC/USD','ETH/USD','SOL/USD','XRP/USD','TAO/USD'];
 
@@ -196,9 +196,13 @@ function strategySignal(name,candles,index){
 }
 
 function normalizeCandles(raw){ const rows=Array.isArray(raw)?raw:raw?.candles; if(!Array.isArray(rows))return[]; const out=rows.map(c=>Array.isArray(c)?{timestamp:n(c[0]),open:n(c[1]),high:n(c[2]),low:n(c[3]),close:n(c[4])}:{timestamp:n(c.timestamp),open:n(c.open),high:n(c.high),low:n(c.low),close:n(c.close)}).filter(c=>c.timestamp>0&&c.open>0&&c.high>0&&c.low>0&&c.close>0); out.sort((a,b)=>a.timestamp-b.timestamp); return out; }
-const GMX_ORACLE_BASES={42161:'https://arbitrum-api.gmxinfra.io'};
-async function fetchJsonUrl(url,label,{attempts=3}={}){let lastError=null;for(let attempt=1;attempt<=Math.max(1,attempts);attempt++){const controller=new AbortController();const timer=setTimeout(()=>controller.abort(),15000);try{const r=await fetch(url,{headers:{accept:'application/json','user-agent':'MylesQuant/'+VERSION},signal:controller.signal});const text=await r.text();if(!r.ok)throw new Error(label+': HTTP '+r.status+' '+r.statusText+' - '+text.replace(/\s+/g,' ').slice(0,400));return JSON.parse(text);}catch(err){lastError=err;if(attempt<attempts)await new Promise(resolve=>setTimeout(resolve,Math.min(2000,250*attempt)));}finally{clearTimeout(timer);}}throw lastError||new Error(label+': request failed');}
-async function fetchGmxCandles(chainId,symbol,timeframe,limit){ const base=GMX_ORACLE_BASES[Number(chainId)]; if(!base)throw new Error('Unsupported chain '+chainId); const tokenSymbol=String(symbol).split('/')[0].toUpperCase();const url=new URL(base+'/prices/candles');url.searchParams.set('tokenSymbol',tokenSymbol);url.searchParams.set('period',timeframe);url.searchParams.set('limit',String(Math.max(1,Math.min(10000,Math.trunc(n(limit,1000))))));const raw=await fetchJsonUrl(url,'GMX '+tokenSymbol+'/'+timeframe);const candles=normalizeCandles(raw);if(candles.length<Math.min(80,Number(limit)))throw new Error('GMX returned only '+candles.length+' usable '+timeframe+' candles for '+tokenSymbol);return candles;}
+const GMX_ORACLE_BASES={42161:[
+  'https://arbitrum-api.gmxinfra.io',
+  'https://arbitrum-api-fallback.gmxinfra.io',
+  'https://arbitrum-api-fallback.gmxinfra2.io'
+]};
+async function fetchJsonUrl(url,label,{attempts=1,timeoutMs=10000}={}){let lastError=null;for(let attempt=1;attempt<=Math.max(1,attempts);attempt++){const controller=new AbortController();const timer=setTimeout(()=>controller.abort(),timeoutMs);try{const r=await fetch(url,{headers:{accept:'application/json','user-agent':'MylesQuant/'+VERSION},signal:controller.signal});const text=await r.text();if(!r.ok)throw new Error(label+': HTTP '+r.status+' '+r.statusText+' - '+text.replace(/\s+/g,' ').slice(0,400));return JSON.parse(text);}catch(err){lastError=err;if(attempt<attempts)await new Promise(resolve=>setTimeout(resolve,Math.min(1200,200*attempt)));}finally{clearTimeout(timer);}}throw lastError||new Error(label+': request failed');}
+async function fetchGmxCandles(chainId,symbol,timeframe,limit){ const bases=GMX_ORACLE_BASES[Number(chainId)]; if(!bases)throw new Error('Unsupported chain '+chainId); const tokenSymbol=String(symbol).split('/')[0].toUpperCase();const errors=[];for(const base of bases){try{const url=new URL(base+'/prices/candles');url.searchParams.set('tokenSymbol',tokenSymbol);url.searchParams.set('period',timeframe);url.searchParams.set('limit',String(Math.max(1,Math.min(10000,Math.trunc(n(limit,1000))))));const raw=await fetchJsonUrl(url,'GMX '+tokenSymbol+'/'+timeframe+' via '+base,{attempts:1,timeoutMs:10000});const candles=normalizeCandles(raw);if(candles.length<Math.min(80,Number(limit)))throw new Error('returned only '+candles.length+' usable '+timeframe+' candles');return candles;}catch(err){errors.push(base+': '+String(err?.message||err));}}throw new Error('GMX oracle hosts failed for '+tokenSymbol+'/'+timeframe+': '+errors.join(' | '));}
 async function fetchLatestPrice(chainId,symbol){ const c=await fetchGmxCandles(chainId,symbol,'1m',2);const last=c.at(-1);return {price:last.close,timestamp:last.timestamp,source:'GMX 1m candle',degraded:false};}
 async function fetchMarketSnapshot(config,symbol,limit){
   const candles=await fetchGmxCandles(config.chain_id,symbol,config.timeframe,limit);
@@ -423,13 +427,18 @@ async function cycle({backtestOnly=false}={}){
   const researchInterval=Math.max(120,n(config.research_exploration?.interval_seconds,900));
   const researchDue=backtestOnly||(researchOn&&(!cachedResearchResults.length||nowEpoch-lastResearchEpoch>=researchInterval));
   const candleLimit=researchDue?config.history_limit:Math.min(config.history_limit,240);
-  for(const symbol of enabled){
-    try{
-      const snapshot=await fetchMarketSnapshot(config,symbol,candleLimit);
-      candlesBySymbol[symbol]=snapshot.candles;
-      latest[symbol]=snapshot.latest;
-      if(snapshot.markError)errors[symbol]='1m mark degraded: '+snapshot.markError;
-    }catch(err){errors[symbol]=String(err?.message||err);}
+  const marketResults=await Promise.all(enabled.map(async symbol=>{
+    try{return{symbol,snapshot:await fetchMarketSnapshot(config,symbol,candleLimit),error:null};}
+    catch(err){return{symbol,snapshot:null,error:String(err?.message||err)};}
+  }));
+  for(const row of marketResults){
+    if(row.snapshot){
+      candlesBySymbol[row.symbol]=row.snapshot.candles;
+      latest[row.symbol]=row.snapshot.latest;
+      if(row.snapshot.markError)errors[row.symbol]='1m mark degraded: '+row.snapshot.markError;
+    }else{
+      errors[row.symbol]=row.error||'GMX market fetch failed';
+    }
   }
   let results=researchOn?cachedResearchResults:[];
   let promotions=[];
