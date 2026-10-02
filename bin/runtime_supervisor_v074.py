@@ -16,6 +16,7 @@ from pathlib import Path
 
 CREATE_NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)
 DETACHED_PROCESS = getattr(subprocess, "DETACHED_PROCESS", 0)
+BELOW_NORMAL_PRIORITY_CLASS = getattr(subprocess, "BELOW_NORMAL_PRIORITY_CLASS", 0x00004000)
 ROOT = Path(os.environ.get("LOCALAPPDATA") or (Path.home() / "AppData" / "Local")) / "MylesAI"
 DATA = ROOT / "data"
 BIN = ROOT / "bin"
@@ -75,11 +76,11 @@ def run(args, cwd: Path | None = None, env: dict | None = None, timeout: int = 9
         return None
 
 
-def hidden_popen(args, cwd: Path | None = None, stdout_path: Path | None = None, stderr_path: Path | None = None):
+def hidden_popen(args, cwd: Path | None = None, stdout_path: Path | None = None, stderr_path: Path | None = None, *, low_priority: bool = False):
     stdout_handle = stdout_path.open("ab") if stdout_path else subprocess.DEVNULL
     stderr_handle = stderr_path.open("ab") if stderr_path else subprocess.DEVNULL
     try:
-        flags = CREATE_NO_WINDOW | DETACHED_PROCESS if os.name == "nt" else 0
+        flags = (CREATE_NO_WINDOW | DETACHED_PROCESS | (BELOW_NORMAL_PRIORITY_CLASS if low_priority else 0)) if os.name == "nt" else 0
         return subprocess.Popen(
             [str(item) for item in args],
             cwd=str(cwd) if cwd else None,
@@ -146,7 +147,30 @@ def light_mode_active() -> bool:
 def start_game_watcher() -> None:
     if not GAME_WATCHER.exists() or not PYW.exists():
         return
-    if has(r"game_mode_watch\.py"):
+
+    # Retire old restored watcher revisions. There must be exactly one canonical
+    # watcher making game-mode decisions.
+    legacy_rx = re.compile(r"game_mode_watch_v\d+\.py", re.I)
+    for pid, command in process_rows():
+        if pid <= 0 or pid == os.getpid() or not legacy_rx.search(command or ""):
+            continue
+        try:
+            if os.name == "nt":
+                subprocess.run(
+                    ["taskkill", "/PID", str(pid), "/T", "/F"],
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                    timeout=8,
+                    creationflags=CREATE_NO_WINDOW,
+                )
+            else:
+                os.kill(pid, 15)
+            log(f"retired legacy game-mode watcher pid={pid}")
+        except Exception:
+            pass
+
+    canonical_pattern = re.escape(str(GAME_WATCHER))
+    if has(canonical_pattern):
         return
     hidden_popen(
         [PYW, GAME_WATCHER],
@@ -154,7 +178,7 @@ def start_game_watcher() -> None:
         stdout_path=LOGS / "game_mode_watch_startup.out.log",
         stderr_path=LOGS / "game_mode_watch_startup.err.log",
     )
-    log("automatic game-mode watcher restart requested")
+    log("automatic canonical game-mode watcher restart requested")
 
 
 def stop_heavy_background() -> None:
@@ -248,12 +272,12 @@ def start_quant() -> None:
     gmx_script = QUANT / "gmx_live.mjs"
     copy_script = QUANT / "copy_trader_service.mjs"
     if quant_script.exists() and not has(r"quant_service\.mjs"):
-        hidden_popen([node, quant_script], cwd=QUANT, stdout_path=LOGS / "quant_startup.out.log", stderr_path=LOGS / "quant_startup.err.log")
+        hidden_popen([node, quant_script], cwd=QUANT, stdout_path=LOGS / "quant_startup.out.log", stderr_path=LOGS / "quant_startup.err.log", low_priority=True)
         log("quant restart requested")
     if gmx_script.exists() and not has(r"gmx_live\.mjs"):
-        hidden_popen([node, gmx_script, "--daemon"], cwd=QUANT, stdout_path=LOGS / "gmx_live_startup.out.log", stderr_path=LOGS / "gmx_live_startup.err.log")
+        hidden_popen([node, gmx_script, "--daemon"], cwd=QUANT, stdout_path=LOGS / "gmx_live_startup.out.log", stderr_path=LOGS / "gmx_live_startup.err.log", low_priority=True)
     if copy_script.exists() and not has(r"copy_trader_service\.mjs"):
-        hidden_popen([node, copy_script, "--daemon"], cwd=QUANT, stdout_path=LOGS / "copy_trader_startup.out.log", stderr_path=LOGS / "copy_trader_startup.err.log")
+        hidden_popen([node, copy_script, "--daemon"], cwd=QUANT, stdout_path=LOGS / "copy_trader_startup.out.log", stderr_path=LOGS / "copy_trader_startup.err.log", low_priority=True)
         log("gmx restart requested")
 
 
