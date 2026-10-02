@@ -136,7 +136,7 @@ $processes = Get-CimInstance Win32_Process -ErrorAction SilentlyContinue | Where
     $name = [string]$_.Name
     $_.ProcessId -ne $PID -and (
         $cmd -like ("*" + $Root + "*") -or
-        $cmd -match "(?i)(runtime_supervisor_v074|runtime_supervisor\.py|myles_core\.py|dashboard_bridge\.py|public_gateway_v074\.py|quant_service\.mjs|gmx_live\.mjs|copy_trader_service\.mjs|game_mode_watch)" -or
+        $cmd -match "(?i)(runtime_supervisor_v074|runtime_supervisor\.py|myles_core\.py|myles_console_v074|myles_console\.py|START_MYLESAI\.cmd|dashboard_bridge\.py|public_gateway_v074\.py|quant_service\.mjs|gmx_live\.mjs|copy_trader_service\.mjs|game_mode_watch)" -or
         ($name -ieq "cloudflared.exe" -and $cmd -match "8791")
     )
 }
@@ -518,12 +518,28 @@ if ($SupervisorRows.Count -gt 1) {
         })
         $SupervisorRows = @($RuntimeProcesses | Where-Object { ([string]$_.CommandLine) -match "runtime_supervisor_v074\.py" })
     } else {
-        Log "FAIL: canonical supervisor PID exited while an older supervisor remained; refusing to keep the stale process"
+        Log "Canonical supervisor exited while an older supervisor remained; stopping stale copies and retrying once"
         foreach ($stale in $SupervisorRows) {
+            Log ("Stopping stale supervisor PID " + $stale.ProcessId)
             Stop-Process -Id $stale.ProcessId -Force -ErrorAction SilentlyContinue
             Stop-ProcessTreeQuiet ([int]$stale.ProcessId)
         }
-        $SupervisorRows = @()
+        Start-Sleep -Seconds 2
+        $CanonicalSupervisor = Start-Process -FilePath $PythonW -ArgumentList $Supervisor -WorkingDirectory $Root -WindowStyle Hidden -RedirectStandardOutput $SupervisorStdOut -RedirectStandardError $SupervisorStdErr -PassThru
+        $CanonicalSupervisorPid = $CanonicalSupervisor.Id
+        Log ("Retried canonical hidden supervisor PID " + $CanonicalSupervisorPid)
+        Start-Sleep -Seconds 3
+        $SupervisorAlive = $false
+        try {
+            $SupervisorAlive = $null -ne (Get-Process -Id $CanonicalSupervisorPid -ErrorAction Stop)
+        } catch {}
+        if (-not $SupervisorAlive) {
+            Log "FAIL: canonical supervisor retry exited during runtime verification"
+        }
+        $RuntimeProcesses = @(Get-CimInstance Win32_Process -ErrorAction SilentlyContinue | Where-Object {
+            ([string]$_.CommandLine) -match "(?i)(runtime_supervisor_v074|myles_core\.py|dashboard_bridge\.py|public_gateway_v074\.py|quant_service\.mjs|gmx_live\.mjs|copy_trader_service\.mjs|game_mode_watch)"
+        })
+        $SupervisorRows = @($RuntimeProcesses | Where-Object { ([string]$_.CommandLine) -match "runtime_supervisor_v074\.py" })
     }
 } elseif ($SupervisorRows.Count -eq 0) {
     Log "FAIL: no canonical supervisor was present at final runtime verification"
