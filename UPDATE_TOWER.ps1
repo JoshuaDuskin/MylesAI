@@ -378,6 +378,18 @@ if (-not (Test-Path $Supervisor)) {
     Fail "Canonical runtime supervisor is missing after update."
 }
 
+function Stop-ProcessTreeQuiet {
+    param([int]$ProcessId)
+
+    if ($ProcessId -le 0 -or $ProcessId -eq $PID) { return }
+    try {
+        $taskkill = Get-Command taskkill.exe -ErrorAction SilentlyContinue
+        if ($taskkill) {
+            Start-Process -FilePath $taskkill.Source -ArgumentList @("/PID", "$ProcessId", "/T", "/F") -WindowStyle Hidden -Wait -ErrorAction SilentlyContinue | Out-Null
+        }
+    } catch {}
+}
+
 Log "Enforcing a single canonical supervisor..."
 $SupervisorPidFile = Join-Path $Data "runtime_supervisor_v074.pid"
 $SupervisorPids = @()
@@ -399,7 +411,7 @@ foreach ($supervisorPid in ($SupervisorPids | Sort-Object -Unique)) {
     try {
         Log ("Stopping existing supervisor PID " + $supervisorPid + " before starting replacement")
         Stop-Process -Id $supervisorPid -Force -ErrorAction SilentlyContinue
-        & taskkill.exe /PID $supervisorPid /T /F *> $null
+        Stop-ProcessTreeQuiet $supervisorPid
     } catch {}
 }
 
@@ -498,7 +510,7 @@ if ($SupervisorRows.Count -gt 1) {
         foreach ($dup in ($SupervisorRows | Where-Object { $_.ProcessId -ne $CanonicalSupervisorPid })) {
             Log ("Stopping duplicate supervisor PID " + $dup.ProcessId)
             Stop-Process -Id $dup.ProcessId -Force -ErrorAction SilentlyContinue
-            & taskkill.exe /PID $dup.ProcessId /T /F *> $null
+            Stop-ProcessTreeQuiet ([int]$dup.ProcessId)
         }
         Start-Sleep -Seconds 3
         $RuntimeProcesses = @(Get-CimInstance Win32_Process -ErrorAction SilentlyContinue | Where-Object {
@@ -509,7 +521,7 @@ if ($SupervisorRows.Count -gt 1) {
         Log "FAIL: canonical supervisor PID exited while an older supervisor remained; refusing to keep the stale process"
         foreach ($stale in $SupervisorRows) {
             Stop-Process -Id $stale.ProcessId -Force -ErrorAction SilentlyContinue
-            & taskkill.exe /PID $stale.ProcessId /T /F *> $null
+            Stop-ProcessTreeQuiet ([int]$stale.ProcessId)
         }
         $SupervisorRows = @()
     }
