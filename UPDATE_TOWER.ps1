@@ -88,6 +88,24 @@ Log "Root: $Root"
 Log "Recovery: $Recovery"
 Log "Preserve staging: $Preserve"
 
+# Retire the specific legacy per-user auto-launcher that creates a second
+# supervisor outside the canonical update/owner-console path. Preserve its
+# exact value in recovery before removing it.
+$RunKeyPath = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Run"
+try {
+    $legacyRun = Get-ItemProperty -Path $RunKeyPath -Name "MylesRuntimeSupervisor" -ErrorAction SilentlyContinue
+    $legacyRunValue = [string]$legacyRun.MylesRuntimeSupervisor
+    if ($legacyRunValue -and $legacyRunValue -match "(?i)runtime_supervisor_v074\.py" -and $legacyRunValue -match [regex]::Escape($Root)) {
+        Set-Content -Path (Join-Path $Recovery "legacy_MylesRuntimeSupervisor_RunValue.txt") -Value $legacyRunValue -Encoding UTF8
+        Remove-ItemProperty -Path $RunKeyPath -Name "MylesRuntimeSupervisor" -Force -ErrorAction Stop
+        Log "PASS: removed legacy HKCU Run supervisor launcher; value backed up in recovery"
+    } elseif ($legacyRunValue) {
+        Log "WARNING: left unrelated MylesRuntimeSupervisor Run value unchanged"
+    }
+} catch {
+    Log ("WARNING: could not retire legacy HKCU Run supervisor launcher: " + $_.Exception.Message)
+}
+
 if (-not (Test-Path (Join-Path $Root ".git"))) {
     Fail "$Root is not a Git repository."
 }
