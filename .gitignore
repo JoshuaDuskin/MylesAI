@@ -36,3 +36,6 @@ legacy_repo_cleanup_v055/
 legacy_repo_cleanup_v056/
 legacy_repo_cleanup/
 trading_dashboard_repo/
+quant/quant_config.json.tmp-*
+quant/simulation_results.json
+data/game_mode_state.json

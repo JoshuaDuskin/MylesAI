@@ -29,6 +29,9 @@ PYW = VENV / "pythonw.exe"
 DASHBOARD_REPO = "https://github.com/JoshuaDuskin/MylesAI.git"
 LOG = LOGS / "runtime_supervisor_v074.log"
 SUPERVISOR_PID_FILE = DATA / "runtime_supervisor_v074.pid"
+CONFIG_FILE = DATA / "config.json"
+GAME_STATE_FILE = DATA / "game_mode_state.json"
+GAME_WATCHER = BIN / "game_mode_watch.py"
 
 for directory in (DATA, BIN, LOGS):
     directory.mkdir(parents=True, exist_ok=True)
@@ -131,6 +134,59 @@ def has(pattern: str) -> bool:
     return any(rx.search(command or "") for _, command in process_rows())
 
 
+def light_mode_active() -> bool:
+    """Use the same light_mode flag as the Myles core and automatic game watcher."""
+    try:
+        value = json.loads(CONFIG_FILE.read_text(encoding="utf-8-sig", errors="replace"))
+        return bool(value.get("light_mode")) if isinstance(value, dict) else False
+    except Exception:
+        return False
+
+
+def start_game_watcher() -> None:
+    if not GAME_WATCHER.exists() or not PYW.exists():
+        return
+    if has(r"game_mode_watch\.py"):
+        return
+    hidden_popen(
+        [PYW, GAME_WATCHER],
+        cwd=BIN,
+        stdout_path=LOGS / "game_mode_watch_startup.out.log",
+        stderr_path=LOGS / "game_mode_watch_startup.err.log",
+    )
+    log("automatic game-mode watcher restart requested")
+
+
+def stop_heavy_background() -> None:
+    """Keep CPU/GPU-heavy Myles workers down for the entire gaming session."""
+    patterns = (
+        re.compile(r"quant_service\.mjs", re.I),
+        re.compile(r"gmx_live\.mjs", re.I),
+        re.compile(r"copy_trader_service\.mjs", re.I),
+        re.compile(r"simulate_first_batch\.py", re.I),
+        re.compile(r"job_worker\.py", re.I),
+    )
+    for pid, command in process_rows():
+        if pid <= 0 or pid == os.getpid():
+            continue
+        if not any(rx.search(command or "") for rx in patterns):
+            continue
+        try:
+            if os.name == "nt":
+                subprocess.run(
+                    ["taskkill", "/PID", str(pid), "/T", "/F"],
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                    timeout=12,
+                    creationflags=CREATE_NO_WINDOW,
+                )
+            else:
+                os.kill(pid, 15)
+            log(f"gaming/light mode stopped heavy pid={pid}")
+        except Exception:
+            pass
+
+
 def stop_stale_tunnels() -> None:
     """Stop only cloudflared processes owned by the Myles 8791 tunnel."""
     try:
@@ -202,7 +258,10 @@ def start_quant() -> None:
 
 
 def start_services(owner: str, read: str) -> None:
-    start_quant()
+    if light_mode_active():
+        stop_heavy_background()
+    else:
+        start_quant()
     owner_headers = {"X-Myles-Token": owner, "Authorization": f"Bearer {owner}"} if owner else {}
     if owner and not http_ok("http://127.0.0.1:8790/dashboard/health", owner_headers):
         bridge_script = BRIDGE / "dashboard_bridge.py"
@@ -439,13 +498,16 @@ SUPERVISOR_PID_FILE.write_text(str(os.getpid()), encoding="utf-8")
 log(f"supervisor started pid={os.getpid()}")
 try:
     while True:
+        start_game_watcher()
         owner = owner_token()
         read = read_token()
         start_core()
+        gaming = light_mode_active()
         start_services(owner, read)
         if http_ok("http://127.0.0.1:8791/dashboard/health", {"X-Myles-Read": read}):
             ensure_tunnel(read)
-        lock_repo()
+        if not gaming:
+            lock_repo()
         time.sleep(30)
 finally:
     try:
