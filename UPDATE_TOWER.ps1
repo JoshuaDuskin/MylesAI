@@ -591,6 +591,61 @@ if ($SupervisorRows.Count -ne 1) {
 $SupervisorCount = $SupervisorRows.Count
 $QuantCount = @($RuntimeProcesses | Where-Object { ([string]$_.CommandLine) -match "quant_service\.mjs" }).Count
 
+# Verify the actual dashboard data path, not just listening ports/process names.
+$DashboardStatusOK = $false
+$QuantFeedOK = $false
+$GmxMarketCount = 0
+$DashboardStatusAgeSeconds = $null
+$DashboardStatusError = ""
+$GameModeActive = $false
+try {
+    $gamePath = Join-Path $Data "game_mode_state.json"
+    if (Test-Path $gamePath) {
+        $gameState = Get-Content $gamePath -Raw -ErrorAction Stop | ConvertFrom-Json
+        $GameModeActive = [bool]$gameState.active
+    }
+} catch {}
+
+$ReadToken = ""
+try { $ReadToken = (Get-Content (Join-Path $Data "dashboard_public_read_token.txt") -Raw -ErrorAction Stop).Trim() } catch {}
+$statusDeadline = (Get-Date).AddSeconds(95)
+while ((Get-Date) -lt $statusDeadline) {
+    try {
+        if (-not $ReadToken) { throw "public read token unavailable" }
+        $headers = @{ "X-Myles-Read" = $ReadToken; "Accept" = "application/json" }
+        $status = Invoke-RestMethod -Uri "http://127.0.0.1:8791/dashboard/status" -Headers $headers -TimeoutSec 20
+        $generated = [DateTimeOffset]::Parse([string]$status.generated_at)
+        $DashboardStatusAgeSeconds = [math]::Round(([DateTimeOffset]::UtcNow - $generated.ToUniversalTime()).TotalSeconds, 1)
+        $DashboardStatusOK = ($DashboardStatusAgeSeconds -ge -30 -and $DashboardStatusAgeSeconds -le 90 -and [bool]$status.myles.online)
+        $trading = $status.trading
+        $QuantFeedOK = $false
+        $GmxMarketCount = 0
+        if ($null -ne $trading) {
+            $QuantFeedOK = ([bool]$trading._verified -and ([string]$trading._verified_source -eq "data/trading_status.json"))
+            if ($null -ne $trading.markets) { $GmxMarketCount = @($trading.markets).Count }
+        }
+        if ($DashboardStatusOK -and ($GameModeActive -or ($QuantFeedOK -and $GmxMarketCount -gt 0))) {
+            break
+        }
+        $DashboardStatusError = if (-not $DashboardStatusOK) { "dashboard status not fresh/core online" } elseif (-not $QuantFeedOK) { "Quant telemetry not verified" } else { "GMX markets empty" }
+    } catch {
+        $DashboardStatusError = $_.Exception.Message
+    }
+    Start-Sleep -Seconds 3
+}
+if ($DashboardStatusOK) {
+    Log ("PASS: gateway dashboard status is fresh; age=" + $DashboardStatusAgeSeconds + "s")
+} else {
+    Log ("FAIL: gateway dashboard status verification failed: " + $DashboardStatusError)
+}
+if ($GameModeActive) {
+    Log "INFO: Gaming Performance Mode is active; Quant/GMX workers are intentionally paused"
+} elseif ($QuantFeedOK -and $GmxMarketCount -gt 0) {
+    Log ("PASS: verified Quant telemetry with " + $GmxMarketCount + " GMX market(s)")
+} else {
+    Log ("FAIL: Quant/GMX telemetry is not healthy: " + $DashboardStatusError)
+}
+
 $Head = ((Invoke-RepoGit -GitArgs @("rev-parse", "--short", "HEAD")) -join "").Trim()
 $Origin = ((Invoke-RepoGit -GitArgs @("remote", "get-url", "origin")) -join "").Trim()
 $GitStatus = @(Invoke-RepoGit -GitArgs @("status", "--short"))
@@ -612,6 +667,11 @@ $Summary += "Gateway 8791 listening: $Port8791"
 $Summary += "Supervisor count: $SupervisorCount"
 $Summary += "Quant service count: $QuantCount"
 $Summary += "GMX daemon count: $GmxCount"
+$Summary += "Dashboard live status verified: $DashboardStatusOK"
+$Summary += "Dashboard status age seconds: $DashboardStatusAgeSeconds"
+$Summary += "Gaming Performance Mode active: $GameModeActive"
+$Summary += "Quant feed verified: $QuantFeedOK"
+$Summary += "GMX market count: $GmxMarketCount"
 $Summary += "Local-only files restored: $($RestoredLocalOnly.Count)"
 $Summary += "Recovery folder: $Recovery"
 $Summary += "Git working-tree entries after update: $($GitStatus.Count)"
@@ -623,7 +683,8 @@ New-Item -ItemType Directory -Force -Path (Join-Path $Root "logs") | Out-Null
 Copy-Item $LogFile (Join-Path $Root "logs\tower_update_latest.log") -Force
 Copy-Item (Join-Path $Recovery "RESULT.txt") (Join-Path $Root "logs\tower_update_RESULT.txt") -Force
 
-if ($CoreOK -and $Port8790 -and $Port8791 -and $SupervisorCount -eq 1 -and $GmxCount -le 1) {
+$DataPlaneOK = $DashboardStatusOK -and ($GameModeActive -or ($QuantFeedOK -and $GmxMarketCount -gt 0))
+if ($CoreOK -and $Port8790 -and $Port8791 -and $SupervisorCount -eq 1 -and $GmxCount -le 1 -and $DataPlaneOK) {
     Write-Host ""
     Write-Host "MYLES TOWER UPDATE: PASS" -ForegroundColor Green
     Write-Host "The canonical runtime is back online." -ForegroundColor Green
