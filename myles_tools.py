@@ -536,7 +536,7 @@ def _git_auth_env_from_gh(gh: str, gh_env: dict[str, str]) -> dict[str, str] | N
 
 
 
-MYLES_DASHBOARD_CANONICAL_REPO = "MylesDashboard"
+MYLES_DASHBOARD_CANONICAL_REPO = "MylesAI"
 
 def _canonical_myles_dashboard_repo_name(value: str) -> str:
     """Collapse Myles dashboard/control-center aliases to one canonical repo.
