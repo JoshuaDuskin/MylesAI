@@ -386,8 +386,9 @@ foreach ($proc in $ExistingSupervisors) {
     } catch {}
 }
 Start-Sleep -Seconds 1
-Start-Process -FilePath $PythonW -ArgumentList $Supervisor -WorkingDirectory $Root -WindowStyle Hidden | Out-Null
-Log "Started one canonical hidden supervisor"
+$CanonicalSupervisor = Start-Process -FilePath $PythonW -ArgumentList $Supervisor -WorkingDirectory $Root -WindowStyle Hidden -PassThru
+$CanonicalSupervisorPid = $CanonicalSupervisor.Id
+Log ("Started canonical hidden supervisor PID " + $CanonicalSupervisorPid)
 
 $GameWatcher = Get-ChildItem (Join-Path $Root "bin") -File -Filter "game_mode_watch*.py" -ErrorAction SilentlyContinue |
     Sort-Object LastWriteTime -Descending |
@@ -439,12 +440,18 @@ $RuntimeProcesses = @(Get-CimInstance Win32_Process -ErrorAction SilentlyContinu
 $GmxCount = @($RuntimeProcesses | Where-Object { ([string]$_.CommandLine) -match "gmx_live\.mjs.*--daemon" }).Count
 $SupervisorRows = @($RuntimeProcesses | Where-Object { ([string]$_.CommandLine) -match "runtime_supervisor_v074\.py" })
 if ($SupervisorRows.Count -gt 1) {
-    $keep = $SupervisorRows | Sort-Object ProcessId | Select-Object -First 1
-    foreach ($dup in ($SupervisorRows | Where-Object { $_.ProcessId -ne $keep.ProcessId })) {
+    $canonicalAlive = @($SupervisorRows | Where-Object { $_.ProcessId -eq $CanonicalSupervisorPid }).Count -eq 1
+    if ($canonicalAlive) {
+        $keepPid = $CanonicalSupervisorPid
+    } else {
+        $keepPid = ($SupervisorRows | Sort-Object ProcessId | Select-Object -First 1).ProcessId
+        Log ("Canonical PID exited; keeping surviving supervisor PID " + $keepPid)
+    }
+    foreach ($dup in ($SupervisorRows | Where-Object { $_.ProcessId -ne $keepPid })) {
         Log ("Stopping duplicate supervisor PID " + $dup.ProcessId)
         Stop-Process -Id $dup.ProcessId -Force -ErrorAction SilentlyContinue
     }
-    Start-Sleep -Seconds 2
+    Start-Sleep -Seconds 3
     $RuntimeProcesses = @(Get-CimInstance Win32_Process -ErrorAction SilentlyContinue | Where-Object {
         ([string]$_.CommandLine) -match "(?i)(runtime_supervisor_v074|myles_core\.py|dashboard_bridge\.py|public_gateway_v074\.py|quant_service\.mjs|gmx_live\.mjs|copy_trader_service\.mjs|game_mode_watch)"
     })
@@ -457,6 +464,10 @@ $Head = ((Invoke-RepoGit -GitArgs @("rev-parse", "--short", "HEAD")) -join "").T
 $Origin = ((Invoke-RepoGit -GitArgs @("remote", "get-url", "origin")) -join "").Trim()
 $GitStatus = @(Invoke-RepoGit -GitArgs @("status", "--short"))
 $GitStatus | Set-Content (Join-Path $Recovery "git_status_after.txt")
+if ($GitStatus.Count -gt 0) {
+    Log "Git working-tree entries after update:"
+    foreach ($entry in $GitStatus) { Log ("  " + $entry) }
+}
 
 $Summary = @()
 $Summary += "============================================================"
