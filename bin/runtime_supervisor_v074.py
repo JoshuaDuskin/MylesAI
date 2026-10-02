@@ -49,12 +49,17 @@ for directory in (DATA, BIN, LOGS):
 # to become a second supervisor. Relaunch once through the venv and exit.
 if os.name == "nt" and len(sys.argv) <= 1:
     try:
-        current = Path(sys.executable).resolve()
-        canonical_choices = [p.resolve() for p in (PYW, PY) if p.exists()]
-        if canonical_choices and current not in canonical_choices:
-            canonical = PYW if PYW.exists() else PY
+        # Do NOT Path.resolve() these executable paths. A uv-managed venv can
+        # resolve its redirector back to the same base interpreter used by an
+        # obsolete direct launcher, making the two look identical. We need the
+        # actual invocation path: MYLES .venv is canonical; AppData\\Roaming\\uv
+        # is not.
+        current = os.path.normcase(os.path.abspath(str(sys.executable)))
+        canonical = PYW if PYW.exists() else PY
+        canonical_text = os.path.normcase(os.path.abspath(str(canonical)))
+        if canonical.exists() and current != canonical_text:
             subprocess.Popen(
-                [str(canonical), str(Path(__file__).resolve())],
+                [str(canonical), str(Path(__file__).absolute())],
                 cwd=str(ROOT),
                 stdin=subprocess.DEVNULL,
                 stdout=subprocess.DEVNULL,
