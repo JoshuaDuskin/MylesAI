@@ -18,7 +18,7 @@ const DEFAULT_CONFIG = {
   schema_version: 3,
   venue: 'GMX',
   chain_id: 42161,
-  timeframe: '1h',
+  timeframe: '5m',
   history_limit: 3000,
   poll_seconds: 60,
   starting_equity: 10000,
@@ -94,7 +94,7 @@ function normalizeConfig(raw){
   cfg.schema_version=3;
   cfg.chain_id=42161;
   cfg.venue='GMX';
-  cfg.timeframe=VALID_PERIODS.has(String(cfg.timeframe))?String(cfg.timeframe):'1h';
+  cfg.timeframe=VALID_PERIODS.has(String(cfg.timeframe))?String(cfg.timeframe):'5m';
   cfg.history_limit=Math.round(clamp(n(cfg.history_limit,3000),300,10000));
   cfg.poll_seconds=Math.round(clamp(n(cfg.poll_seconds,60),30,900));
   cfg.starting_equity=clamp(n(cfg.starting_equity,10000),100,10000000);
@@ -356,7 +356,10 @@ function telemetry(config,candlesBySymbol,latest,results,paper,errors,meta={}){
   const familyProgress={};
   for(const name of ['scalp_trend','trend_momentum','mean_reversion']){
     const rows=strategyRows.filter(r=>r.name===name);
-    familyProgress[name]={tested:rows.length,validated:rows.filter(r=>r.validation_pass).length,best_stress_return_pct:rows.length?Math.max(...rows.map(r=>r.stress_return_pct)):null,best_base_return_pct:rows.length?Math.max(...rows.map(r=>r.return_pct)):null,promoted_count:researchState.promotions.filter(x=>x.to===name).length};
+    const ranked=rows.slice().sort((a,b)=>b.promotion_score-a.promotion_score);
+    const best=ranked[0]||null;
+    const familyPassCount=rows.filter(r=>r.validation_pass).length;
+    familyProgress[name]={tested:rows.length,candidate_count:rows.length,validated:familyPassCount,pass_count:familyPassCount,best_candidate:best?.name||null,best_market:best?.symbol||null,best_stress_return_pct:rows.length?Math.max(...rows.map(r=>r.stress_return_pct)):null,best_base_return_pct:rows.length?Math.max(...rows.map(r=>r.return_pct)):null,promoted_count:researchState.promotions.filter(x=>x.to===name).length};
   }
   const marketIntelMarkets={};
   const pipelineMarkets={};
@@ -451,20 +454,31 @@ async function cycle({backtestOnly=false}={}){
     results=fresh;
     researchState.last_run_epoch=lastResearchEpoch;
     researchState.results=fresh.map(compactResearchResult);
-    researchState.history=[...(researchState.history||[]),{at:now(),cycle:cycleSequence,tested_candidates:fresh.length,validated_candidates:fresh.filter(r=>r.validation?.pass).length,promotions:promotions.map(x=>({symbol:x.symbol,from:x.from,to:x.to,score:x.score}))}].slice(-120);
+    researchState.history=[...(researchState.history||[]),{generated_at:iso(),at:iso(),cycle:cycleSequence,tested_candidates:fresh.length,validated_candidates:fresh.filter(r=>r.validation?.pass).length,rejected_candidates:fresh.filter(r=>!r.validation?.pass).map(r=>({symbol:r.symbol,strategy:r.strategy,checks:r.validation?.checks||{}})),promotions:promotions.map(x=>({symbol:x.symbol,from:x.from,to:x.to,score:x.score}))}].slice(-120);
     researchState.promotions=[...(researchState.promotions||[]),...promotions].slice(-120);
   }
   if(!researchState.activity_feed)researchState.activity_feed=[];
   researchState.cycle_sequence=cycleSequence;
-  researchState.activity_feed.push({at:now(),type:'quant_cycle',title:'Quant cycle',detail:'Cycle '+cycleSequence+': '+Object.keys(latest).length+' GMX markets checked',value:(config.paper?.enabled!==false&&config.paper?.auto_trading_enabled!==false)?1:0});
-  if(researchDue)researchState.activity_feed.push({at:now(),type:'research',title:'Strategy research',detail:'Tested '+results.length+' candidates; '+results.filter(r=>r.validation?.pass).length+' passed validation',value:results.filter(r=>r.validation?.pass).length});
-  for(const [symbol,error] of Object.entries(errors))researchState.activity_feed.push({at:now(),type:'market_error',title:'GMX feed warning',detail:symbol+': '+error,value:-1});
+  researchState.activity_feed.push({at:iso(),type:'quant_cycle',title:'Quant cycle',detail:'Cycle '+cycleSequence+': '+Object.keys(latest).length+' GMX markets checked',value:(config.paper?.enabled!==false&&config.paper?.auto_trading_enabled!==false)?1:0});
+  if(researchDue)researchState.activity_feed.push({at:iso(),type:'research',title:'Strategy research',detail:'Tested '+results.length+' candidates; '+results.filter(r=>r.validation?.pass).length+' passed validation',value:results.filter(r=>r.validation?.pass).length});
+  for(const [symbol,error] of Object.entries(errors))researchState.activity_feed.push({at:iso(),type:'market_error',title:'GMX feed warning',detail:symbol+': '+error,value:-1});
   for(const promotion of promotions)researchState.activity_feed.push({at:promotion.at,type:'promotion',title:'Validated strategy promoted',detail:promotion.symbol+': '+promotion.from+' → '+promotion.to,value:promotion.score});
-  researchState.activity_feed=researchState.activity_feed.slice(-120);
-  writeJsonAtomic(RESEARCH_FILE,researchState);
   let paper=readJson(STATE_FILE,null);
   if(!paper||paper.version!==3)paper=createPaperState(config);
+  const previousPositions=new Set(Object.keys(paper.positions||{}));
+  const previousTradeCount=Array.isArray(paper.trades)?paper.trades.length:0;
   if(!backtestOnly&&config.paper.enabled)paper=updatePaper(paper,candlesBySymbol,latest,config);
+  const currentPositions=new Set(Object.keys(paper.positions||{}));
+  for(const symbol of currentPositions){
+    if(previousPositions.has(symbol))continue;
+    const position=paper.positions[symbol];
+    researchState.activity_feed.push({at:iso(),type:'paper_entry',title:'Paper position opened',detail:symbol+' '+String(position?.side||'').toUpperCase()+' · '+String(position?.strategy||'strategy'),value:n(position?.notional,0)});
+  }
+  for(const trade of (paper.trades||[]).slice(previousTradeCount)){
+    researchState.activity_feed.push({at:trade.closed_at||iso(),type:'paper_result',title:n(trade.pnl,0)>=0?'Paper trade won':'Paper trade lost',detail:trade.symbol+' '+String(trade.side||'').toUpperCase()+' · '+String(trade.reason||'closed'),value:n(trade.pnl,0)});
+  }
+  researchState.activity_feed=researchState.activity_feed.slice(-120);
+  writeJsonAtomic(RESEARCH_FILE,researchState);
   writeJsonAtomic(STATE_FILE,paper);
   const status=telemetry(config,candlesBySymbol,latest,results,paper,errors,{duration_ms:Date.now()-cycleStarted});
   writeJsonAtomic(STATUS_FILE,status);
