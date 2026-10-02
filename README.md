@@ -31,3 +31,9 @@ Runtime state, credentials, logs, databases, generated workspaces, and secrets a
 Canonical GitHub Pages dashboard: https://joshuaduskin.github.io/MylesAI/
 
 All retired MYLES repositories are preserved under `legacy_archive/` for historical reference and are not runtime dependencies.
+
+## Updating the tower
+
+Use `UPDATE_TOWER.cmd` on the Windows tower, or run `UPDATE_TOWER.ps1` with Windows PowerShell.
+
+The updater backs up the current Git state, preserves local runtime data/dependencies/credentials and tower-only files, syncs tracked source to `main`, rotates exposed bridge credentials while preserving the existing 8-character pairing code, restarts the canonical v0.74 runtime, and verifies the core/dashboard/Quant processes.
