@@ -1,8 +1,0 @@
-[
-  {
-    "key": "Software\\Microsoft\\Windows\\CurrentVersion\\Run",
-    "name": "MylesRuntimeSupervisor",
-    "data": "\"C:\\Users\\Joshu\\AppData\\Local\\MylesAI\\.venv\\Scripts\\pythonw.exe\" \"C:\\Users\\Joshu\\AppData\\Local\\MylesAI\\bin\\runtime_supervisor_v074.py\"",
-    "kind": 1
-  }
-]

@@ -1,2 +1,0 @@
-export const MAX_EDGE_PATH_LENGTH = 3;
-export const DEFAULT_NAIVE_TOP_PATHS_COUNT = 3;
