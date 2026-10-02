@@ -77,7 +77,7 @@ def load_json(path: Path) -> Any:
 
 def core_json(path: str, method: str = "GET", body: Any = None, timeout: float = 5.0) -> tuple[int, Any]:
     data = None
-    headers = {"Accept": "application/json", "User-Agent": "MylesDashboardBridge/1.0"}
+    headers = {"Accept": "application/json", "User-Agent": "MylesDashboardBridge/1.9"}
     if body is not None:
         data = json.dumps(body).encode("utf-8")
         headers["Content-Type"] = "application/json"
@@ -624,7 +624,7 @@ def system_metrics() -> dict[str, Any]:
 
 
 def http_json(url: str, timeout: float = 5.0) -> tuple[int, Any]:
-    req = Request(url, headers={"Accept": "application/json", "User-Agent": "MylesDashboardBridge/1.0"})
+    req = Request(url, headers={"Accept": "application/json", "User-Agent": "MylesDashboardBridge/1.9"})
     try:
         with urlopen(req, timeout=timeout) as resp:
             raw = resp.read()
