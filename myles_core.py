@@ -1610,6 +1610,16 @@ class ApiHandler(BaseHTTPRequestHandler):
             threading.Thread(target=self.server.shutdown, daemon=True).start()
             return
 
+        if path == "/api/control/continuous":
+            enabled = bool(body.get("enabled"))
+            message = _continuous_enable("Dashboard owner control") if enabled else _continuous_disable(cancel_running=True)
+            return self._json(200, {
+                "ok": True,
+                "enabled": _continuous_enabled(),
+                "status": _continuous_status_text(),
+                "message": message,
+            })
+
         if path == "/api/send":
             text = str(body.get("text") or "").strip()
             source = str(body.get("source") or "console")[:32]
