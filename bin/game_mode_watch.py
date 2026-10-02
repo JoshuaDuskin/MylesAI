@@ -26,8 +26,31 @@ EXIT_GRACE_SECONDS = 20.0
 DATA.mkdir(parents=True, exist_ok=True)
 LOGS.mkdir(parents=True, exist_ok=True)
 
+WATCHER_FILE_LOCK = None
 WATCHER_MUTEX = None
 if os.name == "nt":
+    # A Windows named mutex can split into Global and Local namespaces when
+    # elevated and non-elevated launchers overlap. Hold an OS file lock too so
+    # exactly one watcher survives across both privilege/session contexts.
+    import msvcrt
+
+    lock_path = DATA / "game_mode_watcher.lock"
+    try:
+        WATCHER_FILE_LOCK = lock_path.open("a+b")
+        WATCHER_FILE_LOCK.seek(0, os.SEEK_END)
+        if WATCHER_FILE_LOCK.tell() < 1:
+            WATCHER_FILE_LOCK.write(b"0")
+            WATCHER_FILE_LOCK.flush()
+        WATCHER_FILE_LOCK.seek(0)
+        msvcrt.locking(WATCHER_FILE_LOCK.fileno(), msvcrt.LK_NBLCK, 1)
+    except OSError:
+        try:
+            if WATCHER_FILE_LOCK is not None:
+                WATCHER_FILE_LOCK.close()
+        except Exception:
+            pass
+        raise SystemExit(0)
+
     k32 = ctypes.windll.kernel32
     for mutex_name in ("Global\\MylesGameModeWatcher_v2", "Local\\MylesGameModeWatcher_v2"):
         handle = k32.CreateMutexW(None, False, mutex_name)
@@ -392,5 +415,15 @@ if __name__ == "__main__":
         if WATCHER_MUTEX is not None and os.name == "nt":
             try:
                 ctypes.windll.kernel32.ReleaseMutex(WATCHER_MUTEX)
+            except Exception:
+                pass
+        if WATCHER_FILE_LOCK is not None and os.name == "nt":
+            try:
+                WATCHER_FILE_LOCK.seek(0)
+                msvcrt.locking(WATCHER_FILE_LOCK.fileno(), msvcrt.LK_UNLCK, 1)
+            except Exception:
+                pass
+            try:
+                WATCHER_FILE_LOCK.close()
             except Exception:
                 pass
