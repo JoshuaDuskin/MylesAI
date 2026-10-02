@@ -10,6 +10,7 @@ import shutil
 import subprocess
 import sys
 import time
+import traceback
 import urllib.request
 from pathlib import Path
 
@@ -99,6 +100,15 @@ def log(message: object) -> None:
     except Exception:
         pass
 
+
+
+def log_exception(context: str, exc: BaseException) -> None:
+    """Persist hidden-runtime failures so pythonw never fails silently."""
+    try:
+        log(f"{context}: {type(exc).__name__}: {exc}")
+        log(traceback.format_exc().rstrip())
+    except Exception:
+        pass
 
 def run(args, cwd: Path | None = None, env: dict | None = None, timeout: int = 90):
     try:
@@ -563,16 +573,24 @@ SUPERVISOR_PID_FILE.write_text(str(os.getpid()), encoding="utf-8")
 log(f"supervisor started pid={os.getpid()}")
 try:
     while True:
-        start_game_watcher()
-        owner = owner_token()
-        read = read_token()
-        start_core()
-        gaming = light_mode_active()
-        start_services(owner, read)
-        if http_ok("http://127.0.0.1:8791/dashboard/health", {"X-Myles-Read": read}):
-            ensure_tunnel(read)
-        if not gaming:
-            lock_repo()
+        # Keep each cycle independently recoverable. A watcher, bridge, tunnel,
+        # or git failure must not terminate the supervisor that owns the tower.
+        try:
+            start_game_watcher()
+        except Exception as exc:
+            log_exception("game-mode watcher cycle failed", exc)
+        try:
+            owner = owner_token()
+            read = read_token()
+            start_core()
+            gaming = light_mode_active()
+            start_services(owner, read)
+            if http_ok("http://127.0.0.1:8791/dashboard/health", {"X-Myles-Read": read}):
+                ensure_tunnel(read)
+            if not gaming:
+                lock_repo()
+        except Exception as exc:
+            log_exception("supervisor service cycle failed", exc)
         time.sleep(30)
 finally:
     try:
