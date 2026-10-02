@@ -118,74 +118,53 @@ def find_runtime_status() -> dict[str, Any]:
     return {}
 
 
-def trading_score(data: Any) -> int:
-    if not isinstance(data, dict):
-        return 0
-    keys = {str(k).lower() for k in data.keys()}
-    score = 0
-    for key in ("trading", "paper_trading", "quant", "equity_curve", "positions", "backtests", "strategies", "pnl"):
-        if key in keys:
-            score += 3
-    text = " ".join(keys)
-    if any(word in text for word in ("trade", "quant", "backtest", "equity", "paper")):
-        score += 1
-    return score
-
-
 def find_trading_data() -> dict[str, Any]:
-    direct = [
-        ROOT / "data" / "trading_status.json",
-        ROOT / "data" / "trading.json",
-        ROOT / "data" / "paper_trading.json",
-        ROOT / "data" / "quant_status.json",
-        ROOT / "data" / "quant_lab_status.json",
-        ROOT / "trading_status.json",
-        ROOT / "quant_status.json",
-    ]
-    best: tuple[int, float, dict[str, Any]] | None = None
-    for path in direct:
-        data = load_json(path)
-        if isinstance(data, dict):
-            score = trading_score(data)
-            if score:
-                best = max(best or (0, 0.0, {}), (score, path.stat().st_mtime, data), key=lambda x: (x[0], x[1]))
+    """Return only fresh telemetry written by the canonical running Quant engine.
 
-    workspaces = ROOT / "workspaces"
-    if workspaces.is_dir():
-        seen = 0
-        try:
-            candidates = sorted(
-                (p for p in workspaces.rglob("*.json") if re.search(r"trade|trading|quant|paper|backtest|equity", p.name, re.I)),
-                key=lambda p: p.stat().st_mtime,
-                reverse=True,
-            )
-            for path in candidates[:120]:
-                seen += 1
-                data = load_json(path)
-                if not isinstance(data, dict):
-                    continue
-                score = trading_score(data)
-                if score:
-                    item = (score, path.stat().st_mtime, data)
-                    if best is None or item[:2] > best[:2]:
-                        best = item
-                if seen >= 120:
-                    break
-        except Exception:
-            pass
-
-    if not best:
+    Never scan workspaces, simulations, archived reports, or similarly named JSON
+    files. If the canonical status is stale or cannot prove a running GMX source,
+    the dashboard must show trading data as unavailable instead of guessing.
+    """
+    path = ROOT / "data" / "trading_status.json"
+    if not path.is_file():
         return {}
-    data = best[2]
-    if isinstance(data.get("trading"), dict):
-        return data["trading"]
-    if isinstance(data.get("paper_trading"), dict):
-        return data["paper_trading"]
-    if isinstance(data.get("quant"), dict):
-        return data["quant"]
-    return data
 
+    try:
+        age_seconds = max(0.0, time.time() - path.stat().st_mtime)
+    except Exception:
+        return {}
 
+    cfg = load_json(ROOT / "quant" / "quant_config.json")
+    try:
+        poll_seconds = int((cfg or {}).get("poll_seconds") or 60)
+    except Exception:
+        poll_seconds = 60
+    max_age = max(180, min(1800, poll_seconds * 3 + 60))
+    if age_seconds > max_age:
+        return {}
+
+    data = load_json(path)
+    if not isinstance(data, dict):
+        return {}
+
+    engine = data.get("engine") if isinstance(data.get("engine"), dict) else {}
+    engine_status = str(engine.get("status") or "").strip().lower()
+    data_source = str(engine.get("data_source") or "").strip()
+    markets = data.get("markets") if isinstance(data.get("markets"), list) else []
+
+    if engine_status != "running":
+        return {}
+    if "gmx" not in data_source.lower():
+        return {}
+    if not markets:
+        return {}
+
+    verified = dict(data)
+    verified["_verified"] = True
+    verified["_verified_source"] = "data/trading_status.json"
+    verified["_verified_age_seconds"] = round(age_seconds, 1)
+    verified["_verified_max_age_seconds"] = max_age
+    return verified
 
 
 QUANT_DIR = ROOT / "quant"
