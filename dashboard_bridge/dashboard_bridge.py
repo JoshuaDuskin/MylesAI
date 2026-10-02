@@ -643,9 +643,16 @@ def build_status() -> dict[str, Any]:
         ]
 
     result["system"] = {**(result.get("system") if isinstance(result.get("system"), dict) else {}), **system_metrics()}
+    game_state = find_game_mode_state()
+    if game_state:
+        result["game_mode_state"] = game_state
+        result["game_mode"] = bool(game_state.get("active"))
+        result["light_mode"] = bool(game_state.get("active")) or bool(result.get("light_mode"))
     trading = find_trading_data()
     if trading:
         result["trading"] = trading
+    else:
+        result.pop("trading", None)
     result.setdefault("bridge", {})
     if isinstance(result["bridge"], dict):
         result["bridge"]["online"] = True
