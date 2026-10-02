@@ -127,9 +127,13 @@ def find_trading_data() -> dict[str, Any]:
     """Return only fresh telemetry written by the canonical running Quant engine.
 
     Never scan workspaces, simulations, archived reports, or similarly named JSON
-    files. If the canonical status is stale or cannot prove a running GMX source,
-    the dashboard must show trading data as unavailable instead of guessing.
+    files. If the canonical status is stale, paused for gaming, or cannot prove a
+    running GMX source, the dashboard must show trading data as unavailable.
     """
+    game_state = find_game_mode_state()
+    if bool(game_state.get("active")):
+        return {}
+
     path = ROOT / "data" / "trading_status.json"
     if not path.is_file():
         return {}
