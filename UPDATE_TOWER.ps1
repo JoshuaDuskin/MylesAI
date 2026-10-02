@@ -639,34 +639,56 @@ if ($SupervisorRows.Count -gt 1) {
 } elseif ($SupervisorRows.Count -eq 0) {
     Log "FAIL: no canonical supervisor was present at final runtime verification"
 }
-# Final stabilization: do not finish while the canonical owner is absent
-# or while another supervisor owns the mutex. A launcher can race this update
-# during the first few seconds after source switching.
+# Final stabilization: keep the canonical .venv supervisor alive and remove
+# only noncanonical copies. Older repairs killed both copies, which allowed the
+# uv launcher to win the race again.
+$CanonicalPythonPattern = [regex]::Escape($PythonW)
 $stabilizationAttempt = 0
-while ($SupervisorRows.Count -ne 1 -and $stabilizationAttempt -lt 3) {
+while ($stabilizationAttempt -lt 4) {
     $stabilizationAttempt++
-    Log ("Supervisor stabilization attempt " + $stabilizationAttempt + " of 3")
-    foreach ($row in $SupervisorRows) {
+    $RuntimeProcesses = @(Get-CimInstance Win32_Process -ErrorAction SilentlyContinue | Where-Object {
+        ([string]$_.CommandLine) -match "(?i)(runtime_supervisor_v074|myles_core\.py|dashboard_bridge\.py|public_gateway_v074\.py|quant_service\.mjs|gmx_live\.mjs|copy_trader_service\.mjs|game_mode_watch)"
+    })
+    $SupervisorRows = @($RuntimeProcesses | Where-Object { ([string]$_.CommandLine) -match "runtime_supervisor_v074\.py" })
+    $CanonicalRows = @($SupervisorRows | Where-Object { ([string]$_.CommandLine) -match $CanonicalPythonPattern })
+    $NonCanonicalRows = @($SupervisorRows | Where-Object { ([string]$_.CommandLine) -notmatch $CanonicalPythonPattern })
+
+    foreach ($row in $NonCanonicalRows) {
+        $parent = ""
         try {
-            Stop-Process -Id ([int]$row.ProcessId) -Force -ErrorAction SilentlyContinue
-            Stop-ProcessTreeQuiet ([int]$row.ProcessId)
+            $parentRow = Get-CimInstance Win32_Process -Filter ("ProcessId=" + [int]$row.ParentProcessId) -ErrorAction SilentlyContinue
+            if ($parentRow) { $parent = " parent=" + $parentRow.ProcessId + " " + [string]$parentRow.CommandLine }
         } catch {}
+        Log ("Stopping noncanonical supervisor PID " + $row.ProcessId + " :: " + ([string]$row.CommandLine) + $parent)
+        Stop-Process -Id ([int]$row.ProcessId) -Force -ErrorAction SilentlyContinue
+        Stop-ProcessTreeQuiet ([int]$row.ProcessId)
     }
-    Start-Sleep -Seconds 2
-    $CanonicalSupervisor = Start-Process -FilePath $PythonW -ArgumentList $Supervisor -WorkingDirectory $Root -WindowStyle Hidden -RedirectStandardOutput $SupervisorStdOut -RedirectStandardError $SupervisorStdErr -PassThru
-    $CanonicalSupervisorPid = $CanonicalSupervisor.Id
-    Log ("Started stabilized canonical supervisor PID " + $CanonicalSupervisorPid)
+
+    if ($CanonicalRows.Count -eq 0) {
+        Remove-Item (Join-Path $Data "runtime_supervisor_v074.lock") -Force -ErrorAction SilentlyContinue
+        Remove-Item $SupervisorPidFile -Force -ErrorAction SilentlyContinue
+        $CanonicalSupervisor = Start-Process -FilePath $PythonW -ArgumentList $Supervisor -WorkingDirectory $Root -WindowStyle Hidden -RedirectStandardOutput $SupervisorStdOut -RedirectStandardError $SupervisorStdErr -PassThru
+        $CanonicalSupervisorPid = $CanonicalSupervisor.Id
+        Log ("Started stabilized canonical supervisor PID " + $CanonicalSupervisorPid)
+    }
+
     Start-Sleep -Seconds 5
     $RuntimeProcesses = @(Get-CimInstance Win32_Process -ErrorAction SilentlyContinue | Where-Object {
         ([string]$_.CommandLine) -match "(?i)(runtime_supervisor_v074|myles_core\.py|dashboard_bridge\.py|public_gateway_v074\.py|quant_service\.mjs|gmx_live\.mjs|copy_trader_service\.mjs|game_mode_watch)"
     })
     $SupervisorRows = @($RuntimeProcesses | Where-Object { ([string]$_.CommandLine) -match "runtime_supervisor_v074\.py" })
+    $CanonicalRows = @($SupervisorRows | Where-Object { ([string]$_.CommandLine) -match $CanonicalPythonPattern })
+    $NonCanonicalRows = @($SupervisorRows | Where-Object { ([string]$_.CommandLine) -notmatch $CanonicalPythonPattern })
+    if ($CanonicalRows.Count -eq 1 -and $NonCanonicalRows.Count -eq 0) { break }
 }
+
 if ($SupervisorRows.Count -ne 1) {
     Log ("FAIL: supervisor stabilization ended with count " + $SupervisorRows.Count)
     foreach ($row in $SupervisorRows) {
-        Log ("Supervisor evidence PID " + $row.ProcessId + " :: " + ([string]$row.CommandLine))
+        Log ("Supervisor evidence PID " + $row.ProcessId + " parent=" + $row.ParentProcessId + " :: " + ([string]$row.CommandLine))
     }
+} else {
+    Log ("PASS: exactly one canonical supervisor remains, PID " + $SupervisorRows[0].ProcessId)
 }
 $SupervisorCount = $SupervisorRows.Count
 $QuantCount = @($RuntimeProcesses | Where-Object { ([string]$_.CommandLine) -match "quant_service\.mjs" }).Count
