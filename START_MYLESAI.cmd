@@ -37,9 +37,22 @@ if not exist "%MYLES_CONSOLE%" (
 
 if not exist "%MYLES_ROOT%\logs" mkdir "%MYLES_ROOT%\logs" >nul 2>&1
 
-echo [%date% %time%] Starting canonical hidden MYLES supervisor > "%MYLES_LOG%"
-start "" /b "%MYLES_PYW%" "%MYLES_SUPERVISOR%" >> "%MYLES_LOG%" 2>&1
-set "MYLES_SUPERVISOR_STARTED=1"
+set "MYLES_SUPERVISOR_RUNNING="
+if exist "%MYLES_ROOT%\data\runtime_supervisor_v074.pid" (
+  for /f "usebackq delims=" %%P in ("%MYLES_ROOT%\data\runtime_supervisor_v074.pid") do (
+    tasklist /FI "PID eq %%P" /NH 2>nul | findstr /C:"%%P" >nul
+    if not errorlevel 1 set "MYLES_SUPERVISOR_RUNNING=1"
+  )
+)
+
+if defined MYLES_SUPERVISOR_RUNNING (
+  echo [%date% %time%] Reusing canonical MYLES supervisor > "%MYLES_LOG%"
+  set "MYLES_SUPERVISOR_STARTED=0"
+) else (
+  echo [%date% %time%] Starting canonical hidden MYLES supervisor > "%MYLES_LOG%"
+  start "" /b "%MYLES_PYW%" "%MYLES_SUPERVISOR%" >> "%MYLES_LOG%" 2>&1
+  set "MYLES_SUPERVISOR_STARTED=1"
+)
 
 echo.
 echo ============================================================
