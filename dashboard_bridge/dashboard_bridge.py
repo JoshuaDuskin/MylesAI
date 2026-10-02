@@ -698,7 +698,7 @@ def build_status() -> dict[str, Any]:
     if not isinstance(base, dict):
         base = {}
     result = dict(base)
-    result.setdefault("schema_version", 4)
+    result["schema_version"] = 4
     result["generated_at"] = now_iso()
 
     health_code, health = core_json("/health", timeout=1.5)
