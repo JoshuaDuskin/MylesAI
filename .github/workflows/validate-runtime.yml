@@ -26,14 +26,7 @@ jobs:
       - name: Compile bridge
         run: python -m py_compile dashboard_bridge/dashboard_bridge.py
       - name: Verify BOM-safe pairing JSON
-        run: python - <<'PY'
-          import json, pathlib, tempfile
-          p = pathlib.Path(tempfile.gettempdir()) / "myles_pair_bom.json"
-          p.write_bytes(b'\xef\xbb\xbf{"code":"C6NANWDQ","pinned":true,"expires_epoch":9999999999}')
-          d = json.loads(p.read_text(encoding="utf-8-sig"))
-          assert d["code"] == "C6NANWDQ" and d["pinned"] is True
-          print("BOM pairing JSON OK")
-          PY
+        run: python -c "import json,tempfile,pathlib;p=pathlib.Path(tempfile.gettempdir())/'myles_pair_bom.json';p.write_bytes(b'\\xef\\xbb\\xbf{\"code\":\"TEST1234\",\"pinned\":true,\"expires_epoch\":9999999999}');d=json.loads(p.read_text(encoding='utf-8-sig'));assert d['code']=='TEST1234' and d['pinned'] is True;print('BOM pairing JSON OK')"
       - name: Check Quant syntax
         run: node --check quant/quant_service.mjs
       - name: Run Quant self-test
