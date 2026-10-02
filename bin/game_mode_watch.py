@@ -85,11 +85,14 @@ GAME_PATH_HINTS = (
     "\\steamapps\\common\\",
     "\\epic games\\",
     "\\xboxgames\\",
+    "\\windowsapps\\",
+    "\\microsoft games\\",
     "\\riot games\\",
     "\\ea games\\",
     "\\ubisoft\\",
     "\\gog galaxy\\games\\",
     "\\battle.net\\",
+    "\\fortnite\\",
 )
 
 # Launchers/updaters/helpers should not trigger gaming performance mode by themselves.
@@ -151,10 +154,11 @@ def write_json_atomic(path: Path, value: dict[str, Any]) -> None:
 
 
 def process_rows() -> list[dict[str, Any]]:
+    """Read processes with a tasklist fallback when psutil cannot see game paths."""
+    rows: list[dict[str, Any]] = []
     try:
         import psutil  # type: ignore
 
-        rows: list[dict[str, Any]] = []
         for process in psutil.process_iter(["pid", "name", "exe", "cmdline", "memory_info"]):
             try:
                 info = process.info
@@ -170,9 +174,14 @@ def process_rows() -> list[dict[str, Any]]:
                 )
             except Exception:
                 pass
-        return rows
     except Exception:
-        # Exact-name fallback still handles Fortnite even if psutil is unavailable.
+        rows = []
+
+    # Windows can hide executable paths from a non-elevated psutil process. Add
+    # exact process names from tasklist so Fortnite is still detected through
+    # the Xbox app / Gaming Services launch path.
+    known_seen = {str(row.get("name") or "").lower() for row in rows}
+    if not any(name in known_seen for name in KNOWN_GAME_NAMES) and not any(name.startswith("fortniteclient-win64-shipping") and name.endswith(".exe") for name in known_seen):
         try:
             result = subprocess.run(
                 ["tasklist", "/FO", "CSV", "/NH"],
@@ -181,7 +190,6 @@ def process_rows() -> list[dict[str, Any]]:
                 timeout=10,
                 creationflags=CREATE_NO_WINDOW,
             )
-            rows = []
             for raw in (result.stdout or "").splitlines():
                 line = raw.strip().strip('"')
                 if not line:
@@ -189,15 +197,17 @@ def process_rows() -> list[dict[str, Any]]:
                 parts = [p.strip('"') for p in line.split('","')]
                 if not parts:
                     continue
-                pid = 0
                 try:
                     pid = int(parts[1]) if len(parts) > 1 else 0
                 except Exception:
-                    pass
-                rows.append({"pid": pid, "name": parts[0], "exe": "", "cmdline": "", "rss": 0})
-            return rows
+                    pid = 0
+                name = parts[0]
+                if str(name).lower() in known_seen:
+                    continue
+                rows.append({"pid": pid, "name": name, "exe": "", "cmdline": "", "rss": 0})
         except Exception:
-            return []
+            pass
+    return rows
 
 
 def detect_game() -> dict[str, Any] | None:
@@ -208,7 +218,7 @@ def detect_game() -> dict[str, Any] | None:
         pid = int(row.get("pid") or 0)
         rss = int(row.get("rss") or 0)
 
-        if name in KNOWN_GAME_NAMES:
+        if name in KNOWN_GAME_NAMES or (name.startswith("fortniteclient-win64-shipping") and name.endswith(".exe")):
             return {"pid": pid, "name": row.get("name") or name, "exe": row.get("exe") or "", "reason": "known_game_process"}
 
         if not exe:
@@ -308,13 +318,15 @@ def state_payload(
     entered_at: str | None,
 ) -> dict[str, Any]:
     return {
+        "schema_version": 2,
         "active": bool(active),
-        "automatic": bool(active),
+        "automatic": True,
         "detected": bool(game),
+        "status": "active" if active else "watching",
         "process": (game or {}).get("name"),
         "pid": (game or {}).get("pid"),
         "exe": (game or {}).get("exe"),
-        "reason": (game or {}).get("reason"),
+        "reason": (game or {}).get("reason") or ("game_process_detected" if active else "no_game_process"),
         "pre_game_light_mode": bool(pre_game_light_mode),
         "entered_at": entered_at,
         "last_checked_at": dt.datetime.now(dt.timezone.utc).astimezone().isoformat(timespec="seconds"),

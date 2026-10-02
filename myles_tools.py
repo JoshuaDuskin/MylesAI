@@ -736,11 +736,35 @@ def _friendly_public_task_label(prompt: str) -> str:
         return "Share the Myles dashboard link"
     if "dashboard" in low and any(x in low for x in ("redesign", "modern", "navigation", "control center")):
         return "Improve the Myles Control Center"
+    if "continuous improvement cycle" in low or "owner-locked dashboard" in low:
+        if any(x in low for x in ("quant", "gmx", "trading", "game mode")):
+            return "Repair dashboard, game mode, and Quant feeds"
+        return "Run verified continuous improvement"
 
     text = re.sub(r"(?is)^continue from and modify the existing result.*?owner's new instruction:\s*", "", text).strip()
     text = re.sub(r"\s+", " ", text)
     first = re.split(r"(?<=[.!?])\s+", text, maxsplit=1)[0].strip()
     return _sanitize_public_status_text(first or text, 110) or "Owner task"
+
+def _friendly_public_task_summary(
+    prompt: str,
+    *,
+    source: str = "",
+    completed: bool = False,
+    failed: bool = False,
+) -> str:
+    """Return a compact public-safe task summary; never expose the raw prompt."""
+    text = str(prompt or "").strip().lower()
+    label = _friendly_public_task_label(prompt)
+    if "continuous improvement cycle" in text or "owner-locked dashboard" in text:
+        return "Verified continuous-improvement work is running; details stay summarized."
+    if source == "continuous":
+        return "Working through the next verified improvement cycle."
+    if failed:
+        return f"Task failed after working on {label}."
+    if completed:
+        return f"Completed {label}."
+    return f"Working on {label}."
 
 def _friendly_public_phase(value: Any) -> str:
     phase = str(value or "").strip()
@@ -771,10 +795,13 @@ def _runtime_public_snapshot() -> dict[str, Any]:
     current = None
     if active:
         truth = job_truth(active)
+        prompt = str(active.get("prompt") or "")
+        source = "continuous" if str(active.get("source") or "") == "continuous" else "owner"
         current = {
             "id": str(active.get("id") or ""),
-            "label": _friendly_public_task_label(str(active.get("prompt") or "")),
-            "source": "continuous" if str(active.get("source") or "") == "continuous" else "owner",
+            "label": _friendly_public_task_label(prompt),
+            "summary": _friendly_public_task_summary(prompt, source=source),
+            "source": source,
             "state": _sanitize_public_status_text(truth.get("truth_state") or active.get("state") or "", 40),
             "phase": _sanitize_public_status_text(active.get("phase") or "", 80),
             "phase_display": _sanitize_public_status_text(_friendly_public_phase(active.get("phase")), 80),
@@ -789,10 +816,14 @@ def _runtime_public_snapshot() -> dict[str, Any]:
 
     queued_tasks = []
     for job in sorted(pending, key=lambda j: str(j.get("created_at") or ""))[:12]:
+        prompt = str(job.get("prompt") or "")
+        source = "continuous" if str(job.get("source") or "") == "continuous" else "owner"
         queued_tasks.append({
             "id": str(job.get("id") or ""),
-            "label": _friendly_public_task_label(str(job.get("prompt") or "")),
-            "source": "continuous" if str(job.get("source") or "") == "continuous" else "owner",
+            "label": _friendly_public_task_label(prompt),
+            "summary": _friendly_public_task_summary(prompt, source=source),
+            "source": source,
+            "state": "QUEUED",
             "created_at": job.get("created_at"),
         })
 
@@ -813,20 +844,24 @@ def _runtime_public_snapshot() -> dict[str, Any]:
             game_state = raw_game
     except Exception:
         pass
-    game_active = bool(cfg.get("light_mode"))
+    game_active = bool(game_state.get("active")) or bool(cfg.get("light_mode"))
     game_detail = {
         "active": game_active,
         "automatic": bool(game_state.get("active") and game_state.get("automatic")),
         "detected": bool(game_state.get("detected")),
+        "status": game_state.get("status") or ("watching" if game_state else "watcher_offline"),
         "process": game_state.get("process"),
         "pid": game_state.get("pid"),
+        "exe": game_state.get("exe"),
+        "reason": game_state.get("reason"),
         "entered_at": game_state.get("entered_at"),
         "last_checked_at": game_state.get("last_checked_at"),
+        "watcher_pid": game_state.get("watcher_pid"),
         "source": cfg.get("light_mode_source") or ("automatic_game_detection" if game_state.get("active") else "manual"),
     }
 
     return {
-        "schema_version": 3,
+        "schema_version": 4,
         "generated_at": now_iso(),
         "myles": {"version": APP_VERSION, "online": True},
         "continuous_program": continuous,
@@ -834,11 +869,13 @@ def _runtime_public_snapshot() -> dict[str, Any]:
         "game_mode_detail": game_detail,
         "current_task": current,
         "queue_count": len(pending),
+        "queue": queued_tasks,
         "queued_tasks": queued_tasks,
         "last_completed": (
             {
                 "id": str(completed.get("id") or ""),
                 "label": _friendly_public_task_label(str(completed.get("prompt") or "")),
+                "summary": _friendly_public_task_summary(str(completed.get("prompt") or ""), completed=True),
                 "completed_at": completed.get("updated_at"),
             } if completed else None
         ),
@@ -846,6 +883,7 @@ def _runtime_public_snapshot() -> dict[str, Any]:
             {
                 "id": str(failed.get("id") or ""),
                 "label": _friendly_public_task_label(str(failed.get("prompt") or "")),
+                "summary": _friendly_public_task_summary(str(failed.get("prompt") or ""), failed=True),
                 "error": _sanitize_public_status_text(failed.get("error") or "Execution failed", 220),
                 "failed_at": failed.get("updated_at"),
             } if failed else None

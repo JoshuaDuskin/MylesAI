@@ -123,71 +123,119 @@ def find_game_mode_state() -> dict[str, Any]:
     return state if isinstance(state, dict) else {}
 
 
-def find_trading_data() -> dict[str, Any]:
-    """Return only fresh telemetry written by the canonical running Quant engine.
-
-    Never scan workspaces, simulations, archived reports, or similarly named JSON
-    files. If the canonical status is stale, paused for gaming, or cannot prove a
-    running GMX source, the dashboard must show trading data as unavailable.
-    """
-    game_state = find_game_mode_state()
-    if bool(game_state.get("active")):
-        return {}
-
+def _trading_context() -> dict[str, Any]:
     path = ROOT / "data" / "trading_status.json"
-    if not path.is_file():
-        return {}
-
-    try:
-        age_seconds = max(0.0, time.time() - path.stat().st_mtime)
-    except Exception:
-        return {}
-
+    game_state = find_game_mode_state()
     cfg = load_json(ROOT / "quant" / "quant_config.json")
     try:
         poll_seconds = int((cfg or {}).get("poll_seconds") or 60)
     except Exception:
         poll_seconds = 60
     max_age = max(180, min(1800, poll_seconds * 3 + 60))
-    if age_seconds > max_age:
-        return {}
-
+    ctx: dict[str, Any] = {
+        "path": path,
+        "game_state": game_state,
+        "max_age_seconds": max_age,
+        "file_present": path.is_file(),
+        "age_seconds": None,
+        "data": None,
+    }
+    if not path.is_file():
+        return ctx
+    try:
+        ctx["age_seconds"] = round(max(0.0, time.time() - path.stat().st_mtime), 1)
+    except Exception:
+        ctx["age_seconds"] = None
     data = load_json(path)
+    ctx["data"] = data if isinstance(data, dict) else None
+    if isinstance(data, dict):
+        generated_at = str(data.get("generated_at") or "").strip()
+        if generated_at:
+            try:
+                parsed = datetime.fromisoformat(generated_at.replace("Z", "+00:00"))
+                ctx["generated_age_seconds"] = round(max(0.0, time.time() - parsed.timestamp()), 1)
+            except Exception:
+                ctx["generated_age_seconds"] = None
+        else:
+            ctx["generated_age_seconds"] = None
+    return ctx
+
+
+def _trading_blockers(ctx: dict[str, Any]) -> list[str]:
+    blockers: list[str] = []
+    if bool((ctx.get("game_state") or {}).get("active")):
+        blockers.append("paused_game_mode")
+    if not ctx.get("file_present"):
+        blockers.append("missing_status_file")
+        return blockers
+    data = ctx.get("data")
+    if not isinstance(data, dict):
+        blockers.append("invalid_status_file")
+        return blockers
+    if ctx.get("age_seconds") is None or float(ctx.get("age_seconds") or 0) > float(ctx.get("max_age_seconds") or 180):
+        blockers.append("stale_status_file")
+    if ctx.get("generated_age_seconds") is None or float(ctx.get("generated_age_seconds") or 0) > float(ctx.get("max_age_seconds") or 180):
+        blockers.append("stale_generated_at")
+    engine = data.get("engine") if isinstance(data.get("engine"), dict) else {}
+    if str(engine.get("status") or "").strip().lower() not in {"running", "degraded"}:
+        blockers.append("quant_engine_not_running")
+    if "gmx" not in str(engine.get("data_source") or "").lower():
+        blockers.append("gmx_source_not_verified")
+    if str(data.get("account_type") or "").strip().upper() != "SIMULATED PAPER":
+        blockers.append("paper_account_not_verified")
+    if str(data.get("mode") or "").strip().lower() != "paper":
+        blockers.append("paper_mode_not_verified")
+    return blockers
+
+
+def trading_diagnostics() -> dict[str, Any]:
+    ctx = _trading_context()
+    data = ctx.get("data") if isinstance(ctx.get("data"), dict) else {}
+    blockers = _trading_blockers(ctx)
+    markets = data.get("markets") if isinstance(data.get("markets"), list) else []
+    engine = data.get("engine") if isinstance(data.get("engine"), dict) else {}
+    if blockers:
+        status = blockers[0]
+    elif not markets:
+        status = "verified_degraded_no_markets"
+    else:
+        status = "verified"
+    return {
+        "status": status,
+        "verified": not blockers,
+        "detail": " · ".join(blockers) if blockers else (
+            "Quant is publishing paper telemetry; awaiting GMX market marks." if not markets
+            else f"Verified GMX paper telemetry for {len(markets)} markets."
+        ),
+        "file_present": bool(ctx.get("file_present")),
+        "age_seconds": ctx.get("age_seconds"),
+        "generated_age_seconds": ctx.get("generated_age_seconds"),
+        "max_age_seconds": ctx.get("max_age_seconds"),
+        "engine_status": engine.get("status"),
+        "data_source": engine.get("data_source"),
+        "markets_count": len(markets),
+        "market_errors": data.get("market_errors") if isinstance(data.get("market_errors"), dict) else {},
+        "game_mode_active": bool((ctx.get("game_state") or {}).get("active")),
+    }
+
+
+def find_trading_data() -> dict[str, Any]:
+    """Return only fresh, canonical GMX paper telemetry with its proof attached."""
+    ctx = _trading_context()
+    blockers = _trading_blockers(ctx)
+    if blockers:
+        return {}
+    data = ctx.get("data")
     if not isinstance(data, dict):
         return {}
-
-    engine = data.get("engine") if isinstance(data.get("engine"), dict) else {}
-    engine_status = str(engine.get("status") or "").strip().lower()
-    data_source = str(engine.get("data_source") or "").strip()
-    markets = data.get("markets") if isinstance(data.get("markets"), list) else []
-    account_type = str(data.get("account_type") or "").strip().upper()
-    mode = str(data.get("mode") or "").strip().lower()
-
-    generated_at = str(data.get("generated_at") or "").strip()
-    if not generated_at:
-        return {}
-    try:
-        parsed_generated = datetime.fromisoformat(generated_at.replace("Z", "+00:00"))
-        generated_age = max(0.0, time.time() - parsed_generated.timestamp())
-    except Exception:
-        return {}
-    if generated_age > max_age:
-        return {}
-
-    if engine_status != "running":
-        return {}
-    if "gmx" not in data_source.lower():
-        return {}
-    if account_type != "SIMULATED PAPER" or mode != "paper":
-        return {}
-    if not markets:
-        return {}
-
     verified = dict(data)
     verified["_verified"] = True
     verified["_verified_source"] = "data/trading_status.json"
-    verified["_verified_age_seconds"] = round(max(age_seconds, generated_age), 1)
-    verified["_verified_max_age_seconds"] = max_age
+    verified["_verified_age_seconds"] = round(
+        max(float(ctx.get("age_seconds") or 0), float(ctx.get("generated_age_seconds") or 0)), 1
+    )
+    verified["_verified_max_age_seconds"] = ctx.get("max_age_seconds")
+    verified["_degraded"] = not bool(verified.get("markets"))
     return verified
 
 
@@ -297,7 +345,7 @@ def save_quant_config(payload: Any) -> dict[str, Any]:
         old = existing_markets.get(symbol) if isinstance(existing_markets.get(symbol), dict) else {}
         new = incoming_markets.get(symbol) if isinstance(incoming_markets.get(symbol), dict) else {}
         strategy = str(new.get("paper_strategy", old.get("paper_strategy", "trend_momentum")))
-        if strategy not in {"trend_momentum", "mean_reversion"}:
+        if strategy not in {"scalp_trend", "trend_momentum", "mean_reversion"}:
             strategy = "trend_momentum"
         market_settings[symbol] = {
             "enabled": bool(new.get("enabled", old.get("enabled", True))),
@@ -364,9 +412,14 @@ def save_quant_config(payload: Any) -> dict[str, Any]:
     research["paper_lab_enabled"] = bool(research_new.get("paper_lab_enabled", research_old.get("paper_lab_enabled", True)))
     research["tournament_enabled"] = bool(research_new.get("tournament_enabled", research_old.get("tournament_enabled", True)))
     research["entry_cooldown_bars"] = int(clamp_num(research_new.get("entry_cooldown_bars", research_old.get("entry_cooldown_bars", paper["entry_cooldown_bars"])), 0, 50, paper["entry_cooldown_bars"]))
+    research["interval_seconds"] = int(clamp_num(research_new.get("interval_seconds", research_old.get("interval_seconds", 900)), 120, 3600, 900))
     cfg["research_exploration"] = research
 
-    cfg["strategies"] = {"trend_momentum": {"enabled": True}, "mean_reversion": {"enabled": True}}
+    cfg["strategies"] = {
+        "scalp_trend": {"enabled": bool((incoming.get("strategies") or {}).get("scalp_trend", {}).get("enabled", True))},
+        "trend_momentum": {"enabled": bool((incoming.get("strategies") or {}).get("trend_momentum", {}).get("enabled", True))},
+        "mean_reversion": {"enabled": bool((incoming.get("strategies") or {}).get("mean_reversion", {}).get("enabled", True))},
+    }
     cfg["live_execution"] = {
         "enabled": False,
         "signing_enabled": False,
@@ -647,16 +700,47 @@ def build_status() -> dict[str, Any]:
         ]
 
     result["system"] = {**(result.get("system") if isinstance(result.get("system"), dict) else {}), **system_metrics()}
+
     game_state = find_game_mode_state()
-    if game_state:
-        result["game_mode_state"] = game_state
-        result["game_mode"] = bool(game_state.get("active"))
-        result["light_mode"] = bool(game_state.get("active")) or bool(result.get("light_mode"))
+    if not game_state:
+        game_state = {
+            "schema_version": 2,
+            "active": False,
+            "automatic": True,
+            "detected": False,
+            "status": "watcher_offline",
+            "reason": "game_mode_state.json is not being updated by the watcher",
+        }
+    else:
+        last_checked = str(game_state.get("last_checked_at") or "")
+        if last_checked:
+            try:
+                checked_at = datetime.fromisoformat(last_checked.replace("Z", "+00:00")).timestamp()
+                if time.time() - checked_at > 15:
+                    game_state = dict(game_state)
+                    game_state["status"] = "stale"
+                    game_state["reason"] = "game-mode watcher heartbeat is stale"
+            except Exception:
+                pass
+    result["game_mode_state"] = game_state
+    result["game_mode"] = bool(game_state.get("active"))
+    result["light_mode"] = bool(game_state.get("active")) or bool(result.get("light_mode"))
+    existing_detail = result.get("game_mode_detail") if isinstance(result.get("game_mode_detail"), dict) else {}
+    result["game_mode_detail"] = {
+        **existing_detail,
+        **game_state,
+        "active": bool(game_state.get("active")),
+        "automatic": bool(game_state.get("automatic", True)),
+        "detected": bool(game_state.get("detected")),
+    }
+
+    result["trading_diagnostics"] = trading_diagnostics()
     trading = find_trading_data()
     if trading:
         result["trading"] = trading
     else:
         result.pop("trading", None)
+
     result.setdefault("bridge", {})
     if isinstance(result["bridge"], dict):
         result["bridge"]["online"] = True
