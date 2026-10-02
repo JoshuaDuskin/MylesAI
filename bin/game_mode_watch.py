@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import ctypes
 import datetime as dt
 import json
 import os
@@ -18,11 +19,23 @@ LOGS = ROOT / "logs"
 CONFIG_FILE = DATA / "config.json"
 STATE_FILE = DATA / "game_mode_state.json"
 LOG_FILE = LOGS / "game_mode_watch.log"
-CHECK_SECONDS = 3.0
-STATE_HEARTBEAT_SECONDS = 15.0
+CHECK_SECONDS = 1.0
+STATE_HEARTBEAT_SECONDS = 5.0
+EXIT_GRACE_SECONDS = 20.0
 
 DATA.mkdir(parents=True, exist_ok=True)
 LOGS.mkdir(parents=True, exist_ok=True)
+
+WATCHER_MUTEX = None
+if os.name == "nt":
+    k32 = ctypes.windll.kernel32
+    for mutex_name in ("Global\\MylesGameModeWatcher_v2", "Local\\MylesGameModeWatcher_v2"):
+        handle = k32.CreateMutexW(None, False, mutex_name)
+        if handle:
+            WATCHER_MUTEX = handle
+            if k32.GetLastError() == 183:
+                raise SystemExit(0)
+            break
 
 # Exact names cover games whose install path may be hidden by anti-cheat launchers.
 KNOWN_GAME_NAMES = {
@@ -87,6 +100,7 @@ HEAVY_MYLES_PATTERNS = (
     re.compile(r"copy_trader_service\.mjs", re.I),
     re.compile(r"simulate_first_batch\.py", re.I),
     re.compile(r"job_worker\.py", re.I),
+    re.compile(r"ollama_llama_server(?:\.exe)?", re.I),
 )
 
 
@@ -292,14 +306,21 @@ def main() -> int:
     entered_at = str(prior.get("entered_at") or "") or None
     last_state_write = 0.0
     last_model_unload = 0.0
+    last_game_seen = time.monotonic() if was_active else 0.0
+    last_game = None
 
     log("automatic game-mode watcher started")
 
     while True:
         try:
-            game = detect_game()
-            active = game is not None
+            detected_game = detect_game()
             now = time.monotonic()
+            if detected_game is not None:
+                last_game_seen = now
+                last_game = detected_game
+            within_exit_grace = bool(was_active and last_game_seen and (now - last_game_seen) < EXIT_GRACE_SECONDS)
+            game = detected_game or (last_game if within_exit_grace else None)
+            active = game is not None
 
             if active and not was_active:
                 pre_game_light = config_light_mode()
@@ -365,4 +386,11 @@ def main() -> int:
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    try:
+        raise SystemExit(main())
+    finally:
+        if WATCHER_MUTEX is not None and os.name == "nt":
+            try:
+                ctypes.windll.kernel32.ReleaseMutex(WATCHER_MUTEX)
+            except Exception:
+                pass
