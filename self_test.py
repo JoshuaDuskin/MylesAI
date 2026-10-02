@@ -222,14 +222,14 @@ def main():
 
     # --- v9.6 canonical dashboard + truthful live queue/status ---
     checks["dashboard_aliases_collapse_to_one_repo"] = (
-        myles_tools._canonical_myles_dashboard_repo_name("Myles-ControlCenter") == "MylesDashboard"
-        and myles_tools._canonical_myles_dashboard_repo_name("myles-dashboard") == "MylesDashboard"
-        and myles_tools._canonical_myles_dashboard_repo_name("Myles-AI-Dashboard") == "MylesDashboard"
+        myles_tools._canonical_myles_dashboard_repo_name("Myles-ControlCenter") == "MylesAI"
+        and myles_tools._canonical_myles_dashboard_repo_name("myles-dashboard") == "MylesAI"
+        and myles_tools._canonical_myles_dashboard_repo_name("Myles-AI-Dashboard") == "MylesAI"
     )
     checks["dashboard_url_is_direct_not_job"] = (
         myles_core._dashboard_url_request("Give me the dashboard URL") is True
         and myles_core._dashboard_url_request("Redesign the dashboard") is False
-        and "MylesDashboard" in myles_core._dashboard_url_reply()
+        and "MylesAI" in myles_core._dashboard_url_reply()
     )
     snap2 = myles_tools._runtime_public_snapshot()
     checks["public_status_schema_v2_has_real_queue"] = (
@@ -424,7 +424,7 @@ def main():
     )
 
     (test_ws / "index.html").write_text(
-        "<html><script>fetch('https://raw.githubusercontent.com/JoshuaDuskin/MylesDashboard/main/status.json?x='+Date.now())</script></html>",
+        "<html><script>fetch('https://raw.githubusercontent.com/JoshuaDuskin/MylesAI/main/status.json?x='+Date.now())</script></html>",
         encoding="utf-8",
     )
     live_gaps = job_worker.completion_gaps(
