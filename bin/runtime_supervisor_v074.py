@@ -72,8 +72,9 @@ def acquire_shared_instance_lock():
     return None
 
 
-shared_lock_fd = acquire_shared_instance_lock()
-if shared_lock_fd is None:
+force_repair_start = os.environ.get("MYLES_SUPERVISOR_FORCE_START", "").strip() == "1"
+shared_lock_fd = None if force_repair_start else acquire_shared_instance_lock()
+if shared_lock_fd is None and not force_repair_start:
     sys.exit(0)
 
 # The filesystem lock above is the single authoritative instance guard.
