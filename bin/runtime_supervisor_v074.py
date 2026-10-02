@@ -44,36 +44,11 @@ SUPERVISOR_STOP_FILE = DATA / "runtime_supervisor_v074.stop"
 for directory in (DATA, BIN, LOGS):
     directory.mkdir(parents=True, exist_ok=True)
 
-# The canonical tower supervisor must always run under MYLES's preserved venv.
-# Old launchers that invoke this file through uv/system Python are not allowed
-# to become a second supervisor. Relaunch once through the venv and exit.
-if os.name == "nt" and len(sys.argv) <= 1:
-    try:
-        # Do NOT Path.resolve() these executable paths. A uv-managed venv can
-        # resolve its redirector back to the same base interpreter used by an
-        # obsolete direct launcher, making the two look identical. We need the
-        # actual invocation path: MYLES .venv is canonical; AppData\\Roaming\\uv
-        # is not.
-        current = os.path.normcase(os.path.abspath(str(sys.executable)))
-        canonical = PYW if PYW.exists() else PY
-        canonical_text = os.path.normcase(os.path.abspath(str(canonical)))
-        if canonical.exists() and current != canonical_text:
-            subprocess.Popen(
-                [str(canonical), str(Path(__file__).absolute())],
-                cwd=str(ROOT),
-                stdin=subprocess.DEVNULL,
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-                creationflags=(CREATE_NO_WINDOW | DETACHED_PROCESS),
-                close_fds=True,
-            )
-            sys.exit(0)
-    except SystemExit:
-        raise
-    except Exception:
-        # The lock below still prevents duplicate ownership if interpreter
-        # normalization itself cannot be completed.
-        pass
+# On this Windows tower the preserved .venv is uv-backed. Launching its
+# pythonw.exe legitimately creates a short interpreter chain where the venv
+# launcher is the parent and the uv-managed CPython process owns this script.
+# That is ONE logical supervisor, not two. Singleton ownership is enforced by
+# the supervisor lock/PID files below; never relaunch based on sys.executable.
 
 # STOP_MYLES.cmd reaches this same canonical supervisor entry point with "stop".
 # Handle that command before trying to acquire the live supervisor lock.
