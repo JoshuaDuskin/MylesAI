@@ -805,11 +805,33 @@ def _runtime_public_snapshot() -> dict[str, Any]:
         "mode": "idle-time continuous improvement",
     }
 
+    cfg = load_config()
+    game_state: dict[str, Any] = {}
+    try:
+        raw_game = json.loads((DATA / "game_mode_state.json").read_text(encoding="utf-8-sig", errors="replace"))
+        if isinstance(raw_game, dict):
+            game_state = raw_game
+    except Exception:
+        pass
+    game_active = bool(cfg.get("light_mode"))
+    game_detail = {
+        "active": game_active,
+        "automatic": bool(game_state.get("active") and game_state.get("automatic")),
+        "detected": bool(game_state.get("detected")),
+        "process": game_state.get("process"),
+        "pid": game_state.get("pid"),
+        "entered_at": game_state.get("entered_at"),
+        "last_checked_at": game_state.get("last_checked_at"),
+        "source": cfg.get("light_mode_source") or ("automatic_game_detection" if game_state.get("active") else "manual"),
+    }
+
     return {
         "schema_version": 3,
         "generated_at": now_iso(),
         "myles": {"version": APP_VERSION, "online": True},
         "continuous_program": continuous,
+        "game_mode": game_active,
+        "game_mode_detail": game_detail,
         "current_task": current,
         "queue_count": len(pending),
         "queued_tasks": queued_tasks,
