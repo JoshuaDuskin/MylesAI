@@ -34,9 +34,16 @@ for directory in (DATA, BIN, LOGS):
 
 mutex = None
 if os.name == "nt":
-    mutex = ctypes.windll.kernel32.CreateMutexW(None, False, "Local\\MylesRuntimeSupervisor_v074")
-    if ctypes.windll.kernel32.GetLastError() == 183:
-        sys.exit(0)
+    k32 = ctypes.windll.kernel32
+    # Global mutex prevents an elevated updater/session and the normal owner
+    # session from running separate supervisor copies at the same time.
+    for mutex_name in ("Global\\MylesRuntimeSupervisor_v074", "Local\\MylesRuntimeSupervisor_v074"):
+        handle = k32.CreateMutexW(None, False, mutex_name)
+        if handle:
+            mutex = handle
+            if k32.GetLastError() == 183:
+                sys.exit(0)
+            break
 
 
 def log(message: object) -> None:

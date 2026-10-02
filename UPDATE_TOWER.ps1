@@ -273,7 +273,20 @@ if (Test-Path $LocalOnlyStage) {
 }
 $RestoredLocalOnly | Set-Content (Join-Path $Recovery "local_only_restored.txt")
 if ($RestoredLocalOnly.Count -gt 0) {
-    Log ("Restored " + $RestoredLocalOnly.Count + " local-only file(s), including tower-only helpers when present")
+    $InfoExclude = Join-Path $Root ".git\info\exclude"
+    New-Item -ItemType Directory -Force -Path (Split-Path $InfoExclude -Parent) | Out-Null
+    if (-not (Test-Path $InfoExclude)) {
+        New-Item -ItemType File -Force -Path $InfoExclude | Out-Null
+    }
+    $ExistingExcludes = @(Get-Content $InfoExclude -ErrorAction SilentlyContinue)
+    foreach ($rel in $RestoredLocalOnly) {
+        $normalized = ($rel -replace "\\","/")
+        if ($ExistingExcludes -notcontains $normalized) {
+            Add-Content -Path $InfoExclude -Value $normalized
+            $ExistingExcludes += $normalized
+        }
+    }
+    Log ("Restored " + $RestoredLocalOnly.Count + " local-only file(s) and kept them local via .git/info/exclude")
 }
 
 $Data = Join-Path $Root "data"
@@ -362,8 +375,19 @@ if (-not (Test-Path $Supervisor)) {
     Fail "Canonical runtime supervisor is missing after update."
 }
 
-Log "Starting one canonical hidden supervisor..."
+Log "Enforcing a single canonical supervisor..."
+$ExistingSupervisors = @(Get-CimInstance Win32_Process -ErrorAction SilentlyContinue | Where-Object {
+    $_.ProcessId -ne $PID -and ([string]$_.CommandLine) -match "(?i)runtime_supervisor_v074\.py"
+})
+foreach ($proc in $ExistingSupervisors) {
+    try {
+        Log ("Stopping leftover supervisor PID " + $proc.ProcessId)
+        Stop-Process -Id $proc.ProcessId -Force -ErrorAction SilentlyContinue
+    } catch {}
+}
+Start-Sleep -Seconds 1
 Start-Process -FilePath $PythonW -ArgumentList $Supervisor -WorkingDirectory $Root -WindowStyle Hidden | Out-Null
+Log "Started one canonical hidden supervisor"
 
 $GameWatcher = Get-ChildItem (Join-Path $Root "bin") -File -Filter "game_mode_watch*.py" -ErrorAction SilentlyContinue |
     Sort-Object LastWriteTime -Descending |
@@ -413,12 +437,26 @@ $RuntimeProcesses = @(Get-CimInstance Win32_Process -ErrorAction SilentlyContinu
 })
 
 $GmxCount = @($RuntimeProcesses | Where-Object { ([string]$_.CommandLine) -match "gmx_live\.mjs.*--daemon" }).Count
-$SupervisorCount = @($RuntimeProcesses | Where-Object { ([string]$_.CommandLine) -match "runtime_supervisor_v074\.py" }).Count
+$SupervisorRows = @($RuntimeProcesses | Where-Object { ([string]$_.CommandLine) -match "runtime_supervisor_v074\.py" })
+if ($SupervisorRows.Count -gt 1) {
+    $keep = $SupervisorRows | Sort-Object ProcessId | Select-Object -First 1
+    foreach ($dup in ($SupervisorRows | Where-Object { $_.ProcessId -ne $keep.ProcessId })) {
+        Log ("Stopping duplicate supervisor PID " + $dup.ProcessId)
+        Stop-Process -Id $dup.ProcessId -Force -ErrorAction SilentlyContinue
+    }
+    Start-Sleep -Seconds 2
+    $RuntimeProcesses = @(Get-CimInstance Win32_Process -ErrorAction SilentlyContinue | Where-Object {
+        ([string]$_.CommandLine) -match "(?i)(runtime_supervisor_v074|myles_core\.py|dashboard_bridge\.py|public_gateway_v074\.py|quant_service\.mjs|gmx_live\.mjs|copy_trader_service\.mjs|game_mode_watch)"
+    })
+    $SupervisorRows = @($RuntimeProcesses | Where-Object { ([string]$_.CommandLine) -match "runtime_supervisor_v074\.py" })
+}
+$SupervisorCount = $SupervisorRows.Count
 $QuantCount = @($RuntimeProcesses | Where-Object { ([string]$_.CommandLine) -match "quant_service\.mjs" }).Count
 
 $Head = ((Invoke-RepoGit -GitArgs @("rev-parse", "--short", "HEAD")) -join "").Trim()
 $Origin = ((Invoke-RepoGit -GitArgs @("remote", "get-url", "origin")) -join "").Trim()
 $GitStatus = @(Invoke-RepoGit -GitArgs @("status", "--short"))
+$GitStatus | Set-Content (Join-Path $Recovery "git_status_after.txt")
 
 $Summary = @()
 $Summary += "============================================================"
