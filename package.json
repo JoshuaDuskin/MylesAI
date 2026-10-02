@@ -1,1 +1,0 @@
-{"name":"myles-dashboard","version":"1.0.0","description":"Myles AI Live Dashboard","main":"index.html","scripts":{"deploy":"vercel"},"dependencies":{},"devDependencies":{}}
