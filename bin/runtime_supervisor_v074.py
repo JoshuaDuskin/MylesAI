@@ -30,6 +30,10 @@ PYW = VENV / "pythonw.exe"
 DASHBOARD_REPO = "https://github.com/JoshuaDuskin/MylesAI.git"
 LOG = LOGS / "runtime_supervisor_v074.log"
 SUPERVISOR_PID_FILE = DATA / "runtime_supervisor_v074.pid"
+# A filesystem lock is shared by elevated and non-elevated sessions. The
+# Global/Local Windows mutex pair can split into two owners when the updater
+# and owner console run at different privilege levels.
+SUPERVISOR_LOCK_FILE = DATA / "runtime_supervisor_v074.lock"
 CONFIG_FILE = DATA / "config.json"
 GAME_STATE_FILE = DATA / "game_mode_state.json"
 GAME_WATCHER = BIN / "game_mode_watch.py"
@@ -37,18 +41,55 @@ GAME_WATCHER = BIN / "game_mode_watch.py"
 for directory in (DATA, BIN, LOGS):
     directory.mkdir(parents=True, exist_ok=True)
 
+def acquire_shared_instance_lock():
+    """Own one cross-privilege supervisor lock for this Windows user."""
+    for _ in range(30):
+        try:
+            descriptor = os.open(
+                str(SUPERVISOR_LOCK_FILE),
+                os.O_CREAT | os.O_EXCL | os.O_WRONLY,
+            )
+            os.write(descriptor, str(os.getpid()).encode("ascii"))
+            return descriptor
+        except FileExistsError:
+            try:
+                owner_pid = int(SUPERVISOR_LOCK_FILE.read_text(encoding="ascii").strip())
+            except Exception:
+                owner_pid = 0
+            if owner_pid and owner_pid != os.getpid():
+                try:
+                    os.kill(owner_pid, 0)
+                    return None
+                except PermissionError:
+                    return None
+                except OSError:
+                    try:
+                        SUPERVISOR_LOCK_FILE.unlink(missing_ok=True)
+                    except Exception:
+                        pass
+            time.sleep(0.1)
+    return None
+
+
+shared_lock_fd = acquire_shared_instance_lock()
+if shared_lock_fd is None:
+    sys.exit(0)
+
 mutex = None
 if os.name == "nt":
     k32 = ctypes.windll.kernel32
-    # Global mutex prevents an elevated updater/session and the normal owner
-    # session from running separate supervisor copies at the same time.
-    for mutex_name in ("Global\\MylesRuntimeSupervisor_v074", "Local\\MylesRuntimeSupervisor_v074"):
-        handle = k32.CreateMutexW(None, False, mutex_name)
-        if handle:
-            mutex = handle
-            if k32.GetLastError() == 183:
-                sys.exit(0)
-            break
+    # Keep the mutex as an additional same-scope guard, while the file lock
+    # above is the authoritative guard across elevated/non-elevated sessions.
+    handle = k32.CreateMutexW(None, False, "Global\\MylesRuntimeSupervisor_v074")
+    if handle:
+        mutex = handle
+        if k32.GetLastError() == 183:
+            os.close(shared_lock_fd)
+            try:
+                SUPERVISOR_LOCK_FILE.unlink(missing_ok=True)
+            except Exception:
+                pass
+            sys.exit(0)
 
 
 def log(message: object) -> None:
@@ -544,3 +585,12 @@ finally:
             ctypes.windll.kernel32.ReleaseMutex(mutex)
         except Exception:
             pass
+    try:
+        os.close(shared_lock_fd)
+    except Exception:
+        pass
+    try:
+        if SUPERVISOR_LOCK_FILE.read_text(encoding="ascii").strip() == str(os.getpid()):
+            SUPERVISOR_LOCK_FILE.unlink(missing_ok=True)
+    except Exception:
+        pass
