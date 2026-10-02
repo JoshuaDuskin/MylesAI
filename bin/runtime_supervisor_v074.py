@@ -59,6 +59,39 @@ if len(sys.argv) > 1 and str(sys.argv[1]).strip().lower() == "stop":
         time.sleep(0.5)
     sys.exit(0 if not SUPERVISOR_PID_FILE.exists() else 3)
 
+def pid_is_alive(pid: int) -> bool:
+    """Check a PID without ever signaling or terminating it.
+
+    On Windows os.kill(pid, 0) is unsafe because non-console signals are routed
+    through TerminateProcess. The old lock check could therefore kill the
+    supervisor it was only trying to inspect.
+    """
+    if pid <= 0:
+        return False
+    if os.name == "nt":
+        PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
+        STILL_ACTIVE = 259
+        handle = ctypes.windll.kernel32.OpenProcess(
+            PROCESS_QUERY_LIMITED_INFORMATION, False, int(pid)
+        )
+        if not handle:
+            return False
+        try:
+            code = ctypes.c_ulong()
+            if not ctypes.windll.kernel32.GetExitCodeProcess(handle, ctypes.byref(code)):
+                return False
+            return int(code.value) == STILL_ACTIVE
+        finally:
+            ctypes.windll.kernel32.CloseHandle(handle)
+    try:
+        os.kill(pid, 0)
+        return True
+    except PermissionError:
+        return True
+    except OSError:
+        return False
+
+
 def acquire_shared_instance_lock():
     """Own one cross-privilege supervisor lock for this Windows user."""
     for _ in range(30):
@@ -74,17 +107,12 @@ def acquire_shared_instance_lock():
                 owner_pid = int(SUPERVISOR_LOCK_FILE.read_text(encoding="ascii").strip())
             except Exception:
                 owner_pid = 0
-            if owner_pid and owner_pid != os.getpid():
-                try:
-                    os.kill(owner_pid, 0)
-                    return None
-                except PermissionError:
-                    return None
-                except OSError:
-                    try:
-                        SUPERVISOR_LOCK_FILE.unlink(missing_ok=True)
-                    except Exception:
-                        pass
+            if owner_pid and owner_pid != os.getpid() and pid_is_alive(owner_pid):
+                return None
+            try:
+                SUPERVISOR_LOCK_FILE.unlink(missing_ok=True)
+            except Exception:
+                pass
             time.sleep(0.1)
     return None
 
