@@ -672,6 +672,19 @@ if ($SupervisorOwnerOK) {
 $QuantCount = @($RuntimeProcesses | Where-Object { ([string]$_.CommandLine) -match "quant_service\.mjs" }).Count
 $CopyCount = @($RuntimeProcesses | Where-Object { ([string]$_.CommandLine) -match "copy_trader_service\.mjs.*--daemon" }).Count
 
+# Give the canonical supervisor one extra service cycle window before launching
+# any fallback Node workers. This avoids racing a slow Node startup and creating
+# a duplicate Quant worker.
+if ($QuantCount -eq 0 -or $GmxCount -eq 0 -or $CopyCount -eq 0) {
+    Start-Sleep -Seconds 12
+    $RuntimeProcesses = @(Get-CimInstance Win32_Process -ErrorAction SilentlyContinue | Where-Object {
+        ([string]$_.CommandLine) -match "(?i)(runtime_supervisor_v074|myles_core\.py|dashboard_bridge\.py|public_gateway_v074\.py|quant_service\.mjs|gmx_live\.mjs|copy_trader_service\.mjs|game_mode_watch)"
+    })
+    $QuantCount = @($RuntimeProcesses | Where-Object { ([string]$_.CommandLine) -match "quant_service\.mjs" }).Count
+    $GmxCount = @($RuntimeProcesses | Where-Object { ([string]$_.CommandLine) -match "gmx_live\.mjs.*--daemon" }).Count
+    $CopyCount = @($RuntimeProcesses | Where-Object { ([string]$_.CommandLine) -match "copy_trader_service\.mjs.*--daemon" }).Count
+}
+
 # If the supervisor survived but a Node worker did not come up during the first
 # service cycle, start that missing worker once here. The supervisor will adopt
 # it on the next cycle and its process guard prevents duplicates.
@@ -825,7 +838,8 @@ Copy-Item $LogFile (Join-Path $Root "logs\tower_update_latest.log") -Force
 Copy-Item (Join-Path $Recovery "RESULT.txt") (Join-Path $Root "logs\tower_update_RESULT.txt") -Force
 
 $DataPlaneOK = $DashboardStatusOK -and ($GameModeActive -or ($QuantFeedOK -and $GmxMarketCount -gt 0))
-if ($CoreOK -and $Port8790 -and $Port8791 -and $SupervisorCount -eq 1 -and $GmxCount -le 1 -and $DataPlaneOK) {
+$WorkerCardinalityOK = $GameModeActive -or ($QuantCount -eq 1 -and $GmxCount -eq 1 -and $CopyCount -eq 1)
+if ($CoreOK -and $Port8790 -and $Port8791 -and $SupervisorCount -eq 1 -and $WorkerCardinalityOK -and $DataPlaneOK) {
     Write-Host ""
     Write-Host "MYLES TOWER UPDATE: PASS" -ForegroundColor Green
     Write-Host "The canonical runtime is back online." -ForegroundColor Green
