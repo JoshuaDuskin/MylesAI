@@ -344,7 +344,7 @@ def _conversation_call(messages: list[dict[str, Any]]) -> dict[str, Any]:
         "think": False,
         "tools": CONVERSATION_TOOLS,
         "options": {"temperature": 0.35},
-        "keep_alive": "10m",
+        "keep_alive": "0" if bool(cfg.get("light_mode")) else "10m",
     }).encode("utf-8")
     req = urllib.request.Request(
         cfg["ollama_url"], data=body, method="POST", headers={"Content-Type": "application/json"}
@@ -387,7 +387,7 @@ def _router_call(raw: str) -> dict[str, Any]:
             "think": False,
             "format": "json",
             "options": {"temperature": 0.0},
-            "keep_alive": "10m",
+            "keep_alive": "0" if bool(cfg.get("light_mode")) else "10m",
         }).encode("utf-8")
         req = urllib.request.Request(
             cfg["ollama_url"], data=body, method="POST", headers={"Content-Type": "application/json"}
@@ -548,7 +548,7 @@ def _speak_to_owner(controller_result: str) -> str:
         "stream": False,
         "think": False,
         "options": {"temperature": 0.35},
-        "keep_alive": "10m",
+        "keep_alive": "0" if bool(cfg.get("light_mode")) else "10m",
     }).encode("utf-8")
     req = urllib.request.Request(
         cfg["ollama_url"], data=body, method="POST", headers={"Content-Type": "application/json"}
@@ -586,7 +586,7 @@ def _summarize_search_evidence(question: str, evidence: str) -> str:
         "stream": False,
         "think": False,
         "options": {"temperature": 0.15},
-        "keep_alive": "10m",
+        "keep_alive": "0" if bool(cfg.get("light_mode")) else "10m",
     }).encode("utf-8")
     req = urllib.request.Request(
         cfg["ollama_url"], data=body, method="POST", headers={"Content-Type": "application/json"}

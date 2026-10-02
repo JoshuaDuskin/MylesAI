@@ -291,6 +291,7 @@ def main() -> int:
     pre_game_light = bool(prior.get("pre_game_light_mode", False))
     entered_at = str(prior.get("entered_at") or "") or None
     last_state_write = 0.0
+    last_model_unload = 0.0
 
     log("automatic game-mode watcher started")
 
@@ -306,6 +307,7 @@ def main() -> int:
                 set_config_light_mode(True, "automatic_game_detection")
                 stopped = stop_heavy_myles_processes()
                 models = unload_ollama_models()
+                last_model_unload = now
                 log(
                     f"game detected: {game.get('name')} pid={game.get('pid')}; "
                     f"gaming mode ON; stopped heavy pids={stopped}; unloaded models={models}"
@@ -324,6 +326,11 @@ def main() -> int:
                 stopped = stop_heavy_myles_processes()
                 if stopped:
                     log(f"gaming mode enforcement stopped heavy pids={stopped}")
+                if now - last_model_unload >= STATE_HEARTBEAT_SECONDS:
+                    models = unload_ollama_models()
+                    last_model_unload = now
+                    if models:
+                        log(f"gaming mode enforcement unloaded Ollama models={models}")
                 if now - last_state_write >= STATE_HEARTBEAT_SECONDS:
                     write_json_atomic(
                         STATE_FILE,
