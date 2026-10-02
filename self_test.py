@@ -43,13 +43,14 @@ def main():
     tools_source = Path(myles_tools.__file__).read_text(encoding="utf-8")
     caps_source = Path(myles_capabilities.__file__).read_text(encoding="utf-8")
     restart_source = (myles_common.ROOT / "restart_helper.py").read_text(encoding="utf-8")
-    supervisor_path = myles_common.ROOT / "runtime_supervisor.py"
+    supervisor_path = myles_common.ROOT / "bin" / "runtime_supervisor_v074.py"
     start_path = myles_common.ROOT / "START_MYLESAI.cmd"
     stop_path = myles_common.ROOT / "STOP_MYLES.cmd"
     supervisor_source = supervisor_path.read_text(encoding="utf-8") if supervisor_path.exists() else ""
     start_source = start_path.read_text(encoding="utf-8") if start_path.exists() else ""
     stop_source = stop_path.read_text(encoding="utf-8") if stop_path.exists() else ""
-    console_source = Path(myles_console.__file__).read_text(encoding="utf-8")
+    console_path = myles_common.ROOT / "bin" / "myles_console_v074.py"
+    console_source = console_path.read_text(encoding="utf-8") if console_path.exists() else ""
 
     # --- Conversation/control routing ---
     checks["semantic_natural_language_router"] = (
@@ -293,17 +294,18 @@ def main():
     )
     checks["canonical_supervisor_contract_present"] = (
         supervisor_path.exists()
-        and "supervisor.pid" in supervisor_source
-        and "supervisor.lock" in supervisor_source
-        and "supervisor.stop" in supervisor_source
+        and "runtime_supervisor_v074.pid" in supervisor_source
+        and "runtime_supervisor_v074.lock" in supervisor_source
+        and "runtime_supervisor_v074.stop" in supervisor_source
         and "RESTART_REQUEST" in supervisor_source
         and "_wait_for_core_offline" in supervisor_source
+        and "_restart_for_update" in supervisor_source
     )
     checks["canonical_start_path_is_persistent"] = (
         start_path.exists()
-        and "cmd /k" in start_source
-        and "runtime_supervisor.py" in start_source
-        and "myles_console.py" in start_source
+        and "runtime_supervisor_v074.py" in start_source
+        and "myles_console_v074.py" in start_source
+        and "MYLES_SUPERVISOR_RUNNING" in start_source
     )
     checks["canonical_stop_path_is_scoped"] = (
         stop_path.exists()
@@ -311,9 +313,8 @@ def main():
         and "taskkill" not in stop_source.lower()
     )
     checks["visible_console_waits_for_hidden_core"] = (
-        "def ensure_supervisor" in console_source
-        and "def wait_for_core" in console_source
-        and "wait_for_core(" in console_source
+        "while time.time()<end and not health()" in console_source
+        and "DASHBOARD = \"https://joshuaduskin.github.io/MylesAI/\"" in console_source
     )
     checks["core_restart_is_supervisor_owned"] = (
         "restart_helper.py" not in core_source
