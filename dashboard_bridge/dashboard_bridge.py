@@ -567,7 +567,7 @@ def build_status() -> dict[str, Any]:
     # dashboard does not depend on GitHub snapshots for owner controls.
     public_code, public_payload = core_json("/api/public-status", timeout=4.0)
     if public_code == 200 and isinstance(public_payload, dict):
-        for key in ("continuous_program", "current_task", "queue", "game_mode", "activity", "model", "runtime"):
+        for key in ("continuous_program", "current_task", "queue", "game_mode", "game_mode_detail", "activity", "model", "runtime"):
             if key in public_payload:
                 result[key] = public_payload[key]
 
