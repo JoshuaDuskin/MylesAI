@@ -12,8 +12,11 @@ function Test-Administrator {
 
 if (-not (Test-Administrator)) {
     $elevateArgs = @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $PSCommandPath)
-    Start-Process -FilePath "powershell.exe" -ArgumentList $elevateArgs -Verb RunAs | Out-Null
-    exit
+    $elevated = Start-Process -FilePath "powershell.exe" -ArgumentList $elevateArgs -Verb RunAs -Wait -PassThru
+    if ($null -ne $elevated) {
+        exit $elevated.ExitCode
+    }
+    exit 1
 }
 
 $Root = Join-Path $env:LOCALAPPDATA "MylesAI"
