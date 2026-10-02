@@ -50,7 +50,7 @@ def refresh_pair_state() -> None:
     if PAIR_CODE_FILE is None:
         return
     try:
-        pair_data = json.loads(PAIR_CODE_FILE.read_text(encoding="utf-8"))
+        pair_data = json.loads(PAIR_CODE_FILE.read_text(encoding="utf-8-sig"))
         code = str(pair_data.get("code") or "").strip().upper()
         expires = float(pair_data.get("expires_epoch") or 0)
         pinned = bool(pair_data.get("pinned", False))
