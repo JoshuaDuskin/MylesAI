@@ -11,8 +11,8 @@ function Test-Administrator {
 }
 
 if (-not (Test-Administrator)) {
-    $args = @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $PSCommandPath)
-    Start-Process -FilePath "powershell.exe" -ArgumentList $args -Verb RunAs | Out-Null
+    $elevateArgs = @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $PSCommandPath)
+    Start-Process -FilePath "powershell.exe" -ArgumentList $elevateArgs -Verb RunAs | Out-Null
     exit
 }
 
@@ -54,13 +54,13 @@ $GitExe = $GitCommand.Source
 
 function Invoke-RepoGit {
     param(
-        [Parameter(Mandatory=$true)][string[]]$Args,
+        [Parameter(Mandatory=$true)][string[]]$GitArgs,
         [switch]$AllowFailure
     )
-    $output = & $GitExe -C $Root @Args 2>&1
+    $output = & $GitExe -C $Root @GitArgs 2>&1
     $code = $LASTEXITCODE
     if ($code -ne 0 -and -not $AllowFailure) {
-        throw ("git " + ($Args -join " ") + " failed: " + (($output | Out-String).Trim()))
+        throw ("git " + ($GitArgs -join " ") + " failed: " + (($output | Out-String).Trim()))
     }
     return @($output)
 }
@@ -77,12 +77,12 @@ if (-not (Test-Path (Join-Path $Root ".git"))) {
 }
 
 try {
-    (Invoke-RepoGit -Args @("remote", "-v")) | Set-Content (Join-Path $Recovery "git_remotes_before.txt")
-    (Invoke-RepoGit -Args @("status", "--short", "--branch")) | Set-Content (Join-Path $Recovery "git_status_before.txt")
-    (Invoke-RepoGit -Args @("rev-parse", "HEAD")) | Set-Content (Join-Path $Recovery "git_head_before.txt")
-    Invoke-RepoGit -Args @("bundle", "create", (Join-Path $Recovery "MylesAI_before_update.bundle"), "--all") | Out-Null
-    (Invoke-RepoGit -Args @("diff", "--binary")) | Set-Content (Join-Path $Recovery "working_tree_before.patch")
-    (Invoke-RepoGit -Args @("diff", "--cached", "--binary")) | Set-Content (Join-Path $Recovery "staged_before.patch")
+    (Invoke-RepoGit -GitArgs @("remote", "-v")) | Set-Content (Join-Path $Recovery "git_remotes_before.txt")
+    (Invoke-RepoGit -GitArgs @("status", "--short", "--branch")) | Set-Content (Join-Path $Recovery "git_status_before.txt")
+    (Invoke-RepoGit -GitArgs @("rev-parse", "HEAD")) | Set-Content (Join-Path $Recovery "git_head_before.txt")
+    Invoke-RepoGit -GitArgs @("bundle", "create", (Join-Path $Recovery "MylesAI_before_update.bundle"), "--all") | Out-Null
+    (Invoke-RepoGit -GitArgs @("diff", "--binary")) | Set-Content (Join-Path $Recovery "working_tree_before.patch")
+    (Invoke-RepoGit -GitArgs @("diff", "--cached", "--binary")) | Set-Content (Join-Path $Recovery "staged_before.patch")
     Log "PASS: Git history and local tracked changes backed up"
 } catch {
     Fail ("Could not create Git recovery bundle: " + $_.Exception.Message)
@@ -90,15 +90,15 @@ try {
 
 $Untracked = @()
 try {
-    $Untracked = @(Invoke-RepoGit -Args @("ls-files", "--others", "--exclude-standard"))
+    $Untracked = @(Invoke-RepoGit -GitArgs @("ls-files", "--others", "--exclude-standard"))
     $Untracked | Set-Content (Join-Path $Recovery "untracked_before.txt")
 } catch {}
 
 $Modified = @()
 try {
     $Modified = @(
-        (Invoke-RepoGit -Args @("diff", "--name-only", "HEAD")) +
-        (Invoke-RepoGit -Args @("diff", "--cached", "--name-only"))
+        (Invoke-RepoGit -GitArgs @("diff", "--name-only", "HEAD")) +
+        (Invoke-RepoGit -GitArgs @("diff", "--cached", "--name-only"))
     ) | Where-Object { $_ } | Sort-Object -Unique
     $Modified | Set-Content (Join-Path $Recovery "modified_tracked_before.txt")
 } catch {}
@@ -210,10 +210,10 @@ if (Test-Path $LocalOnlyStage) {
 
 try {
     Log "Pointing tower at canonical GitHub repository..."
-    Invoke-RepoGit -Args @("remote", "set-url", "origin", $Canonical) | Out-Null
-    Invoke-RepoGit -Args @("fetch", "origin", "main", "--prune") | Out-Null
-    Invoke-RepoGit -Args @("checkout", "-B", "main", "origin/main", "--force") | Out-Null
-    Invoke-RepoGit -Args @("reset", "--hard", "origin/main") | Out-Null
+    Invoke-RepoGit -GitArgs @("remote", "set-url", "origin", $Canonical) | Out-Null
+    Invoke-RepoGit -GitArgs @("fetch", "origin", "main", "--prune") | Out-Null
+    Invoke-RepoGit -GitArgs @("checkout", "-B", "main", "origin/main", "--force") | Out-Null
+    Invoke-RepoGit -GitArgs @("reset", "--hard", "origin/main") | Out-Null
     Log "PASS: tracked source now matches JoshuaDuskin/MylesAI main"
 } catch {
     Fail ("Canonical source sync failed: " + $_.Exception.Message)
@@ -280,7 +280,7 @@ function New-RandomToken {
     $rng = [Security.Cryptography.RandomNumberGenerator]::Create()
     $rng.GetBytes($bytes)
     $rng.Dispose()
-    return ([Convert]::ToBase64String($bytes)).TrimEnd("=").Replace("+","-").Replace("/","_")
+    return ([Convert]::ToBase64String($bytes)).TrimEnd([char]"=").Replace("+","-").Replace("/","_")
 }
 
 $PairFile = Join-Path $Data "dashboard_pair_code.json"
@@ -381,9 +381,19 @@ while ((Get-Date) -lt $deadline) {
 }
 
 $CoreOK = Core-Healthy
-$Listeners = @(Get-NetTCPConnection -State Listen -ErrorAction SilentlyContinue | Where-Object { $_.LocalPort -in 8790,8791 })
-$Port8790 = @($Listeners | Where-Object { $_.LocalPort -eq 8790 }).Count -gt 0
-$Port8791 = @($Listeners | Where-Object { $_.LocalPort -eq 8791 }).Count -gt 0
+$Port8790 = $false
+$Port8791 = $false
+$serviceDeadline = (Get-Date).AddSeconds(70)
+while ((Get-Date) -lt $serviceDeadline) {
+    $Listeners = @(Get-NetTCPConnection -State Listen -ErrorAction SilentlyContinue | Where-Object { $_.LocalPort -in 8790,8791 })
+    $Port8790 = @($Listeners | Where-Object { $_.LocalPort -eq 8790 }).Count -gt 0
+    $Port8791 = @($Listeners | Where-Object { $_.LocalPort -eq 8791 }).Count -gt 0
+    if ($Port8790 -and $Port8791) { break }
+    Start-Sleep -Seconds 2
+}
+if ($Port8790 -and $Port8791) {
+    Start-Sleep -Seconds 5
+}
 
 $RuntimeProcesses = @(Get-CimInstance Win32_Process -ErrorAction SilentlyContinue | Where-Object {
     ([string]$_.CommandLine) -match "(?i)(runtime_supervisor_v074|myles_core\.py|dashboard_bridge\.py|public_gateway_v074\.py|quant_service\.mjs|gmx_live\.mjs|copy_trader_service\.mjs|game_mode_watch)"
@@ -393,9 +403,9 @@ $GmxCount = @($RuntimeProcesses | Where-Object { ([string]$_.CommandLine) -match
 $SupervisorCount = @($RuntimeProcesses | Where-Object { ([string]$_.CommandLine) -match "runtime_supervisor_v074\.py" }).Count
 $QuantCount = @($RuntimeProcesses | Where-Object { ([string]$_.CommandLine) -match "quant_service\.mjs" }).Count
 
-$Head = ((Invoke-RepoGit -Args @("rev-parse", "--short", "HEAD")) -join "").Trim()
-$Origin = ((Invoke-RepoGit -Args @("remote", "get-url", "origin")) -join "").Trim()
-$GitStatus = @(Invoke-RepoGit -Args @("status", "--short"))
+$Head = ((Invoke-RepoGit -GitArgs @("rev-parse", "--short", "HEAD")) -join "").Trim()
+$Origin = ((Invoke-RepoGit -GitArgs @("remote", "get-url", "origin")) -join "").Trim()
+$GitStatus = @(Invoke-RepoGit -GitArgs @("status", "--short"))
 
 $Summary = @()
 $Summary += "============================================================"
