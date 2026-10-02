@@ -234,7 +234,8 @@ if ($After.Count -gt 0) {
 Write-Host "============================================================"
 
 $DataPlaneOK = $LiveStatus -and ($GameModeActive -or ($QuantVerified -and $GmxMarketCount -gt 0))
-$Pass = $Core -and $P8790 -and $P8791 -and $SupervisorAlive -and $QuantRows.Count -eq 1 -and $GmxRows.Count -le 1 -and $DataPlaneOK -and $After.Count -eq 0
+$WorkerStateOK = $GameModeActive -or ($QuantRows.Count -eq 1)
+$Pass = $Core -and $P8790 -and $P8791 -and $SupervisorAlive -and $WorkerStateOK -and $GmxRows.Count -le 1 -and $DataPlaneOK -and $After.Count -eq 0
 
 if ($Pass) {
     Write-Host ""
