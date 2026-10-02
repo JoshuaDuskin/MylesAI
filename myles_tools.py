@@ -951,7 +951,7 @@ def _status_feed_git_push(repo: Path) -> str:
 def configure_runtime_status_feed(
     job_id: str,
     repo_path: str,
-    repo_name: str = "MylesDashboard",
+    repo_name: str = "MylesAI",
     min_update_seconds: int = 20,
 ) -> str:
     """Configure a real sanitized public status feed for a Myles dashboard.
