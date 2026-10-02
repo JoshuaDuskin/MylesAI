@@ -14,7 +14,7 @@ from pathlib import Path
 ROOT = Path(os.environ.get("LOCALAPPDATA", "")) / "MylesAI"
 DATA = ROOT / "data"
 BASE = "http://127.0.0.1:8766"
-DASHBOARD = "https://joshuaduskin.github.io/MylesDashboard/"
+DASHBOARD = "https://joshuaduskin.github.io/MylesAI/"
 MUTEX = "Local\\MylesOwnerConsole_v074"
 STOP = threading.Event()
 SEEN: set[int] = set()
