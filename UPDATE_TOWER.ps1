@@ -713,7 +713,15 @@ if (-not $GameModeNow) {
             ([string]$_.CommandLine) -match "(?i)(runtime_supervisor_v074|myles_core\.py|dashboard_bridge\.py|public_gateway_v074\.py|quant_service\.mjs|gmx_live\.mjs|copy_trader_service\.mjs|game_mode_watch)"
         })
         $SupervisorRows = @($RuntimeProcesses | Where-Object { ([string]$_.CommandLine) -match "runtime_supervisor_v074\.py" })
-        $SupervisorCount = $SupervisorRows.Count
+        $SupervisorProcessChainCount = $SupervisorRows.Count
+        $SupervisorOwnerOK = $false
+        if (Test-Path $SupervisorPidFile) {
+            try { $SupervisorOwnerPid = [int](Get-Content $SupervisorPidFile -Raw).Trim() } catch { $SupervisorOwnerPid = 0 }
+        }
+        if ($SupervisorOwnerPid -gt 0 -and @($SupervisorRows | Where-Object { [int]$_.ProcessId -eq $SupervisorOwnerPid }).Count -eq 1) {
+            $SupervisorOwnerOK = $true
+        }
+        $SupervisorCount = if ($SupervisorOwnerOK) { 1 } else { 0 }
         $QuantCount = @($RuntimeProcesses | Where-Object { ([string]$_.CommandLine) -match "quant_service\.mjs" }).Count
         $GmxCount = @($RuntimeProcesses | Where-Object { ([string]$_.CommandLine) -match "gmx_live\.mjs.*--daemon" }).Count
         $CopyCount = @($RuntimeProcesses | Where-Object { ([string]$_.CommandLine) -match "copy_trader_service\.mjs.*--daemon" }).Count
