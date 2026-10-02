@@ -57,12 +57,25 @@ function Invoke-RepoGit {
         [Parameter(Mandatory=$true)][string[]]$GitArgs,
         [switch]$AllowFailure
     )
-    $output = & $GitExe -C $Root @GitArgs 2>&1
-    $code = $LASTEXITCODE
-    if ($code -ne 0 -and -not $AllowFailure) {
-        throw ("git " + ($GitArgs -join " ") + " failed: " + (($output | Out-String).Trim()))
+
+    # Windows PowerShell 5.1 can promote native stderr text (including harmless
+    # Git warnings such as LF/CRLF conversion notices) into terminating errors
+    # when the script-wide ErrorActionPreference is Stop.  Judge Git by its
+    # actual process exit code instead.
+    $previousPreference = $ErrorActionPreference
+    $ErrorActionPreference = "Continue"
+    try {
+        $output = & $GitExe -C $Root @GitArgs 2>&1
+        $code = $LASTEXITCODE
+    } finally {
+        $ErrorActionPreference = $previousPreference
     }
-    return @($output)
+
+    if ($code -ne 0 -and -not $AllowFailure) {
+        throw ("git " + ($GitArgs -join " ") + " failed with exit code " + $code + ": " + (($output | Out-String).Trim()))
+    }
+
+    return @($output | ForEach-Object { [string]$_ })
 }
 
 Log "============================================================"
@@ -85,7 +98,7 @@ try {
     (Invoke-RepoGit -GitArgs @("diff", "--cached", "--binary")) | Set-Content (Join-Path $Recovery "staged_before.patch")
     Log "PASS: Git history and local tracked changes backed up"
 } catch {
-    Fail ("Could not create Git recovery bundle: " + $_.Exception.Message)
+    Fail ("Could not create the Git recovery snapshot: " + $_.Exception.Message)
 }
 
 $Untracked = @()
