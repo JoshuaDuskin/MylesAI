@@ -225,9 +225,39 @@ def process_rows():
         return []
 
 
-def has(pattern: str) -> bool:
+def matching_process_rows(pattern: str):
     rx = re.compile(pattern, re.I)
-    return any(rx.search(command or "") for _, command in process_rows())
+    return [(pid, command) for pid, command in process_rows() if rx.search(command or "")]
+
+
+def has(pattern: str) -> bool:
+    return bool(matching_process_rows(pattern))
+
+
+def keep_one_process(pattern: str, label: str) -> bool:
+    """Keep exactly one direct worker process for a script; retire duplicates."""
+    rows = sorted(matching_process_rows(pattern), key=lambda row: row[0])
+    if not rows:
+        return False
+    keep_pid = rows[0][0]
+    for pid, _command in rows[1:]:
+        if pid <= 0 or pid == os.getpid():
+            continue
+        try:
+            if os.name == "nt":
+                subprocess.run(
+                    ["taskkill", "/PID", str(pid), "/T", "/F"],
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                    timeout=8,
+                    creationflags=CREATE_NO_WINDOW,
+                )
+            else:
+                os.kill(pid, 15)
+            log(f"retired duplicate {label} pid={pid}; kept pid={keep_pid}")
+        except Exception as exc:
+            log(f"duplicate {label} cleanup failed pid={pid}: {exc}")
+    return True
 
 
 def light_mode_active() -> bool:
@@ -508,14 +538,15 @@ def start_quant() -> None:
     quant_script = QUANT / "quant_service.mjs"
     gmx_script = QUANT / "gmx_live.mjs"
     copy_script = QUANT / "copy_trader_service.mjs"
-    if quant_script.exists() and not has(r"quant_service\.mjs"):
+    if quant_script.exists() and not keep_one_process(r"quant_service\.mjs", "Quant worker"):
         hidden_popen([node, quant_script], cwd=QUANT, stdout_path=LOGS / "quant_startup.out.log", stderr_path=LOGS / "quant_startup.err.log", low_priority=True)
         log("quant restart requested")
-    if gmx_script.exists() and not has(r"gmx_live\.mjs"):
+    if gmx_script.exists() and not keep_one_process(r"gmx_live\.mjs.*--daemon", "GMX daemon"):
         hidden_popen([node, gmx_script, "--daemon"], cwd=QUANT, stdout_path=LOGS / "gmx_live_startup.out.log", stderr_path=LOGS / "gmx_live_startup.err.log", low_priority=True)
-    if copy_script.exists() and not has(r"copy_trader_service\.mjs"):
-        hidden_popen([node, copy_script, "--daemon"], cwd=QUANT, stdout_path=LOGS / "copy_trader_startup.out.log", stderr_path=LOGS / "copy_trader_startup.err.log", low_priority=True)
         log("gmx restart requested")
+    if copy_script.exists() and not keep_one_process(r"copy_trader_service\.mjs.*--daemon", "copy research daemon"):
+        hidden_popen([node, copy_script, "--daemon"], cwd=QUANT, stdout_path=LOGS / "copy_trader_startup.out.log", stderr_path=LOGS / "copy_trader_startup.err.log", low_priority=True)
+        log("copy research restart requested")
 
 
 def start_services(owner: str, read: str) -> None:
