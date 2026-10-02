@@ -33,7 +33,7 @@ jobs:
           python-version: "3.12"
 
       - name: Compile Python runtime
-        run: python -m py_compile dashboard_bridge/dashboard_bridge.py bin/runtime_supervisor_v074.py bin/game_mode_watch.py myles_core.py myles_tools.py
+        run: python -m py_compile dashboard_bridge/dashboard_bridge.py bin/runtime_supervisor_v074.py bin/public_gateway_v074.py bin/game_mode_watch.py myles_core.py myles_tools.py
 
       - name: Verify BOM-safe pairing JSON
         run: python -c "import json,tempfile,pathlib;p=pathlib.Path(tempfile.gettempdir())/'myles_pair_bom.json';p.write_bytes(b'\\xef\\xbb\\xbf{\"code\":\"TEST1234\",\"pinned\":true,\"expires_epoch\":9999999999}');d=json.loads(p.read_text(encoding='utf-8-sig'));assert d['code']=='TEST1234' and d['pinned'] is True;print('BOM pairing JSON OK')"
@@ -61,3 +61,36 @@ jobs:
           grep -q "data/trading_status.json" index.html
           grep -q "SIMULATED PAPER" index.html
           ! grep -q "paper_equity','balance','paper_balance" index.html
+
+      - name: Reject stale or simulated dashboard artifacts
+        shell: bash
+        run: |
+          ! test -e status.json
+          ! test -e data-feed.json
+          ! test -e feed_data.js
+          ! test -e status_logic.js
+          ! test -e status_server.py
+          ! test -e dashboard.html
+          ! test -e myles_dashboard/index.html
+          ! test -e myles_dashboard/run_dashboard.py
+          ! test -e public-dashboard/index.html
+          ! test -e index_final.html
+          ! test -e app.py
+          ! test -e server.py
+          ! grep -q "NOT PUBLISHED" index.html
+          ! grep -q "937d" index.html
+          grep -q "Published status fallback is legacy or stale" index.html
+          grep -q "timeout:18000" index.html
+          echo "dashboard truth-only contract OK"
+
+      - name: Verify GMX resilient feed contract
+        shell: bash
+        run: |
+          grep -q "arbitrum-api-fallback.gmxinfra.io" quant/quant_service.mjs
+          grep -q "arbitrum-api-fallback.gmxinfra2.io" quant/quant_service.mjs
+          grep -q "Promise.all(enabled.map" quant/quant_service.mjs
+          grep -q "arbitrum-api-fallback.gmxinfra.io" dashboard_bridge/dashboard_bridge.py
+          grep -q "_verified_source.*data/trading_status.json" bin/public_gateway_v074.py
+          node --check quant/gmx_live.mjs
+          node --check quant/copy_trader_service.mjs
+          echo "GMX fallback and gateway telemetry contract OK"
