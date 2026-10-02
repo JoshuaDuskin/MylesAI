@@ -1003,7 +1003,7 @@ def configure_runtime_status_feed(
             )
             with urllib.request.urlopen(req, timeout=15) as response:
                 payload = json.loads(response.read(200000).decode("utf-8", errors="replace"))
-            if isinstance(payload, dict) and int(payload.get("schema_version") or 0) in {1, 2, 3}:
+            if isinstance(payload, dict) and int(payload.get("schema_version") or 0) in {1, 2, 3, 4}:
                 verified_raw = True
                 break
             verify_error = "status.json did not contain the expected schema"
