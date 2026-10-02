@@ -102,19 +102,39 @@ def core_json(path: str, method: str = "GET", body: Any = None, timeout: float =
 
 
 def find_runtime_status() -> dict[str, Any]:
+    """Return only a recent local runtime snapshot.
+
+    Repository-root status files were historical dashboard artifacts and must
+    never bleed old versions/timestamps into the live tower response.
+    """
     candidates = [
         ROOT / "data" / "public_status.json",
         ROOT / "data" / "dashboard_status.json",
         ROOT / "data" / "status.json",
-        ROOT / "public_status.json",
-        ROOT / "dashboard_status.json",
-        ROOT / "status.json",
         ROOT / "runtime" / "status.json",
     ]
     for path in candidates:
         data = load_json(path)
-        if isinstance(data, dict):
-            return data
+        if not isinstance(data, dict):
+            continue
+        stamp = data.get("generated_at") or data.get("updated_at") or data.get("timestamp") or data.get("time")
+        if not stamp:
+            continue
+        try:
+            if isinstance(stamp, (int, float)):
+                epoch = float(stamp)
+                if epoch < 100_000_000_000:
+                    age = time.time() - epoch
+                else:
+                    age = time.time() - (epoch / 1000.0)
+            else:
+                epoch = datetime.fromisoformat(str(stamp).replace("Z", "+00:00")).timestamp()
+                age = time.time() - epoch
+            if age < -300 or age > 300:
+                continue
+        except Exception:
+            continue
+        return data
     return {}
 
 
@@ -269,52 +289,61 @@ def fetch_quant_candles(symbol: str, period: str, limit: int = 240) -> dict[str,
         raise RuntimeError("Unsupported candle period")
     limit = max(50, min(500, int(limit or 240)))
     token = symbol.split("/", 1)[0]
-    url = (
-        "https://arbitrum-api.gmxinfra.io/prices/candles"
-        f"?tokenSymbol={quote(token)}&period={quote(period)}&limit={limit}"
+    bases = (
+        "https://arbitrum-api.gmxinfra.io",
+        "https://arbitrum-api-fallback.gmxinfra.io",
+        "https://arbitrum-api-fallback.gmxinfra2.io",
     )
-    req = Request(
-        url,
-        headers={"Accept": "application/json", "User-Agent": "MylesDashboardBridge/1.7"},
-        method="GET",
-    )
-    try:
-        with urlopen(req, timeout=12) as resp:
-            raw = json.loads(resp.read().decode("utf-8"))
-    except Exception as exc:
-        raise RuntimeError(f"GMX candle request failed: {exc}")
-    rows = raw if isinstance(raw, list) else raw.get("candles", []) if isinstance(raw, dict) else []
-    candles = []
-    for row in rows:
+    errors: list[str] = []
+    for base in bases:
+        url = (
+            f"{base}/prices/candles"
+            f"?tokenSymbol={quote(token)}&period={quote(period)}&limit={limit}"
+        )
+        req = Request(
+            url,
+            headers={"Accept": "application/json", "User-Agent": "MylesDashboardBridge/1.9"},
+            method="GET",
+        )
         try:
-            if isinstance(row, list) and len(row) >= 5:
-                ts, op, hi, lo, cl = row[:5]
-            elif isinstance(row, dict):
-                ts, op, hi, lo, cl = row.get("timestamp"), row.get("open"), row.get("high"), row.get("low"), row.get("close")
-            else:
-                continue
-            item = {
-                "timestamp": int(float(ts)),
-                "open": float(op),
-                "high": float(hi),
-                "low": float(lo),
-                "close": float(cl),
+            with urlopen(req, timeout=10) as resp:
+                raw = json.loads(resp.read().decode("utf-8"))
+            rows = raw if isinstance(raw, list) else raw.get("candles", []) if isinstance(raw, dict) else []
+            candles = []
+            for row in rows:
+                try:
+                    if isinstance(row, list) and len(row) >= 5:
+                        ts, op, hi, lo, cl = row[:5]
+                    elif isinstance(row, dict):
+                        ts, op, hi, lo, cl = row.get("timestamp"), row.get("open"), row.get("high"), row.get("low"), row.get("close")
+                    else:
+                        continue
+                    item = {
+                        "timestamp": int(float(ts)),
+                        "open": float(op),
+                        "high": float(hi),
+                        "low": float(lo),
+                        "close": float(cl),
+                    }
+                    if item["timestamp"] > 0 and min(item["open"], item["high"], item["low"], item["close"]) > 0:
+                        candles.append(item)
+                except Exception:
+                    continue
+            candles.sort(key=lambda x: x["timestamp"])
+            if len(candles) < 2:
+                raise RuntimeError("insufficient candle data")
+            return {
+                "ok": True,
+                "symbol": symbol,
+                "period": period,
+                "source": "GMX Oracle /prices/candles",
+                "source_host": base,
+                "generated_at": now_iso(),
+                "candles": candles,
             }
-            if item["timestamp"] > 0 and min(item["open"], item["high"], item["low"], item["close"]) > 0:
-                candles.append(item)
-        except Exception:
-            continue
-    candles.sort(key=lambda x: x["timestamp"])
-    if len(candles) < 2:
-        raise RuntimeError("GMX returned insufficient candle data")
-    return {
-        "ok": True,
-        "symbol": symbol,
-        "period": period,
-        "source": "GMX Oracle /prices/candles",
-        "generated_at": now_iso(),
-        "candles": candles,
-    }
+        except Exception as exc:
+            errors.append(f"{base}: {exc}")
+    raise RuntimeError("GMX candle request failed across all oracle hosts: " + " | ".join(errors))
 
 
 def clamp_num(value: Any, low: float, high: float, fallback: float) -> float:
@@ -584,7 +613,7 @@ def system_metrics() -> dict[str, Any]:
         out["uptime_seconds"] = int(time.time() - psutil.boot_time())
     except Exception:
         pass
-    status, tags = http_json("http://127.0.0.1:11434/api/tags", timeout=2.0)
+    status, tags = http_json("http://127.0.0.1:11434/api/tags", timeout=0.4)
     if status == 200 and isinstance(tags, dict):
         models = tags.get("models") or []
         if isinstance(models, list):
@@ -672,7 +701,7 @@ def build_status() -> dict[str, Any]:
     result.setdefault("schema_version", 4)
     result["generated_at"] = now_iso()
 
-    health_code, health = core_json("/health", timeout=4.0)
+    health_code, health = core_json("/health", timeout=1.5)
     if not isinstance(health, dict):
         health = {}
     existing_myles = result.get("myles") if isinstance(result.get("myles"), dict) else {}
@@ -686,7 +715,7 @@ def build_status() -> dict[str, Any]:
     if health.get("status") and not result.get("status"):
         result["status"] = health["status"]
 
-    jobs_code, jobs_payload = core_json("/api/jobs", timeout=4.0)
+    jobs_code, jobs_payload = core_json("/api/jobs", timeout=1.5)
     jobs = normalize_jobs(jobs_payload) if jobs_code == 200 else []
     if jobs:
         running = next((j for j in jobs if str(j.get("state", "")).lower() in {"running", "active", "working"}), None)
@@ -701,13 +730,13 @@ def build_status() -> dict[str, Any]:
 
     # Pull live public/runtime state directly from core when available so the
     # dashboard does not depend on GitHub snapshots for owner controls.
-    public_code, public_payload = core_json("/api/public-status", timeout=4.0)
+    public_code, public_payload = core_json("/api/public-status", timeout=1.5)
     if public_code == 200 and isinstance(public_payload, dict):
         for key in ("continuous_program", "current_task", "queue", "game_mode", "game_mode_detail", "activity", "model", "runtime"):
             if key in public_payload:
                 result[key] = public_payload[key]
 
-    capabilities_code, capabilities_payload = core_json("/api/capabilities", timeout=6.0)
+    capabilities_code, capabilities_payload = core_json("/api/capabilities", timeout=1.0)
     capability_payload_is_useful = False
     if isinstance(capabilities_payload, list):
         capability_payload_is_useful = bool(capabilities_payload)
@@ -860,7 +889,7 @@ def send_to_myles(text: str) -> tuple[int, Any, str]:
 
 
 class Handler(BaseHTTPRequestHandler):
-    server_version = "MylesDashboardBridge/1.8"
+    server_version = "MylesDashboardBridge/1.9"
 
     def log_message(self, fmt: str, *args: Any) -> None:
         line = f"[{now_iso()}] {self.client_address[0]} {fmt % args}\n"
