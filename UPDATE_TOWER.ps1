@@ -106,6 +106,77 @@ try {
     Log ("WARNING: could not retire legacy HKCU Run supervisor launcher: " + $_.Exception.Message)
 }
 
+# Retire every known old MYLES auto-launch path that can race the canonical
+# supervisor. Previous builds used Run/RunOnce, Startup-folder files, and
+# Scheduled Tasks. Keep a recovery record before removing only entries that
+# explicitly point at this MYLES root and a retired launcher/supervisor.
+$AutoLaunchPattern = "(?i)(runtime_supervisor(?:_v074)?\.py|START_MYLESAI\.cmd|launch_myles\.py|myles_console(?:_v074)?\.py)"
+$RunKeyCandidates = @(
+    "HKCU:\Software\Microsoft\Windows\CurrentVersion\Run",
+    "HKCU:\Software\Microsoft\Windows\CurrentVersion\RunOnce",
+    "HKLM:\Software\Microsoft\Windows\CurrentVersion\Run",
+    "HKLM:\Software\Microsoft\Windows\CurrentVersion\RunOnce"
+)
+foreach ($key in $RunKeyCandidates) {
+    try {
+        $props = Get-ItemProperty -Path $key -ErrorAction SilentlyContinue
+        if ($null -eq $props) { continue }
+        foreach ($prop in $props.PSObject.Properties) {
+            if ($prop.Name -match "^PS(Path|ParentPath|ChildName|Drive|Provider)$") { continue }
+            $value = [string]$prop.Value
+            if ($value -and $value -match [regex]::Escape($Root) -and $value -match $AutoLaunchPattern) {
+                Add-Content -Path (Join-Path $Recovery "retired_autolaunch_registry.txt") -Value ("{0} :: {1}={2}" -f $key,$prop.Name,$value)
+                Remove-ItemProperty -Path $key -Name $prop.Name -Force -ErrorAction SilentlyContinue
+                Log ("PASS: retired legacy auto-launch registry value " + $prop.Name)
+            }
+        }
+    } catch {
+        Log ("WARNING: registry auto-launch cleanup failed for " + $key + ": " + $_.Exception.Message)
+    }
+}
+
+try {
+    $startupFolders = @(
+        [Environment]::GetFolderPath("Startup"),
+        [Environment]::GetFolderPath("CommonStartup")
+    ) | Where-Object { $_ -and (Test-Path $_) } | Sort-Object -Unique
+    $shell = New-Object -ComObject WScript.Shell
+    foreach ($folder in $startupFolders) {
+        Get-ChildItem $folder -File -ErrorAction SilentlyContinue | ForEach-Object {
+            $evidence = ""
+            if ($_.Extension -ieq ".lnk") {
+                try {
+                    $shortcut = $shell.CreateShortcut($_.FullName)
+                    $evidence = ([string]$shortcut.TargetPath + " " + [string]$shortcut.Arguments)
+                } catch {}
+            } elseif ($_.Extension -match "(?i)\.(cmd|bat|vbs|ps1)$") {
+                try { $evidence = Get-Content $_.FullName -Raw -ErrorAction SilentlyContinue } catch {}
+            }
+            if ($evidence -and $evidence -match [regex]::Escape($Root) -and $evidence -match $AutoLaunchPattern) {
+                Add-Content -Path (Join-Path $Recovery "retired_autolaunch_startup.txt") -Value $_.FullName
+                Remove-Item $_.FullName -Force -ErrorAction SilentlyContinue
+                Log ("PASS: retired legacy Startup launcher " + $_.Name)
+            }
+        }
+    }
+} catch {
+    Log ("WARNING: Startup-folder cleanup failed: " + $_.Exception.Message)
+}
+
+try {
+    Get-ScheduledTask -ErrorAction SilentlyContinue | ForEach-Object {
+        $task = $_
+        $evidence = (($task.Actions | ForEach-Object { ([string]$_.Execute + " " + [string]$_.Arguments) }) -join " ")
+        if ($evidence -and $evidence -match [regex]::Escape($Root) -and $evidence -match $AutoLaunchPattern) {
+            Add-Content -Path (Join-Path $Recovery "retired_autolaunch_tasks.txt") -Value ($task.TaskPath + $task.TaskName + " :: " + $evidence)
+            Unregister-ScheduledTask -TaskName $task.TaskName -TaskPath $task.TaskPath -Confirm:$false -ErrorAction SilentlyContinue
+            Log ("PASS: retired legacy scheduled launcher " + $task.TaskPath + $task.TaskName)
+        }
+    }
+} catch {
+    Log ("WARNING: scheduled-task cleanup failed: " + $_.Exception.Message)
+}
+
 if (-not (Test-Path (Join-Path $Root ".git"))) {
     Fail "$Root is not a Git repository."
 }
@@ -447,6 +518,12 @@ if ($RemainingSupervisors.Count -gt 0) {
     Fail "An older MYLES supervisor could not be stopped; refusing to start a second mutex owner."
 }
 
+# Forced termination may prevent an old supervisor from deleting its filesystem
+# lock/PID marker. With no supervisor process left, both markers are stale.
+Remove-Item (Join-Path $Data "runtime_supervisor_v074.lock") -Force -ErrorAction SilentlyContinue
+Remove-Item $SupervisorPidFile -Force -ErrorAction SilentlyContinue
+Log "PASS: cleared stale supervisor lock/PID markers after confirming no supervisor is running"
+
 $SupervisorStdOut = Join-Path $Root "logs\runtime_supervisor_startup.out.log"
 $SupervisorStdErr = Join-Path $Root "logs\runtime_supervisor_startup.err.log"
 Remove-Item $SupervisorStdOut, $SupervisorStdErr -Force -ErrorAction SilentlyContinue
@@ -587,6 +664,9 @@ while ($SupervisorRows.Count -ne 1 -and $stabilizationAttempt -lt 3) {
 }
 if ($SupervisorRows.Count -ne 1) {
     Log ("FAIL: supervisor stabilization ended with count " + $SupervisorRows.Count)
+    foreach ($row in $SupervisorRows) {
+        Log ("Supervisor evidence PID " + $row.ProcessId + " :: " + ([string]$row.CommandLine))
+    }
 }
 $SupervisorCount = $SupervisorRows.Count
 $QuantCount = @($RuntimeProcesses | Where-Object { ([string]$_.CommandLine) -match "quant_service\.mjs" }).Count
