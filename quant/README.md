@@ -1,8 +1,8 @@
-# Myles Quant v0.6.2
+# Myles Quant stack
 
-Myles Quant combines GMX market research, a chart-based scalp terminal, simulated forward-paper trading, and an owner-gated GMX live execution adapter.
+Myles Quant combines GMX market research, a chart-based scalp terminal, simulated forward-paper trading, and an owner-gated GMX live execution adapter. Component versions are reported by the running services; this document intentionally does not assign one stale version number to the whole stack.
 
-## v0.6 architecture
+## Architecture
 
 - **Research / paper engine:** `quant_service.mjs`
 - **GMX live adapter:** `gmx_live.mjs`
