@@ -544,6 +544,32 @@ if ($SupervisorRows.Count -gt 1) {
 } elseif ($SupervisorRows.Count -eq 0) {
     Log "FAIL: no canonical supervisor was present at final runtime verification"
 }
+# Final stabilization: do not finish while the canonical owner is absent
+# or while another supervisor owns the mutex. A launcher can race this update
+# during the first few seconds after source switching.
+$stabilizationAttempt = 0
+while ($SupervisorRows.Count -ne 1 -and $stabilizationAttempt -lt 3) {
+    $stabilizationAttempt++
+    Log ("Supervisor stabilization attempt " + $stabilizationAttempt + " of 3")
+    foreach ($row in $SupervisorRows) {
+        try {
+            Stop-Process -Id ([int]$row.ProcessId) -Force -ErrorAction SilentlyContinue
+            Stop-ProcessTreeQuiet ([int]$row.ProcessId)
+        } catch {}
+    }
+    Start-Sleep -Seconds 2
+    $CanonicalSupervisor = Start-Process -FilePath $PythonW -ArgumentList $Supervisor -WorkingDirectory $Root -WindowStyle Hidden -RedirectStandardOutput $SupervisorStdOut -RedirectStandardError $SupervisorStdErr -PassThru
+    $CanonicalSupervisorPid = $CanonicalSupervisor.Id
+    Log ("Started stabilized canonical supervisor PID " + $CanonicalSupervisorPid)
+    Start-Sleep -Seconds 5
+    $RuntimeProcesses = @(Get-CimInstance Win32_Process -ErrorAction SilentlyContinue | Where-Object {
+        ([string]$_.CommandLine) -match "(?i)(runtime_supervisor_v074|myles_core\.py|dashboard_bridge\.py|public_gateway_v074\.py|quant_service\.mjs|gmx_live\.mjs|copy_trader_service\.mjs|game_mode_watch)"
+    })
+    $SupervisorRows = @($RuntimeProcesses | Where-Object { ([string]$_.CommandLine) -match "runtime_supervisor_v074\.py" })
+}
+if ($SupervisorRows.Count -ne 1) {
+    Log ("FAIL: supervisor stabilization ended with count " + $SupervisorRows.Count)
+}
 $SupervisorCount = $SupervisorRows.Count
 $QuantCount = @($RuntimeProcesses | Where-Object { ([string]$_.CommandLine) -match "quant_service\.mjs" }).Count
 
