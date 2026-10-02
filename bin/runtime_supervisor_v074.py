@@ -76,21 +76,10 @@ shared_lock_fd = acquire_shared_instance_lock()
 if shared_lock_fd is None:
     sys.exit(0)
 
+# The filesystem lock above is the single authoritative instance guard.
+# A Windows Global mutex can survive through a launcher/interpreter process
+# split and incorrectly block a clean restart, so it is intentionally unused.
 mutex = None
-if os.name == "nt":
-    k32 = ctypes.windll.kernel32
-    # Keep the mutex as an additional same-scope guard, while the file lock
-    # above is the authoritative guard across elevated/non-elevated sessions.
-    handle = k32.CreateMutexW(None, False, "Global\\MylesRuntimeSupervisor_v074")
-    if handle:
-        mutex = handle
-        if k32.GetLastError() == 183:
-            os.close(shared_lock_fd)
-            try:
-                SUPERVISOR_LOCK_FILE.unlink(missing_ok=True)
-            except Exception:
-                pass
-            sys.exit(0)
 
 
 def log(message: object) -> None:
