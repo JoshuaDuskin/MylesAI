@@ -169,7 +169,7 @@ def main():
         and core_source.index("elif behavior_feedback_request(raw):")
             < core_source.index("elif quick.looks_like_quick_public_lookup(raw):")
             < core_source.index("elif self_capability_request(raw):")
-            < core_source.index("elif strong_action_request(raw):")
+            < core_source.index("elif strong_action_request(raw) and not natural_question(raw):")
     )
     lookup_branch = core_source.split('if intent == "lookup":', 1)[1].split('elif intent == "feedback":', 1)[0]
     checks["quick_lookup_has_no_job_creation"] = (
