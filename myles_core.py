@@ -48,12 +48,12 @@ CONVERSATION_TOOLS = [
 
 CONVERSATION_SYSTEM = """
 CANONICAL PROJECT RESOLUTION:
-- The owner's one Myles production dashboard is JoshuaDuskin/MylesDashboard.
-- The Quant source repository is JoshuaDuskin/trading-dashboard.
+- The owner's one Myles production dashboard is JoshuaDuskin/MylesAI.
+- The Quant source repository is JoshuaDuskin/MylesAI.
 - Live runtime/chat/trading telemetry comes from the authenticated tower bridge, not a GitHub status repository.
 - Never create another Myles dashboard/control-center/progress/runtime-status/live-status repository.
 - Before proposing or creating any repository, check whether the project already exists and reuse its canonical repository.
-- A request to improve/fix/update "the dashboard" always means JoshuaDuskin/MylesDashboard unless the owner explicitly names another non-Myles project.
+- A request to improve/fix/update "the dashboard" always means JoshuaDuskin/MylesAI unless the owner explicitly names another non-Myles project.
 # MYLES_CANONICAL_REPOSITORY_RESOLUTION_v4
 
 IDENTITY / VOICE:
@@ -163,8 +163,8 @@ def create_job(
         hard_rule = (
             "\n\nOWNER-LOCKED REPOSITORIES (MANDATORY): Continuous/self-improvement jobs may not mutate remote GitHub at all. "
             "Do not publish GitHub Pages, push Git commits, create/rename/archive/delete repositories, or use browser automation to change GitHub. "
-            "JoshuaDuskin/MylesDashboard is the one canonical owner dashboard and is read-only to continuous work. "
-            "JoshuaDuskin/trading-dashboard is Quant source and is also read-only to continuous work. "
+            "JoshuaDuskin/MylesAI is the one canonical owner dashboard and is read-only to continuous work. "
+            "JoshuaDuskin/MylesAI is Quant source and is also read-only to continuous work. "
             "Legacy dashboard repositories must never be revived or replaced. Live runtime/status data belongs on the authenticated tower bridge, not GitHub commits."
         )
         if "OWNER-LOCKED REPOSITORIES (MANDATORY)" not in str(prompt or ""):
@@ -173,7 +173,7 @@ def create_job(
     if str(source or "").strip().lower() == "continuous":
         dashboard_lock = (
             "\n\nOWNER-LOCKED DASHBOARD (MANDATORY): "
-            "JoshuaDuskin/MylesDashboard is production owner UI. "
+            "JoshuaDuskin/MylesAI is production owner UI. "
             "During continuous/self-improvement work you may inspect its health/status only. "
             "Do NOT redesign, edit, write, commit, push, publish, force-update, replace, clone-and-push, "
             "or otherwise mutate that repository or its GitHub Pages production UI. "
@@ -756,7 +756,7 @@ def _owner_affirms_auth_resume(raw: str) -> bool:
 
 
 
-CANONICAL_MYLES_DASHBOARD_URL = "https://joshuaduskin.github.io/MylesDashboard/"
+CANONICAL_MYLES_DASHBOARD_URL = "https://joshuaduskin.github.io/MylesAI/"
 
 def _dashboard_url_request(raw: str) -> bool:
     t = re.sub(r"\s+", " ", str(raw or "").strip().lower())
@@ -826,7 +826,7 @@ def _capability_truth_report() -> str:
 
 
 CONTINUOUS_DEFAULT_MISSION = """
-OWNER-LOCKED DASHBOARD: Continuous improvement must never modify, commit, push, publish, replace, or create alternatives to JoshuaDuskin/MylesDashboard. Inspect health/status only. # MYLES_CONTINUOUS_MISSION_DASHBOARD_LOCK_v2
+OWNER-LOCKED DASHBOARD: Continuous improvement must never modify, commit, push, publish, replace, or create alternatives to JoshuaDuskin/MylesAI. Inspect health/status only. # MYLES_CONTINUOUS_MISSION_DASHBOARD_LOCK_v2
 Continuously improve Myles and the owner's personal Myles ecosystem.
 Each cycle must choose ONE highest-value concrete improvement, implement it safely, test it, verify it, and finish the cycle so the next cycle can choose again.
 
@@ -992,7 +992,7 @@ THIS CYCLE:
 - Pick ONE highest-value improvement that is not already verified complete.
 - If the previous cycle failed, prioritize understanding and overcoming that failure rather than repeating the same action.
 - Make the change through a safe candidate/test/promote workflow when changing Myles itself.
-- For dashboard work, use only JoshuaDuskin/MylesDashboard and real sanitized state.
+- For dashboard work, use only JoshuaDuskin/MylesAI and real sanitized state.
 - For trading work, stay in research/backtest/paper/simulation/risk-control territory; never place a real-money trade.
 - Produce verifiable evidence and stop this cycle after that concrete improvement is complete. The runtime will automatically create the next cycle.
 """
