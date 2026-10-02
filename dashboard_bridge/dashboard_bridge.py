@@ -220,23 +220,31 @@ def trading_diagnostics() -> dict[str, Any]:
 
 
 def find_trading_data() -> dict[str, Any]:
-    """Return only fresh, canonical GMX paper telemetry with its proof attached."""
+    """Return canonical paper telemetry, explicitly marked fresh, paused, or stale."""
     ctx = _trading_context()
-    blockers = _trading_blockers(ctx)
-    if blockers:
-        return {}
     data = ctx.get("data")
     if not isinstance(data, dict):
         return {}
-    verified = dict(data)
-    verified["_verified"] = True
-    verified["_verified_source"] = "data/trading_status.json"
-    verified["_verified_age_seconds"] = round(
+    if str(data.get("account_type") or "").strip().upper() != "SIMULATED PAPER":
+        return {}
+    if str(data.get("mode") or "").strip().lower() != "paper":
+        return {}
+    blockers = _trading_blockers(ctx)
+    published = dict(data)
+    published["_verified"] = not blockers
+    published["_verified_source"] = "data/trading_status.json"
+    published["_verified_age_seconds"] = round(
         max(float(ctx.get("age_seconds") or 0), float(ctx.get("generated_age_seconds") or 0)), 1
     )
-    verified["_verified_max_age_seconds"] = ctx.get("max_age_seconds")
-    verified["_degraded"] = not bool(verified.get("markets"))
-    return verified
+    published["_verified_max_age_seconds"] = ctx.get("max_age_seconds")
+    published["_blockers"] = blockers
+    published["_telemetry_state"] = (
+        "paused_game_mode" if "paused_game_mode" in blockers
+        else "stale" if blockers
+        else "live"
+    )
+    published["_degraded"] = bool(blockers) or not bool(published.get("markets"))
+    return published
 
 
 QUANT_DIR = ROOT / "quant"
@@ -433,6 +441,8 @@ def save_quant_config(payload: Any) -> dict[str, Any]:
 
 
 def start_quant_once(backtest_only: bool = False) -> int | None:
+    if bool(find_game_mode_state().get("active")):
+        return None
     if not QUANT_SCRIPT.is_file():
         return None
     node = shutil.which("node") or shutil.which("node.exe")
@@ -594,15 +604,64 @@ def http_json(url: str, timeout: float = 5.0) -> tuple[int, Any]:
         return 599, {"error": str(exc)}
 
 
+def _task_label(value: Any, limit: int = 110) -> str:
+    text = re.sub(r"\s+", " ", str(value or "").strip())
+    low = text.lower()
+    if "continuous improvement cycle" in low or "owner-locked dashboard" in low:
+        return "Run verified continuous improvement"
+    if "quant" in low and any(word in low for word in ("gmx", "trading", "game mode")):
+        return "Repair dashboard, game mode, and Quant feeds"
+    first = re.split(r"(?<=[.!?])\s+", text, maxsplit=1)[0].strip()
+    label = first or "Owner task"
+    return label if len(label) <= limit else label[: limit - 1].rstrip(" ,.;:-") + "…"
+
+
+def _public_job(job: dict[str, Any]) -> dict[str, Any]:
+    source = str(job.get("source") or "owner")
+    label = _task_label(job.get("label") or job.get("title") or job.get("prompt"))
+    state = str(job.get("truth_state") or job.get("state") or "")
+    if source == "continuous":
+        summary = "Working through the next verified improvement cycle."
+    elif state.lower() in {"completed", "done", "success"}:
+        summary = f"Completed {label}."
+    elif state.lower() in {"failed", "error", "blocked"}:
+        summary = f"Work stopped while handling {label}."
+    elif state.lower() in {"pending", "queued", "waiting"}:
+        summary = f"Queued: {label}."
+    else:
+        summary = f"Working on {label}."
+    return {
+        key: value for key, value in {
+            "id": job.get("id"),
+            "label": label,
+            "summary": summary,
+            "source": source,
+            "state": state,
+            "phase": job.get("phase"),
+            "phase_display": job.get("phase_display"),
+            "created_at": job.get("created_at"),
+            "started_at": job.get("started_at"),
+            "updated_at": job.get("updated_at"),
+            "completed_at": job.get("completed_at"),
+            "heartbeat_at": job.get("heartbeat_at"),
+            "last_verified_progress_at": job.get("material_progress_at") or job.get("last_verified_progress_at"),
+            "worker_alive": job.get("live_worker") if "live_worker" in job else job.get("worker_alive"),
+            "error": _task_label(job.get("error"), 180) if job.get("error") else None,
+        }.items() if value is not None
+    }
+
+
 def normalize_jobs(payload: Any) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
     if isinstance(payload, list):
-        return [x for x in payload if isinstance(x, dict)]
-    if isinstance(payload, dict):
+        rows = [x for x in payload if isinstance(x, dict)]
+    elif isinstance(payload, dict):
         for key in ("jobs", "items", "tasks"):
             value = payload.get(key)
             if isinstance(value, list):
-                return [x for x in value if isinstance(x, dict)]
-    return []
+                rows = [x for x in value if isinstance(x, dict)]
+                break
+    return [_public_job(row) for row in rows]
 
 
 def build_status() -> dict[str, Any]:
@@ -971,6 +1030,38 @@ class Handler(BaseHTTPRequestHandler):
             self.deny(400, "JSON object required")
             return
 
+        if path == "/dashboard/control/game-mode":
+            enabled = bool(payload.get("enabled"))
+            cfg_path = ROOT / "data" / "config.json"
+            cfg = load_json(cfg_path)
+            if not isinstance(cfg, dict):
+                cfg = {}
+            cfg["light_mode"] = enabled
+            cfg["light_mode_source"] = "manual_dashboard" if enabled else ""
+            cfg_path.parent.mkdir(parents=True, exist_ok=True)
+            tmp = cfg_path.with_name(cfg_path.name + ".tmp")
+            tmp.write_text(json.dumps(cfg, indent=2), encoding="utf-8")
+            os.replace(tmp, cfg_path)
+            game_state = find_game_mode_state()
+            detected = bool(game_state.get("active"))
+            self.json_response(200, {
+                "ok": True,
+                "requested": enabled,
+                "active": detected or enabled,
+                "automatic_game_detected": detected,
+                "detail": "Game detected; automatic performance mode remains active." if detected and not enabled else "Gaming performance mode updated.",
+            })
+            return
+
+        if path == "/dashboard/control/continuous":
+            enabled = bool(payload.get("enabled"))
+            code, result = core_json("/api/control/continuous", method="POST", body={"enabled": enabled}, timeout=12.0)
+            if 200 <= code < 300:
+                self.json_response(200, result)
+            else:
+                self.json_response(502, {"error": "Myles core rejected the continuous-improvement control", "detail": result})
+            return
+
         if path.startswith("/dashboard/quant/live/"):
             try:
                 route = path.removeprefix("/dashboard/quant/live/")
@@ -1018,8 +1109,8 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/dashboard/quant/config":
             try:
                 cfg = save_quant_config(payload)
-                pid = start_quant_once(backtest_only=True)
-                self.json_response(200, {"ok": True, "config": cfg, "validation_pid": pid})
+                pid = start_quant_once(backtest_only=False)
+                self.json_response(200, {"ok": True, "config": cfg, "quant_pid": pid, "paused_for_game": bool(find_game_mode_state().get("active"))})
             except Exception as exc:
                 self.deny(400, str(exc))
             return
