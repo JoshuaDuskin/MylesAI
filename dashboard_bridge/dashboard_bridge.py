@@ -118,6 +118,11 @@ def find_runtime_status() -> dict[str, Any]:
     return {}
 
 
+def find_game_mode_state() -> dict[str, Any]:
+    state = load_json(ROOT / "data" / "game_mode_state.json")
+    return state if isinstance(state, dict) else {}
+
+
 def find_trading_data() -> dict[str, Any]:
     """Return only fresh telemetry written by the canonical running Quant engine.
 
@@ -151,10 +156,25 @@ def find_trading_data() -> dict[str, Any]:
     engine_status = str(engine.get("status") or "").strip().lower()
     data_source = str(engine.get("data_source") or "").strip()
     markets = data.get("markets") if isinstance(data.get("markets"), list) else []
+    account_type = str(data.get("account_type") or "").strip().upper()
+    mode = str(data.get("mode") or "").strip().lower()
+
+    generated_at = str(data.get("generated_at") or "").strip()
+    if not generated_at:
+        return {}
+    try:
+        parsed_generated = datetime.fromisoformat(generated_at.replace("Z", "+00:00"))
+        generated_age = max(0.0, time.time() - parsed_generated.timestamp())
+    except Exception:
+        return {}
+    if generated_age > max_age:
+        return {}
 
     if engine_status != "running":
         return {}
     if "gmx" not in data_source.lower():
+        return {}
+    if account_type != "SIMULATED PAPER" or mode != "paper":
         return {}
     if not markets:
         return {}
@@ -162,7 +182,7 @@ def find_trading_data() -> dict[str, Any]:
     verified = dict(data)
     verified["_verified"] = True
     verified["_verified_source"] = "data/trading_status.json"
-    verified["_verified_age_seconds"] = round(age_seconds, 1)
+    verified["_verified_age_seconds"] = round(max(age_seconds, generated_age), 1)
     verified["_verified_max_age_seconds"] = max_age
     return verified
 
