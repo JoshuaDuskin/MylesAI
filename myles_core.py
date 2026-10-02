@@ -1446,16 +1446,51 @@ def telegram_loop() -> None:
             STOP.wait(5)
 
 
+def _pause_active_job_for_light_mode(job: dict[str, Any]) -> None:
+    """Pause heavy owner/continuous work without losing its durable queue entry."""
+    job_id = str(job.get("id") or "")
+    if not job_id:
+        return
+    _terminate_pid(job.get("runner_pid"))
+    set_job(
+        job_id,
+        state="pending",
+        phase="paused_for_game",
+        runner_pid=None,
+        heartbeat_at=None,
+        started_at=None,
+        error=None,
+    )
+    trace(job_id, "job.paused_for_game", "Automatic/manual light mode paused background execution.")
+
+
 def monitor_loop() -> None:
     while not STOP.wait(3):
         try:
+            cfg = load_config()
+            light = bool(cfg.get("light_mode"))
+            active = active_job()
+
+            if light:
+                # Gaming/latency mode is intentionally minimal. Do not run
+                # capability ticks, status-feed publishing, continuous improvement,
+                # or any durable job worker while the owner is gaming.
+                if active:
+                    _pause_active_job_for_light_mode(active)
+                if RESTART_REQUEST.exists():
+                    log("restart request detected during light mode; supervisor will perform verified restart")
+                    STOP.set()
+                    threading.Thread(target=lambda: (time.sleep(1), os._exit(0)), daemon=True).start()
+                continue
+
             capabilities.run_background_ticks()
-            # Built-in sanitized public status feed is also background work, but it
-            # never blocks job dispatch and only pushes when meaningful state changes.
+            # Built-in sanitized public status feed is nonessential during gaming
+            # and therefore only runs in normal mode.
             try:
                 tools.runtime_status_feed_tick_async()
             except Exception as exc:
                 log(f"status feed tick error: {type(exc).__name__}: {exc}")
+
             active = active_job()
             if active:
                 t = job_truth(active)
@@ -1464,8 +1499,7 @@ def monitor_loop() -> None:
                     recover_job(active["id"], reason=f"Automatic recovery: {reason}")
                 continue
 
-            cfg = load_config()
-            if not bool(cfg.get("light_mode")) and not CHAT_BUSY.is_set():
+            if not CHAT_BUSY.is_set():
                 _continuous_program_tick()
                 pending = next_pending_job()
                 if pending:
