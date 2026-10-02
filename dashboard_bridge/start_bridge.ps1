@@ -123,7 +123,7 @@ $expiresLocal = [DateTimeOffset]::FromUnixTimeSeconds($PairExpires).LocalDateTim
 @"
 MYLES DASHBOARD PHONE PAIRING
 =============================
-Dashboard: https://joshuaduskin.github.io/MylesDashboard/
+Dashboard: https://joshuaduskin.github.io/MylesAI/
 Bridge:    $PublicUrl
 Pair code: $PairCode
 Expires:   $expiresLocal
