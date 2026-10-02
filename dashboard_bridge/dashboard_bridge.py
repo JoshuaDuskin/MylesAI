@@ -40,6 +40,23 @@ RATE_LOCK = threading.Lock()
 TOKEN = ""
 PAIR_CODE = ""
 PAIR_EXPIRES = 0.0
+PAIR_CODE_FILE: Path | None = None
+
+
+def refresh_pair_state() -> None:
+    """Reload the pinned/recovery pairing code without restarting the bridge."""
+    global PAIR_CODE, PAIR_EXPIRES
+    if PAIR_CODE_FILE is None:
+        return
+    try:
+        pair_data = json.loads(PAIR_CODE_FILE.read_text(encoding="utf-8"))
+        code = str(pair_data.get("code") or "").strip().upper()
+        expires = float(pair_data.get("expires_epoch") or 0)
+        if code:
+            PAIR_CODE = code
+            PAIR_EXPIRES = expires
+    except Exception:
+        pass
 
 
 def now_iso() -> str:
@@ -806,6 +823,7 @@ class Handler(BaseHTTPRequestHandler):
     def do_POST(self) -> None:  # noqa: N802
         path = self.path.split("?", 1)[0]
         if path == "/dashboard/pair":
+            refresh_pair_state()
             origin = self.headers.get("Origin", "")
             if origin and origin not in ALLOWED_ORIGINS and not origin.startswith("http://127.0.0.1:") and not origin.startswith("http://localhost:"):
                 self.deny(403, "Origin not allowed")
@@ -968,7 +986,7 @@ class Handler(BaseHTTPRequestHandler):
 
 
 def main() -> None:
-    global TOKEN, PORT, PAIR_CODE, PAIR_EXPIRES
+    global TOKEN, PORT, PAIR_CODE, PAIR_EXPIRES, PAIR_CODE_FILE
     parser = argparse.ArgumentParser(description="Authenticated phone-to-tower bridge for Myles Dashboard")
     parser.add_argument("--token-file", required=True)
     parser.add_argument("--port", type=int, default=8790)
@@ -980,13 +998,8 @@ def main() -> None:
     if len(TOKEN) < 24:
         raise SystemExit("Pairing token is missing or too short")
     if args.pair_code_file:
-        try:
-            pair_data = json.loads(Path(args.pair_code_file).read_text(encoding="utf-8"))
-            PAIR_CODE = str(pair_data.get("code") or "").strip().upper()
-            PAIR_EXPIRES = float(pair_data.get("expires_epoch") or 0)
-        except Exception:
-            PAIR_CODE = ""
-            PAIR_EXPIRES = 0.0
+        PAIR_CODE_FILE = Path(args.pair_code_file)
+        refresh_pair_state()
     server = ThreadingHTTPServer((HOST, PORT), Handler)
     server.daemon_threads = True
     print(json.dumps({"ok": True, "listen": f"http://{HOST}:{PORT}", "core": CORE, "time": now_iso()}), flush=True)
