@@ -34,3 +34,5 @@ __pycache__/
 quant/quant_config.json
 legacy_repo_cleanup_v055/
 legacy_repo_cleanup_v056/
+legacy_repo_cleanup/
+trading_dashboard_repo/
