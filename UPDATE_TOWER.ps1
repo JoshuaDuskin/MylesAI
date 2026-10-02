@@ -379,19 +379,69 @@ if (-not (Test-Path $Supervisor)) {
 }
 
 Log "Enforcing a single canonical supervisor..."
+$SupervisorPidFile = Join-Path $Data "runtime_supervisor_v074.pid"
+$SupervisorPids = @()
+
+if (Test-Path $SupervisorPidFile) {
+    try {
+        $pidFromFile = [int](Get-Content $SupervisorPidFile -Raw).Trim()
+        if ($pidFromFile -gt 0) { $SupervisorPids += $pidFromFile }
+    } catch {}
+}
+
 $ExistingSupervisors = @(Get-CimInstance Win32_Process -ErrorAction SilentlyContinue | Where-Object {
     $_.ProcessId -ne $PID -and ([string]$_.CommandLine) -match "(?i)runtime_supervisor_v074\.py"
 })
-foreach ($proc in $ExistingSupervisors) {
+$SupervisorPids += @($ExistingSupervisors | ForEach-Object { [int]$_.ProcessId })
+
+foreach ($supervisorPid in ($SupervisorPids | Sort-Object -Unique)) {
+    if ($supervisorPid -le 0 -or $supervisorPid -eq $PID) { continue }
     try {
-        Log ("Stopping leftover supervisor PID " + $proc.ProcessId)
-        Stop-Process -Id $proc.ProcessId -Force -ErrorAction SilentlyContinue
+        Log ("Stopping existing supervisor PID " + $supervisorPid + " before starting replacement")
+        Stop-Process -Id $supervisorPid -Force -ErrorAction SilentlyContinue
+        & taskkill.exe /PID $supervisorPid /T /F *> $null
     } catch {}
 }
-Start-Sleep -Seconds 1
-$CanonicalSupervisor = Start-Process -FilePath $PythonW -ArgumentList $Supervisor -WorkingDirectory $Root -WindowStyle Hidden -PassThru
+
+$supervisorDeadline = (Get-Date).AddSeconds(15)
+$RemainingSupervisors = @()
+do {
+    $RemainingSupervisors = @(Get-CimInstance Win32_Process -ErrorAction SilentlyContinue | Where-Object {
+        $_.ProcessId -ne $PID -and ([string]$_.CommandLine) -match "(?i)runtime_supervisor_v074\.py"
+    })
+    if ($RemainingSupervisors.Count -eq 0) { break }
+    Start-Sleep -Seconds 1
+} while ((Get-Date) -lt $supervisorDeadline)
+
+if ($RemainingSupervisors.Count -gt 0) {
+    Fail "An older MYLES supervisor could not be stopped; refusing to start a second mutex owner."
+}
+
+$SupervisorStdOut = Join-Path $Root "logs\runtime_supervisor_startup.out.log"
+$SupervisorStdErr = Join-Path $Root "logs\runtime_supervisor_startup.err.log"
+Remove-Item $SupervisorStdOut, $SupervisorStdErr -Force -ErrorAction SilentlyContinue
+$CanonicalSupervisor = Start-Process -FilePath $PythonW -ArgumentList $Supervisor -WorkingDirectory $Root -WindowStyle Hidden -RedirectStandardOutput $SupervisorStdOut -RedirectStandardError $SupervisorStdErr -PassThru
 $CanonicalSupervisorPid = $CanonicalSupervisor.Id
 Log ("Started canonical hidden supervisor PID " + $CanonicalSupervisorPid)
+Start-Sleep -Seconds 3
+
+$SupervisorAlive = $false
+try {
+    $SupervisorAlive = $null -ne (Get-Process -Id $CanonicalSupervisorPid -ErrorAction Stop)
+} catch {}
+
+if (-not $SupervisorAlive) {
+    $startupError = ""
+    if (Test-Path $SupervisorStdErr) {
+        $startupError = ((Get-Content $SupervisorStdErr -Tail 40 -ErrorAction SilentlyContinue) -join " ")
+    }
+    if ($startupError) {
+        Log ("FAIL: supervisor exited during startup: " + $startupError)
+    } else {
+        Log "FAIL: supervisor exited during startup without stderr output"
+    }
+    Fail "The canonical supervisor exited during startup. See $SupervisorStdErr"
+}
 
 $GameWatcher = Get-ChildItem (Join-Path $Root "bin") -File -Filter "game_mode_watch*.py" -ErrorAction SilentlyContinue |
     Sort-Object LastWriteTime -Descending |
@@ -445,20 +495,26 @@ $SupervisorRows = @($RuntimeProcesses | Where-Object { ([string]$_.CommandLine) 
 if ($SupervisorRows.Count -gt 1) {
     $canonicalAlive = @($SupervisorRows | Where-Object { $_.ProcessId -eq $CanonicalSupervisorPid }).Count -eq 1
     if ($canonicalAlive) {
-        $keepPid = $CanonicalSupervisorPid
+        foreach ($dup in ($SupervisorRows | Where-Object { $_.ProcessId -ne $CanonicalSupervisorPid })) {
+            Log ("Stopping duplicate supervisor PID " + $dup.ProcessId)
+            Stop-Process -Id $dup.ProcessId -Force -ErrorAction SilentlyContinue
+            & taskkill.exe /PID $dup.ProcessId /T /F *> $null
+        }
+        Start-Sleep -Seconds 3
+        $RuntimeProcesses = @(Get-CimInstance Win32_Process -ErrorAction SilentlyContinue | Where-Object {
+            ([string]$_.CommandLine) -match "(?i)(runtime_supervisor_v074|myles_core\.py|dashboard_bridge\.py|public_gateway_v074\.py|quant_service\.mjs|gmx_live\.mjs|copy_trader_service\.mjs|game_mode_watch)"
+        })
+        $SupervisorRows = @($RuntimeProcesses | Where-Object { ([string]$_.CommandLine) -match "runtime_supervisor_v074\.py" })
     } else {
-        $keepPid = ($SupervisorRows | Sort-Object ProcessId | Select-Object -First 1).ProcessId
-        Log ("Canonical PID exited; keeping surviving supervisor PID " + $keepPid)
+        Log "FAIL: canonical supervisor PID exited while an older supervisor remained; refusing to keep the stale process"
+        foreach ($stale in $SupervisorRows) {
+            Stop-Process -Id $stale.ProcessId -Force -ErrorAction SilentlyContinue
+            & taskkill.exe /PID $stale.ProcessId /T /F *> $null
+        }
+        $SupervisorRows = @()
     }
-    foreach ($dup in ($SupervisorRows | Where-Object { $_.ProcessId -ne $keepPid })) {
-        Log ("Stopping duplicate supervisor PID " + $dup.ProcessId)
-        Stop-Process -Id $dup.ProcessId -Force -ErrorAction SilentlyContinue
-    }
-    Start-Sleep -Seconds 3
-    $RuntimeProcesses = @(Get-CimInstance Win32_Process -ErrorAction SilentlyContinue | Where-Object {
-        ([string]$_.CommandLine) -match "(?i)(runtime_supervisor_v074|myles_core\.py|dashboard_bridge\.py|public_gateway_v074\.py|quant_service\.mjs|gmx_live\.mjs|copy_trader_service\.mjs|game_mode_watch)"
-    })
-    $SupervisorRows = @($RuntimeProcesses | Where-Object { ([string]$_.CommandLine) -match "runtime_supervisor_v074\.py" })
+} elseif ($SupervisorRows.Count -eq 0) {
+    Log "FAIL: no canonical supervisor was present at final runtime verification"
 }
 $SupervisorCount = $SupervisorRows.Count
 $QuantCount = @($RuntimeProcesses | Where-Object { ([string]$_.CommandLine) -match "quant_service\.mjs" }).Count
