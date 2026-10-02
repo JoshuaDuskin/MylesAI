@@ -9,7 +9,6 @@ function Test-Admin {
     $p = New-Object Security.Principal.WindowsPrincipal($id)
     return $p.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
 }
-
 if (-not (Test-Admin)) {
     $ea = @("-NoProfile","-ExecutionPolicy","Bypass","-File",$PSCommandPath)
     Start-Process powershell.exe -ArgumentList $ea -Verb RunAs | Out-Null
@@ -28,14 +27,14 @@ function Log([string]$m) {
 }
 
 if (-not (Test-Path (Join-Path $Root ".git"))) { throw "MYLES repo not found at $Root" }
-$Git = (Get-Command git.exe -ErrorAction Stop).Source
+$GitExe = (Get-Command git.exe -ErrorAction Stop).Source
 
-function Git {
+function Invoke-Git {
     param([string[]]$A)
     $prev = $ErrorActionPreference
     $ErrorActionPreference = "Continue"
     try {
-        $o = & $Git -C $Root @A 2>&1
+        $o = & $GitExe -C $Root @A 2>&1
         $c = $LASTEXITCODE
     } finally {
         $ErrorActionPreference = $prev
@@ -45,82 +44,78 @@ function Git {
 }
 
 Log "============================================================"
-Log "MYLES FINAL CANONICAL CLEANUP"
+Log "MYLES FINAL CANONICAL CLEANUP V3"
 Log "============================================================"
 
-# Preserve status before touching anything.
-$before = @(Git @("status","--short","--branch"))
-$before | Set-Content (Join-Path $Recovery "git_status_before.txt")
+@(Invoke-Git @("status","--short","--branch")) | Set-Content (Join-Path $Recovery "git_status_before.txt")
 
-# Pull the latest canonical source.
-Git @("remote","set-url","origin","https://github.com/JoshuaDuskin/MylesAI.git") | Out-Null
-Git @("fetch","origin","main","--prune") | Out-Null
-Git @("checkout","-B","main","origin/main","--force") | Out-Null
-Git @("reset","--hard","origin/main") | Out-Null
+# Preserve the live Quant configuration before Git stops tracking it.
+$QuantConfig = Join-Path $Root "quant\quant_config.json"
+$SavedQuantConfig = Join-Path $Recovery "quant_config.live.json"
+if (Test-Path $QuantConfig -PathType Leaf) {
+    Copy-Item $QuantConfig $SavedQuantConfig -Force
+    Log "PASS: live Quant config preserved"
+}
+
+# Sync canonical source where stale nested repositories and quant_config are no longer tracked.
+Invoke-Git @("remote","set-url","origin","https://github.com/JoshuaDuskin/MylesAI.git") | Out-Null
+Invoke-Git @("fetch","origin","main","--prune") | Out-Null
+Invoke-Git @("checkout","-B","main","origin/main","--force") | Out-Null
+Invoke-Git @("reset","--hard","origin/main") | Out-Null
 Log "PASS: source reset to canonical MylesAI/main"
 
-# Keep genuinely local, untracked files local without deleting them.
-$exclude = Join-Path $Root ".git\info\exclude"
-New-Item -ItemType Directory -Force -Path (Split-Path $exclude -Parent) | Out-Null
-if (-not (Test-Path $exclude)) { New-Item -ItemType File -Force -Path $exclude | Out-Null }
-$existing = @(Get-Content $exclude -ErrorAction SilentlyContinue)
-$untracked = @(Git @("ls-files","--others","--exclude-standard"))
-foreach ($rel in $untracked) {
+# Restore live tower configuration after the source reset.
+if (Test-Path $SavedQuantConfig) {
+    New-Item -ItemType Directory -Force -Path (Split-Path $QuantConfig -Parent) | Out-Null
+    Copy-Item $SavedQuantConfig $QuantConfig -Force
+    Log "PASS: live Quant config restored as tower-local state"
+}
+
+# Local nested repositories/workspaces are preserved by design. The canonical
+# .gitignore now excludes them, but add them to local exclude as a second guard.
+$Exclude = Join-Path $Root ".git\info\exclude"
+New-Item -ItemType Directory -Force -Path (Split-Path $Exclude -Parent) | Out-Null
+if (-not (Test-Path $Exclude)) { New-Item -ItemType File -Force -Path $Exclude | Out-Null }
+$LocalPatterns = @(
+    "dashboard_site/",
+    "workspace/",
+    "legacy_repo_cleanup_v055/",
+    "legacy_repo_cleanup_v056/",
+    "quant/quant_config.json"
+)
+$Existing = @(Get-Content $Exclude -ErrorAction SilentlyContinue)
+foreach ($pattern in $LocalPatterns) {
+    if ($Existing -notcontains $pattern) {
+        Add-Content -Path $Exclude -Value $pattern
+        $Existing += $pattern
+    }
+}
+
+# Also keep any other genuinely untracked tower-only files local.
+$Untracked = @(Invoke-Git @("ls-files","--others","--exclude-standard"))
+foreach ($rel in $Untracked) {
     if (-not $rel) { continue }
     $n = ($rel -replace "\\","/")
-    if ($existing -notcontains $n) {
-        Add-Content -Path $exclude -Value $n
-        $existing += $n
+    if ($Existing -notcontains $n) {
+        Add-Content -Path $Exclude -Value $n
+        $Existing += $n
     }
 }
-Log ("PASS: " + $untracked.Count + " untracked tower-only file(s) kept local")
+Log ("PASS: tower-only paths preserved locally")
 
-# Runtime-generated tracked files that are allowed to be local state.
-$runtimeTrackedPatterns = @(
-    '^bridge\.json$',
-    '^quant/quant_config\.json$',
-    '^quant/.*status.*\.json$',
-    '^quant/.*state.*\.json$'
-)
-
-$statusNow = @(Git @("status","--short"))
-$sourceDirty = @()
-foreach ($row in $statusNow) {
-    if ($row.Length -lt 4) { continue }
-    $path = $row.Substring(3).Trim()
-    $norm = $path -replace "\\","/"
-    $runtimeGenerated = $false
-    foreach ($rx in $runtimeTrackedPatterns) {
-        if ($norm -match $rx) { $runtimeGenerated = $true; break }
-    }
-    if ($runtimeGenerated) {
-        $src = Join-Path $Root $path
-        if (Test-Path $src -PathType Leaf) {
-            $dst = Join-Path $Recovery ("runtime_generated\" + $path)
-            New-Item -ItemType Directory -Force -Path (Split-Path $dst -Parent) | Out-Null
-            Copy-Item $src $dst -Force
-        }
-        Git @("restore","--source=HEAD","--staged","--worktree","--",$path) | Out-Null
-        $n = ($norm -replace "\\","/")
-        if ($existing -notcontains $n) {
-            Add-Content -Path $exclude -Value $n
-            $existing += $n
-        }
-        Log ("Preserved runtime-generated tracked file and reset Git copy: " + $norm)
-    } else {
-        $sourceDirty += $row
-    }
-}
-
-# Stop all supervisor copies.
-$supervisors = @(Get-CimInstance Win32_Process -ErrorAction SilentlyContinue | Where-Object {
+# Stop all currently visible supervisor wrapper/child processes. This is safe:
+# children such as core/Quant/bridge are intentionally left running.
+$SupervisorRows = @(Get-CimInstance Win32_Process -ErrorAction SilentlyContinue | Where-Object {
     $_.ProcessId -ne $PID -and ([string]$_.CommandLine) -match "(?i)runtime_supervisor_v074\.py"
 })
-foreach ($p in $supervisors) {
-    Log ("Stopping supervisor PID " + $p.ProcessId)
+foreach ($p in $SupervisorRows) {
+    Log ("Stopping supervisor process PID " + $p.ProcessId)
     Stop-Process -Id $p.ProcessId -Force -ErrorAction SilentlyContinue
 }
 Start-Sleep -Seconds 3
+
+$PidFile = Join-Path $Root "data\runtime_supervisor_v074.pid"
+Remove-Item $PidFile -Force -ErrorAction SilentlyContinue
 
 $PythonW = Join-Path $Root ".venv\Scripts\pythonw.exe"
 if (-not (Test-Path $PythonW)) { $PythonW = Join-Path $Root ".venv\Scripts\python.exe" }
@@ -128,95 +123,88 @@ $Supervisor = Join-Path $Root "bin\runtime_supervisor_v074.py"
 if (-not (Test-Path $PythonW)) { throw "MYLES Python environment missing" }
 if (-not (Test-Path $Supervisor)) { throw "Canonical supervisor missing" }
 
-# Start one and remember the exact PID.
-$canonical = Start-Process -FilePath $PythonW -ArgumentList $Supervisor -WorkingDirectory $Root -WindowStyle Hidden -PassThru
-$canonicalPid = $canonical.Id
-Log ("Started canonical supervisor PID " + $canonicalPid)
+Start-Process -FilePath $PythonW -ArgumentList $Supervisor -WorkingDirectory $Root -WindowStyle Hidden | Out-Null
+Log "Started canonical supervisor"
 
-# Allow competing startup mechanisms to fire. Keep the exact canonical PID if it remains alive.
-Start-Sleep -Seconds 18
-$rows = @(Get-CimInstance Win32_Process -ErrorAction SilentlyContinue | Where-Object {
-    ([string]$_.CommandLine) -match "(?i)runtime_supervisor_v074\.py"
-})
-
-$canonicalAlive = @($rows | Where-Object { $_.ProcessId -eq $canonicalPid }).Count -eq 1
-if ($rows.Count -gt 1) {
-    if ($canonicalAlive) {
-        $keepPid = $canonicalPid
-    } else {
-        $keepPid = ($rows | Sort-Object CreationDate | Select-Object -First 1).ProcessId
-        Log ("Canonical PID exited; keeping surviving supervisor PID " + $keepPid)
+# Wait for the actual Python supervisor process to publish its authoritative PID.
+$deadline = (Get-Date).AddSeconds(20)
+$SupervisorPid = 0
+while ((Get-Date) -lt $deadline) {
+    if (Test-Path $PidFile) {
+        try { $SupervisorPid = [int](Get-Content $PidFile -Raw).Trim() } catch { $SupervisorPid = 0 }
+        if ($SupervisorPid -gt 0) {
+            $alive = Get-Process -Id $SupervisorPid -ErrorAction SilentlyContinue
+            if ($alive) { break }
+        }
     }
-    foreach ($dup in ($rows | Where-Object { $_.ProcessId -ne $keepPid })) {
-        Log ("Stopping duplicate supervisor PID " + $dup.ProcessId)
-        Stop-Process -Id $dup.ProcessId -Force -ErrorAction SilentlyContinue
-    }
-    Start-Sleep -Seconds 4
+    Start-Sleep -Seconds 1
 }
 
-# If no supervisor survived, start one more time after duplicates are gone.
-$rows = @(Get-CimInstance Win32_Process -ErrorAction SilentlyContinue | Where-Object {
-    ([string]$_.CommandLine) -match "(?i)runtime_supervisor_v074\.py"
-})
-if ($rows.Count -eq 0) {
-    $canonical = Start-Process -FilePath $PythonW -ArgumentList $Supervisor -WorkingDirectory $Root -WindowStyle Hidden -PassThru
-    $canonicalPid = $canonical.Id
-    Log ("No supervisor survived first pass; restarted canonical supervisor PID " + $canonicalPid)
-    Start-Sleep -Seconds 8
+$SupervisorAlive = $false
+if ($SupervisorPid -gt 0) {
+    $SupervisorAlive = $null -ne (Get-Process -Id $SupervisorPid -ErrorAction SilentlyContinue)
 }
 
-$runtime = @(Get-CimInstance Win32_Process -ErrorAction SilentlyContinue | Where-Object {
-    ([string]$_.CommandLine) -match "(?i)(runtime_supervisor_v074|myles_core\.py|dashboard_bridge\.py|public_gateway_v074\.py|quant_service\.mjs|gmx_live\.mjs|copy_trader_service\.mjs|game_mode_watch)"
+# Give competing startup paths time to try. The global mutex should make their
+# real supervisor child exit without replacing the authoritative PID file.
+Start-Sleep -Seconds 10
+if (Test-Path $PidFile) {
+    try {
+        $PublishedPid = [int](Get-Content $PidFile -Raw).Trim()
+        if ($PublishedPid -gt 0) {
+            $SupervisorPid = $PublishedPid
+            $SupervisorAlive = $null -ne (Get-Process -Id $SupervisorPid -ErrorAction SilentlyContinue)
+        }
+    } catch {}
+}
+
+$Runtime = @(Get-CimInstance Win32_Process -ErrorAction SilentlyContinue | Where-Object {
+    ([string]$_.CommandLine) -match "(?i)(myles_core\.py|dashboard_bridge\.py|public_gateway_v074\.py|quant_service\.mjs|gmx_live\.mjs|copy_trader_service\.mjs|game_mode_watch)"
 })
-$supRows = @($runtime | Where-Object { ([string]$_.CommandLine) -match "runtime_supervisor_v074\.py" })
-$quantRows = @($runtime | Where-Object { ([string]$_.CommandLine) -match "quant_service\.mjs" })
-$gmxRows = @($runtime | Where-Object { ([string]$_.CommandLine) -match "gmx_live\.mjs.*--daemon" })
+$QuantRows = @($Runtime | Where-Object { ([string]$_.CommandLine) -match "quant_service\.mjs" })
+$GmxRows = @($Runtime | Where-Object { ([string]$_.CommandLine) -match "gmx_live\.mjs.*--daemon" })
 
 function CoreOK {
     try { return $null -ne (Invoke-RestMethod "http://127.0.0.1:8766/health" -TimeoutSec 4) }
     catch { return $false }
 }
+$Core = CoreOK
+$Listeners = @(Get-NetTCPConnection -State Listen -ErrorAction SilentlyContinue | Where-Object { $_.LocalPort -in 8790,8791 })
+$P8790 = @($Listeners | Where-Object {$_.LocalPort -eq 8790}).Count -gt 0
+$P8791 = @($Listeners | Where-Object {$_.LocalPort -eq 8791}).Count -gt 0
 
-$core = CoreOK
-$listeners = @(Get-NetTCPConnection -State Listen -ErrorAction SilentlyContinue | Where-Object { $_.LocalPort -in 8790,8791 })
-$p8790 = @($listeners | Where-Object {$_.LocalPort -eq 8790}).Count -gt 0
-$p8791 = @($listeners | Where-Object {$_.LocalPort -eq 8791}).Count -gt 0
-
-$after = @(Git @("status","--short"))
-$after | Set-Content (Join-Path $Recovery "git_status_after.txt")
-$head = ((Git @("rev-parse","--short","HEAD")) -join "").Trim()
+$After = @(Invoke-Git @("status","--short"))
+$After | Set-Content (Join-Path $Recovery "git_status_after.txt")
+$Head = ((Invoke-Git @("rev-parse","--short","HEAD")) -join "").Trim()
 
 Write-Host ""
 Write-Host "============================================================"
-Write-Host " MYLES FINAL TOWER RESULT"
+Write-Host " MYLES FINAL TOWER RESULT V3"
 Write-Host "============================================================"
-Write-Host "Git HEAD: $head"
-Write-Host "Core 8766 healthy: $core"
-Write-Host "Bridge 8790 listening: $p8790"
-Write-Host "Gateway 8791 listening: $p8791"
-Write-Host "Supervisor count: $($supRows.Count)"
-Write-Host "Quant service count: $($quantRows.Count)"
-Write-Host "GMX daemon count: $($gmxRows.Count)"
-Write-Host "Git working-tree entries: $($after.Count)"
+Write-Host "Git HEAD: $Head"
+Write-Host "Core 8766 healthy: $Core"
+Write-Host "Bridge 8790 listening: $P8790"
+Write-Host "Gateway 8791 listening: $P8791"
+Write-Host "Supervisor PID: $SupervisorPid"
+Write-Host "Logical supervisor healthy: $SupervisorAlive"
+Write-Host "Quant service count: $($QuantRows.Count)"
+Write-Host "GMX daemon count: $($GmxRows.Count)"
+Write-Host "Git working-tree entries: $($After.Count)"
 Write-Host "Recovery folder: $Recovery"
-if ($after.Count -gt 0) {
+if ($After.Count -gt 0) {
     Write-Host "Remaining Git entries:"
-    foreach ($row in $after) { Write-Host ("  " + $row) }
+    foreach ($row in $After) { Write-Host ("  " + $row) }
 }
 Write-Host "============================================================"
 
-$pass = $core -and $p8790 -and $p8791 -and $supRows.Count -eq 1 -and $quantRows.Count -eq 1 -and $gmxRows.Count -le 1 -and $after.Count -eq 0
+$Pass = $Core -and $P8790 -and $P8791 -and $SupervisorAlive -and $QuantRows.Count -eq 1 -and $GmxRows.Count -le 1 -and $After.Count -eq 0
 
-if ($pass) {
+if ($Pass) {
     Write-Host ""
-    Write-Host "MYLES FINALIZE: PASS" -ForegroundColor Green
+    Write-Host "MYLES FINALIZE V3: PASS" -ForegroundColor Green
 } else {
     Write-Host ""
-    Write-Host "MYLES FINALIZE: PARTIAL" -ForegroundColor Yellow
-    if ($sourceDirty.Count -gt 0) {
-        Write-Host "Real source modifications were preserved and NOT deleted:" -ForegroundColor Yellow
-        foreach ($row in $sourceDirty) { Write-Host ("  " + $row) }
-    }
+    Write-Host "MYLES FINALIZE V3: PARTIAL" -ForegroundColor Yellow
 }
 
 Write-Host ""
