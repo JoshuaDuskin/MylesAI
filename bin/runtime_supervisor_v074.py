@@ -44,6 +44,32 @@ SUPERVISOR_STOP_FILE = DATA / "runtime_supervisor_v074.stop"
 for directory in (DATA, BIN, LOGS):
     directory.mkdir(parents=True, exist_ok=True)
 
+# The canonical tower supervisor must always run under MYLES's preserved venv.
+# Old launchers that invoke this file through uv/system Python are not allowed
+# to become a second supervisor. Relaunch once through the venv and exit.
+if os.name == "nt" and len(sys.argv) <= 1:
+    try:
+        current = Path(sys.executable).resolve()
+        canonical_choices = [p.resolve() for p in (PYW, PY) if p.exists()]
+        if canonical_choices and current not in canonical_choices:
+            canonical = PYW if PYW.exists() else PY
+            subprocess.Popen(
+                [str(canonical), str(Path(__file__).resolve())],
+                cwd=str(ROOT),
+                stdin=subprocess.DEVNULL,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                creationflags=(CREATE_NO_WINDOW | DETACHED_PROCESS),
+                close_fds=True,
+            )
+            sys.exit(0)
+    except SystemExit:
+        raise
+    except Exception:
+        # The lock below still prevents duplicate ownership if interpreter
+        # normalization itself cannot be completed.
+        pass
+
 # STOP_MYLES.cmd reaches this same canonical supervisor entry point with "stop".
 # Handle that command before trying to acquire the live supervisor lock.
 if len(sys.argv) > 1 and str(sys.argv[1]).strip().lower() == "stop":
@@ -117,9 +143,8 @@ def acquire_shared_instance_lock():
     return None
 
 
-force_repair_start = os.environ.get("MYLES_SUPERVISOR_FORCE_START", "").strip() == "1"
-shared_lock_fd = None if force_repair_start else acquire_shared_instance_lock()
-if shared_lock_fd is None and not force_repair_start:
+shared_lock_fd = acquire_shared_instance_lock()
+if shared_lock_fd is None:
     sys.exit(0)
 try:
     SUPERVISOR_STOP_FILE.unlink(missing_ok=True)
