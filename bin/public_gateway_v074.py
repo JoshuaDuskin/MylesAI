@@ -2,8 +2,10 @@ from __future__ import annotations
 
 import json
 import os
+import time
 import urllib.error
 import urllib.request
+from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
@@ -76,7 +78,7 @@ def scrub(value, key: str = ""):
 
 
 def request_local(path: str, method: str = "GET", body: bytes | None = None, headers: dict | None = None, timeout: int = 15):
-    request_headers = {"Accept": "application/json", "User-Agent": "MylesPublicGateway/0.7.4"}
+    request_headers = {"Accept": "application/json", "User-Agent": "MylesPublicGateway/0.7.5"}
     request_headers.update(headers or {})
     token = owner_token()
     if token:
@@ -119,6 +121,53 @@ def parse_json(raw: bytes):
         return {}
 
 
+def local_trading_snapshot():
+    path = DATA / "trading_status.json"
+    try:
+        if not path.is_file() or path.stat().st_size > 2_000_000:
+            return None, {"status": "missing_status_file", "verified": False}
+        value = json.loads(path.read_text(encoding="utf-8", errors="replace"))
+        if not isinstance(value, dict):
+            return None, {"status": "invalid_status_file", "verified": False}
+        if str(value.get("account_type") or "").upper() != "SIMULATED PAPER" or str(value.get("mode") or "").lower() != "paper":
+            return None, {"status": "paper_identity_invalid", "verified": False}
+        stamp = str(value.get("generated_at") or "").strip()
+        if not stamp:
+            return None, {"status": "missing_generated_at", "verified": False}
+        generated = datetime.fromisoformat(stamp.replace("Z", "+00:00")).timestamp()
+        age = max(0.0, time.time() - generated)
+        file_age = max(0.0, time.time() - path.stat().st_mtime)
+        max_age = 300.0
+        engine = value.get("engine") if isinstance(value.get("engine"), dict) else {}
+        engine_ok = str(engine.get("status") or "").lower() in {"running", "degraded"}
+        source_ok = "gmx" in str(engine.get("data_source") or "").lower()
+        if age > max_age or file_age > max_age or not engine_ok or not source_ok:
+            return None, {
+                "status": "stale_or_unverified",
+                "verified": False,
+                "age_seconds": round(max(age, file_age), 1),
+                "engine_status": engine.get("status"),
+                "data_source": engine.get("data_source"),
+            }
+        published = dict(value)
+        published["_verified"] = True
+        published["_verified_source"] = "data/trading_status.json"
+        published["_verified_age_seconds"] = round(max(age, file_age), 1)
+        published["_verified_max_age_seconds"] = max_age
+        published["_blockers"] = []
+        published["_telemetry_state"] = "live"
+        return published, {
+            "status": "verified",
+            "verified": True,
+            "age_seconds": published["_verified_age_seconds"],
+            "engine_status": engine.get("status"),
+            "data_source": engine.get("data_source"),
+            "markets_count": len(value.get("markets") or []) if isinstance(value.get("markets"), list) else 0,
+        }
+    except Exception as error:
+        return None, {"status": "read_error", "verified": False, "detail": f"{type(error).__name__}: {error}"}
+
+
 def fallback_status():
     code, raw = request_core("/api/public-status")
     value = parse_json(raw)
@@ -128,10 +177,18 @@ def fallback_status():
     if not value:
         return 502, {"ok": False, "error": "Myles status is unavailable"}
     payload = scrub(value)
+    payload["schema_version"] = max(4, int(payload.get("schema_version") or 0))
+    payload["generated_at"] = datetime.now(timezone.utc).astimezone().isoformat(timespec="seconds")
     payload.setdefault("ok", code == 200)
     payload.setdefault("myles", {})
     if isinstance(payload["myles"], dict):
         payload["myles"].setdefault("online", code == 200)
+    trading, diagnostics = local_trading_snapshot()
+    payload["trading_diagnostics"] = diagnostics
+    if trading:
+        payload["trading"] = scrub(trading)
+    else:
+        payload.pop("trading", None)
     payload["bridge"] = {"online": False, "fallback": "core-read"}
     return 200 if code == 200 else 502, payload
 
@@ -154,7 +211,7 @@ def public_read_ok(headers) -> bool:
 
 
 class Handler(BaseHTTPRequestHandler):
-    server_version = "MylesGateway/0.7.4"
+    server_version = "MylesGateway/0.7.5"
 
     def log_message(self, fmt, *args):
         return
@@ -191,7 +248,7 @@ class Handler(BaseHTTPRequestHandler):
                 200,
                 {
                     "ok": True,
-                    "gateway": {"ok": True, "version": "0.7.4"},
+                    "gateway": {"ok": True, "version": "0.7.5"},
                     "bridge": {"ok": False, "fallback": "core-health", "private_status": status},
                     "myles": {"ok": core_code == 200, "data": health},
                 },
