@@ -173,6 +173,38 @@ $Listeners = @(Get-NetTCPConnection -State Listen -ErrorAction SilentlyContinue 
 $P8790 = @($Listeners | Where-Object {$_.LocalPort -eq 8790}).Count -gt 0
 $P8791 = @($Listeners | Where-Object {$_.LocalPort -eq 8791}).Count -gt 0
 
+$LiveStatus = $false
+$QuantVerified = $false
+$GmxMarketCount = 0
+$GameModeActive = $false
+try {
+    $gamePath = Join-Path $Root "data\game_mode_state.json"
+    if (Test-Path $gamePath) {
+        $gameState = Get-Content $gamePath -Raw | ConvertFrom-Json
+        $GameModeActive = [bool]$gameState.active
+    }
+} catch {}
+try {
+    $read = (Get-Content (Join-Path $Root "data\dashboard_public_read_token.txt") -Raw -ErrorAction Stop).Trim()
+    if ($read) {
+        $statusDeadline = (Get-Date).AddSeconds(90)
+        while ((Get-Date) -lt $statusDeadline) {
+            try {
+                $status = Invoke-RestMethod "http://127.0.0.1:8791/dashboard/status" -Headers @{"X-Myles-Read"=$read;"Accept"="application/json"} -TimeoutSec 20
+                $generated = [DateTimeOffset]::Parse([string]$status.generated_at)
+                $age = ([DateTimeOffset]::UtcNow - $generated.ToUniversalTime()).TotalSeconds
+                $LiveStatus = ($age -ge -30 -and $age -le 90 -and [bool]$status.myles.online)
+                if ($null -ne $status.trading) {
+                    $QuantVerified = ([bool]$status.trading._verified -and ([string]$status.trading._verified_source -eq "data/trading_status.json"))
+                    if ($null -ne $status.trading.markets) { $GmxMarketCount = @($status.trading.markets).Count }
+                }
+                if ($LiveStatus -and ($GameModeActive -or ($QuantVerified -and $GmxMarketCount -gt 0))) { break }
+            } catch {}
+            Start-Sleep -Seconds 3
+        }
+    }
+} catch {}
+
 $After = @(Invoke-Git @("status","--short"))
 $After | Set-Content (Join-Path $Recovery "git_status_after.txt")
 $Head = ((Invoke-Git @("rev-parse","--short","HEAD")) -join "").Trim()
@@ -189,6 +221,10 @@ Write-Host "Supervisor PID: $SupervisorPid"
 Write-Host "Logical supervisor healthy: $SupervisorAlive"
 Write-Host "Quant service count: $($QuantRows.Count)"
 Write-Host "GMX daemon count: $($GmxRows.Count)"
+Write-Host "Dashboard live status verified: $LiveStatus"
+Write-Host "Gaming Performance Mode active: $GameModeActive"
+Write-Host "Quant feed verified: $QuantVerified"
+Write-Host "GMX market count: $GmxMarketCount"
 Write-Host "Git working-tree entries: $($After.Count)"
 Write-Host "Recovery folder: $Recovery"
 if ($After.Count -gt 0) {
@@ -197,7 +233,8 @@ if ($After.Count -gt 0) {
 }
 Write-Host "============================================================"
 
-$Pass = $Core -and $P8790 -and $P8791 -and $SupervisorAlive -and $QuantRows.Count -eq 1 -and $GmxRows.Count -le 1 -and $After.Count -eq 0
+$DataPlaneOK = $LiveStatus -and ($GameModeActive -or ($QuantVerified -and $GmxMarketCount -gt 0))
+$Pass = $Core -and $P8790 -and $P8791 -and $SupervisorAlive -and $QuantRows.Count -eq 1 -and $GmxRows.Count -le 1 -and $DataPlaneOK -and $After.Count -eq 0
 
 if ($Pass) {
     Write-Host ""
