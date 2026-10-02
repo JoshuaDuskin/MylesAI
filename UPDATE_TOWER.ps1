@@ -598,99 +598,77 @@ $RuntimeProcesses = @(Get-CimInstance Win32_Process -ErrorAction SilentlyContinu
 })
 
 $GmxCount = @($RuntimeProcesses | Where-Object { ([string]$_.CommandLine) -match "gmx_live\.mjs.*--daemon" }).Count
-$SupervisorRows = @($RuntimeProcesses | Where-Object { ([string]$_.CommandLine) -match "runtime_supervisor_v074\.py" })
-if ($SupervisorRows.Count -gt 1) {
-    $canonicalAlive = @($SupervisorRows | Where-Object { $_.ProcessId -eq $CanonicalSupervisorPid }).Count -eq 1
-    if ($canonicalAlive) {
-        foreach ($dup in ($SupervisorRows | Where-Object { $_.ProcessId -ne $CanonicalSupervisorPid })) {
-            Log ("Stopping duplicate supervisor PID " + $dup.ProcessId)
-            Stop-Process -Id $dup.ProcessId -Force -ErrorAction SilentlyContinue
-            Stop-ProcessTreeQuiet ([int]$dup.ProcessId)
-        }
-        Start-Sleep -Seconds 3
-        $RuntimeProcesses = @(Get-CimInstance Win32_Process -ErrorAction SilentlyContinue | Where-Object {
-            ([string]$_.CommandLine) -match "(?i)(runtime_supervisor_v074|myles_core\.py|dashboard_bridge\.py|public_gateway_v074\.py|quant_service\.mjs|gmx_live\.mjs|copy_trader_service\.mjs|game_mode_watch)"
-        })
-        $SupervisorRows = @($RuntimeProcesses | Where-Object { ([string]$_.CommandLine) -match "runtime_supervisor_v074\.py" })
-    } else {
-        Log "Canonical supervisor exited while an older supervisor remained; stopping stale copies and retrying once"
-        foreach ($stale in $SupervisorRows) {
-            Log ("Stopping stale supervisor PID " + $stale.ProcessId)
-            Stop-Process -Id $stale.ProcessId -Force -ErrorAction SilentlyContinue
-            Stop-ProcessTreeQuiet ([int]$stale.ProcessId)
-        }
-        Start-Sleep -Seconds 2
-        $CanonicalSupervisor = Start-Process -FilePath $PythonW -ArgumentList $Supervisor -WorkingDirectory $Root -WindowStyle Hidden -RedirectStandardOutput $SupervisorStdOut -RedirectStandardError $SupervisorStdErr -PassThru
-        $CanonicalSupervisorPid = $CanonicalSupervisor.Id
-        Log ("Retried canonical hidden supervisor PID " + $CanonicalSupervisorPid)
-        Start-Sleep -Seconds 3
-        $SupervisorAlive = $false
-        try {
-            $SupervisorAlive = $null -ne (Get-Process -Id $CanonicalSupervisorPid -ErrorAction Stop)
-        } catch {}
-        if (-not $SupervisorAlive) {
-            Log "FAIL: canonical supervisor retry exited during runtime verification"
-        }
-        $RuntimeProcesses = @(Get-CimInstance Win32_Process -ErrorAction SilentlyContinue | Where-Object {
-            ([string]$_.CommandLine) -match "(?i)(runtime_supervisor_v074|myles_core\.py|dashboard_bridge\.py|public_gateway_v074\.py|quant_service\.mjs|gmx_live\.mjs|copy_trader_service\.mjs|game_mode_watch)"
-        })
-        $SupervisorRows = @($RuntimeProcesses | Where-Object { ([string]$_.CommandLine) -match "runtime_supervisor_v074\.py" })
-    }
-} elseif ($SupervisorRows.Count -eq 0) {
-    Log "FAIL: no canonical supervisor was present at final runtime verification"
-}
-# Final stabilization: keep the canonical .venv supervisor alive and remove
-# only noncanonical copies. Older repairs killed both copies, which allowed the
-# uv launcher to win the race again.
-$CanonicalPythonPattern = [regex]::Escape($PythonW)
-$stabilizationAttempt = 0
-while ($stabilizationAttempt -lt 4) {
-    $stabilizationAttempt++
+
+# A uv-backed Windows venv legitimately shows TWO process rows for one Python
+# program: the .venv launcher and its uv-managed CPython child. Count supervisor
+# ownership from the authoritative PID file + lock, not raw process rows.
+$SupervisorOwnerPid = 0
+$SupervisorOwnerOK = $false
+$SupervisorProcessChainCount = 0
+$ownerDeadline = (Get-Date).AddSeconds(25)
+while ((Get-Date) -lt $ownerDeadline) {
     $RuntimeProcesses = @(Get-CimInstance Win32_Process -ErrorAction SilentlyContinue | Where-Object {
         ([string]$_.CommandLine) -match "(?i)(runtime_supervisor_v074|myles_core\.py|dashboard_bridge\.py|public_gateway_v074\.py|quant_service\.mjs|gmx_live\.mjs|copy_trader_service\.mjs|game_mode_watch)"
     })
     $SupervisorRows = @($RuntimeProcesses | Where-Object { ([string]$_.CommandLine) -match "runtime_supervisor_v074\.py" })
-    $CanonicalRows = @($SupervisorRows | Where-Object { ([string]$_.CommandLine) -match $CanonicalPythonPattern })
-    $NonCanonicalRows = @($SupervisorRows | Where-Object { ([string]$_.CommandLine) -notmatch $CanonicalPythonPattern })
+    $SupervisorProcessChainCount = $SupervisorRows.Count
 
-    foreach ($row in $NonCanonicalRows) {
-        $parent = ""
-        try {
-            $parentRow = Get-CimInstance Win32_Process -Filter ("ProcessId=" + [int]$row.ParentProcessId) -ErrorAction SilentlyContinue
-            if ($parentRow) { $parent = " parent=" + $parentRow.ProcessId + " " + [string]$parentRow.CommandLine }
-        } catch {}
-        Log ("Stopping noncanonical supervisor PID " + $row.ProcessId + " :: " + ([string]$row.CommandLine) + $parent)
-        Stop-Process -Id ([int]$row.ProcessId) -Force -ErrorAction SilentlyContinue
-        Stop-ProcessTreeQuiet ([int]$row.ProcessId)
+    if (Test-Path $SupervisorPidFile) {
+        try { $SupervisorOwnerPid = [int](Get-Content $SupervisorPidFile -Raw).Trim() } catch { $SupervisorOwnerPid = 0 }
     }
-
-    if ($CanonicalRows.Count -eq 0) {
-        Remove-Item (Join-Path $Data "runtime_supervisor_v074.lock") -Force -ErrorAction SilentlyContinue
-        Remove-Item $SupervisorPidFile -Force -ErrorAction SilentlyContinue
-        $CanonicalSupervisor = Start-Process -FilePath $PythonW -ArgumentList $Supervisor -WorkingDirectory $Root -WindowStyle Hidden -RedirectStandardOutput $SupervisorStdOut -RedirectStandardError $SupervisorStdErr -PassThru
-        $CanonicalSupervisorPid = $CanonicalSupervisor.Id
-        Log ("Started stabilized canonical supervisor PID " + $CanonicalSupervisorPid)
+    if ($SupervisorOwnerPid -gt 0) {
+        $OwnerRow = @($SupervisorRows | Where-Object { [int]$_.ProcessId -eq $SupervisorOwnerPid })
+        if ($OwnerRow.Count -eq 1) {
+            $SupervisorOwnerOK = $true
+            break
+        }
     }
-
-    Start-Sleep -Seconds 5
-    $RuntimeProcesses = @(Get-CimInstance Win32_Process -ErrorAction SilentlyContinue | Where-Object {
-        ([string]$_.CommandLine) -match "(?i)(runtime_supervisor_v074|myles_core\.py|dashboard_bridge\.py|public_gateway_v074\.py|quant_service\.mjs|gmx_live\.mjs|copy_trader_service\.mjs|game_mode_watch)"
-    })
-    $SupervisorRows = @($RuntimeProcesses | Where-Object { ([string]$_.CommandLine) -match "runtime_supervisor_v074\.py" })
-    $CanonicalRows = @($SupervisorRows | Where-Object { ([string]$_.CommandLine) -match $CanonicalPythonPattern })
-    $NonCanonicalRows = @($SupervisorRows | Where-Object { ([string]$_.CommandLine) -notmatch $CanonicalPythonPattern })
-    if ($CanonicalRows.Count -eq 1 -and $NonCanonicalRows.Count -eq 0) { break }
+    Start-Sleep -Seconds 1
 }
 
-if ($SupervisorRows.Count -ne 1) {
-    Log ("FAIL: supervisor stabilization ended with count " + $SupervisorRows.Count)
-    foreach ($row in $SupervisorRows) {
+if (-not $SupervisorOwnerOK) {
+    Log "Supervisor owner PID was not healthy after startup; performing one clean restart"
+    foreach ($row in @($SupervisorRows)) {
+        try {
+            Stop-Process -Id ([int]$row.ProcessId) -Force -ErrorAction SilentlyContinue
+            Stop-ProcessTreeQuiet ([int]$row.ProcessId)
+        } catch {}
+    }
+    Start-Sleep -Seconds 2
+    Remove-Item (Join-Path $Data "runtime_supervisor_v074.lock") -Force -ErrorAction SilentlyContinue
+    Remove-Item $SupervisorPidFile -Force -ErrorAction SilentlyContinue
+    $CanonicalSupervisor = Start-Process -FilePath $PythonW -ArgumentList $Supervisor -WorkingDirectory $Root -WindowStyle Hidden -RedirectStandardOutput $SupervisorStdOut -RedirectStandardError $SupervisorStdErr -PassThru
+    Log ("Restarted canonical supervisor launcher PID " + $CanonicalSupervisor.Id)
+
+    $ownerDeadline = (Get-Date).AddSeconds(25)
+    while ((Get-Date) -lt $ownerDeadline) {
+        Start-Sleep -Seconds 1
+        $RuntimeProcesses = @(Get-CimInstance Win32_Process -ErrorAction SilentlyContinue | Where-Object {
+            ([string]$_.CommandLine) -match "(?i)(runtime_supervisor_v074|myles_core\.py|dashboard_bridge\.py|public_gateway_v074\.py|quant_service\.mjs|gmx_live\.mjs|copy_trader_service\.mjs|game_mode_watch)"
+        })
+        $SupervisorRows = @($RuntimeProcesses | Where-Object { ([string]$_.CommandLine) -match "runtime_supervisor_v074\.py" })
+        $SupervisorProcessChainCount = $SupervisorRows.Count
+        if (Test-Path $SupervisorPidFile) {
+            try { $SupervisorOwnerPid = [int](Get-Content $SupervisorPidFile -Raw).Trim() } catch { $SupervisorOwnerPid = 0 }
+        }
+        if ($SupervisorOwnerPid -gt 0 -and @($SupervisorRows | Where-Object { [int]$_.ProcessId -eq $SupervisorOwnerPid }).Count -eq 1) {
+            $SupervisorOwnerOK = $true
+            break
+        }
+    }
+}
+
+if ($SupervisorOwnerOK) {
+    $SupervisorCount = 1
+    Log ("PASS: one logical supervisor owner PID " + $SupervisorOwnerPid + "; interpreter process chain count " + $SupervisorProcessChainCount)
+} else {
+    $SupervisorCount = 0
+    Log "FAIL: no healthy authoritative supervisor owner PID was published"
+    foreach ($row in @($SupervisorRows)) {
         Log ("Supervisor evidence PID " + $row.ProcessId + " parent=" + $row.ParentProcessId + " :: " + ([string]$row.CommandLine))
     }
-} else {
-    Log ("PASS: exactly one canonical supervisor remains, PID " + $SupervisorRows[0].ProcessId)
 }
-$SupervisorCount = $SupervisorRows.Count
+
 $QuantCount = @($RuntimeProcesses | Where-Object { ([string]$_.CommandLine) -match "quant_service\.mjs" }).Count
 $CopyCount = @($RuntimeProcesses | Where-Object { ([string]$_.CommandLine) -match "copy_trader_service\.mjs.*--daemon" }).Count
 
@@ -818,6 +796,7 @@ $Summary += "Core 8766 healthy: $CoreOK"
 $Summary += "Bridge 8790 listening: $Port8790"
 $Summary += "Gateway 8791 listening: $Port8791"
 $Summary += "Supervisor count: $SupervisorCount"
+$Summary += "Supervisor interpreter process chain count: $SupervisorProcessChainCount"
 $Summary += "Quant service count: $QuantCount"
 $Summary += "GMX daemon count: $GmxCount"
 $Summary += "Copy research daemon count: $CopyCount"
