@@ -602,4 +602,16 @@ Write-Host "Copy the result above now. The MYLES dashboard will not open until y
 Write-Host ""
 Write-Host "Starting the single owner console..." -ForegroundColor Cyan
 Start-Sleep -Seconds 2
-Start-Process -FilePath (Join-Path $Root "START_MYLESAI.cmd") -WorkingDirectory $Root
+
+# Launch through an explicit persistent cmd.exe host. Calling a .cmd file
+# directly with Start-Process can return to PowerShell immediately on some
+# Windows builds, leaving the owner console invisible or already closed.
+$OwnerLauncher = Join-Path $Root "START_MYLESAI.cmd"
+$OwnerCommand = 'call "' + $OwnerLauncher + '"'
+try {
+    Start-Process -FilePath $env:ComSpec -ArgumentList @("/d", "/k", $OwnerCommand) -WorkingDirectory $Root -WindowStyle Normal | Out-Null
+    Write-Host "Owner console launched in a persistent Command Prompt window." -ForegroundColor Green
+} catch {
+    Write-Host ("Could not launch the owner console: " + $_.Exception.Message) -ForegroundColor Red
+    Write-Host "Run this manually if needed: $OwnerLauncher" -ForegroundColor Yellow
+}
