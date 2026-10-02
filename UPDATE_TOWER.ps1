@@ -621,9 +621,8 @@ Write-Host (Join-Path $Root "logs\tower_update_RESULT.txt")
 Write-Host "Saved log:" -ForegroundColor Cyan
 Write-Host (Join-Path $Root "logs\tower_update_latest.log")
 Write-Host ""
-Write-Host "THIS POWERSHELL WINDOW WILL STAY OPEN." -ForegroundColor Yellow
-Write-Host "Copy the result above now. The MYLES dashboard will not open until you press ENTER." -ForegroundColor Yellow
-[void](Read-Host "Press ENTER only after you are finished copying the result")
+Write-Host "The update result is saved. Launching the single owner console automatically..." -ForegroundColor Cyan
+Start-Sleep -Seconds 1
 
 Write-Host ""
 Write-Host "Starting the single owner console..." -ForegroundColor Cyan
