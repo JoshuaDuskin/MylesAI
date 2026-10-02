@@ -87,7 +87,7 @@ def main():
         and rt.deterministic_control(dashboard_prompt, has_active=False, has_recent_cancelled=False) is None
     )
     checks["core_strong_action_bypasses_router"] = (
-        'elif strong_action_request(raw):' in core_source
+        'elif strong_action_request(raw) and not natural_question(raw):' in core_source
         and '"intent": "modify" if parent else "start"' in core_source
     )
     checks["router_receives_exact_latest_message"] = (
@@ -180,7 +180,7 @@ def main():
     )
     checks["job_ack_is_compact"] = (
         "def _human_task_label" in core_source
-        and 'Started: {label}' in core_source
+        and "I’m on it — I’ll post a concise verified summary when it’s finished. ({label})" in core_source
         and "I'm working on: {task or raw}" not in core_source
     )
     cleaned = myles_core._telegram_plain_text("### **General Overview**\n* **Weather:** Clear")
@@ -234,7 +234,7 @@ def main():
     )
     snap2 = myles_tools._runtime_public_snapshot()
     checks["public_status_schema_v2_has_real_queue"] = (
-        snap2.get("schema_version") in {2, 3}
+        snap2.get("schema_version") in {2, 3, 4}
         and isinstance(snap2.get("queued_tasks"), list)
         and "queue_count" in snap2
     )
@@ -276,7 +276,7 @@ def main():
     )
     snap3 = myles_tools._runtime_public_snapshot()
     checks["public_status_schema_v3_has_continuous_program"] = (
-        snap3.get("schema_version") == 3
+        snap3.get("schema_version") == 4
         and isinstance(snap3.get("continuous_program"), dict)
         and "queued_tasks" in snap3
     )
@@ -441,7 +441,7 @@ def main():
     snapshot = myles_tools._runtime_public_snapshot()
     serialized_snapshot = json.dumps(snapshot).lower()
     checks["sanitized_status_snapshot_present"] = (
-        snapshot.get("schema_version") in {1, 2, 3}
+        snapshot.get("schema_version") in {1, 2, 3, 4}
         and "prompt" not in serialized_snapshot
         and "workspace" not in serialized_snapshot
         and "runner_pid" not in serialized_snapshot
