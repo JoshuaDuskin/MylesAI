@@ -38,9 +38,26 @@ SUPERVISOR_LOCK_FILE = DATA / "runtime_supervisor_v074.lock"
 CONFIG_FILE = DATA / "config.json"
 GAME_STATE_FILE = DATA / "game_mode_state.json"
 GAME_WATCHER = BIN / "game_mode_watch.py"
+RESTART_REQUEST = DATA / "restart.request"
+SUPERVISOR_STOP_FILE = DATA / "runtime_supervisor_v074.stop"
 
 for directory in (DATA, BIN, LOGS):
     directory.mkdir(parents=True, exist_ok=True)
+
+# STOP_MYLES.cmd reaches this same canonical supervisor entry point with "stop".
+# Handle that command before trying to acquire the live supervisor lock.
+if len(sys.argv) > 1 and str(sys.argv[1]).strip().lower() == "stop":
+    try:
+        SUPERVISOR_STOP_FILE.write_text(
+            json.dumps({"requested_at": dt.datetime.now(dt.timezone.utc).isoformat(), "pid": os.getpid()}) + "\n",
+            encoding="utf-8",
+        )
+    except Exception:
+        sys.exit(2)
+    deadline = time.time() + 40
+    while time.time() < deadline and SUPERVISOR_PID_FILE.exists():
+        time.sleep(0.5)
+    sys.exit(0 if not SUPERVISOR_PID_FILE.exists() else 3)
 
 def acquire_shared_instance_lock():
     """Own one cross-privilege supervisor lock for this Windows user."""
@@ -76,6 +93,10 @@ force_repair_start = os.environ.get("MYLES_SUPERVISOR_FORCE_START", "").strip() 
 shared_lock_fd = None if force_repair_start else acquire_shared_instance_lock()
 if shared_lock_fd is None and not force_repair_start:
     sys.exit(0)
+try:
+    SUPERVISOR_STOP_FILE.unlink(missing_ok=True)
+except Exception:
+    pass
 
 # The filesystem lock above is the single authoritative instance guard.
 # A Windows Global mutex can survive through a launcher/interpreter process
@@ -250,6 +271,148 @@ def stop_heavy_background() -> None:
             log(f"gaming/light mode stopped heavy pid={pid}")
         except Exception:
             pass
+
+
+def stop_runtime_children() -> None:
+    """Stop only processes that belong to the canonical Myles runtime."""
+    patterns = (
+        re.compile(r"myles_core\.py", re.I),
+        re.compile(r"dashboard_bridge\.py", re.I),
+        re.compile(r"public_gateway_v074\.py", re.I),
+        re.compile(r"quant_service\.mjs", re.I),
+        re.compile(r"gmx_live\.mjs", re.I),
+        re.compile(r"copy_trader_service\.mjs", re.I),
+        re.compile(r"game_mode_watch\.py", re.I),
+        re.compile(r"cloudflared.*8791", re.I),
+    )
+    for pid, command in process_rows():
+        if pid <= 0 or pid == os.getpid() or not any(rx.search(command or "") for rx in patterns):
+            continue
+        try:
+            if os.name == "nt":
+                subprocess.run(
+                    ["taskkill", "/PID", str(pid), "/T", "/F"],
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                    timeout=12,
+                    creationflags=CREATE_NO_WINDOW,
+                )
+            else:
+                os.kill(pid, 15)
+            log(f"stopped Myles runtime child pid={pid}")
+        except Exception as exc:
+            log(f"could not stop Myles runtime child pid={pid}: {exc}")
+
+
+def _stop_core_only() -> None:
+    rx = re.compile(r"myles_core\.py", re.I)
+    for pid, command in process_rows():
+        if pid <= 0 or pid == os.getpid() or not rx.search(command or ""):
+            continue
+        try:
+            if os.name == "nt":
+                subprocess.run(
+                    ["taskkill", "/PID", str(pid), "/T", "/F"],
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                    timeout=12,
+                    creationflags=CREATE_NO_WINDOW,
+                )
+            else:
+                os.kill(pid, 15)
+        except Exception:
+            pass
+
+
+def _wait_for_core_offline(timeout: float = 20.0) -> bool:
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        if not http_ok("http://127.0.0.1:8766/health", timeout=1):
+            return True
+        time.sleep(0.5)
+    return not http_ok("http://127.0.0.1:8766/health", timeout=1)
+
+
+def _wait_for_core_health(timeout: float = 45.0) -> bool:
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        if http_ok("http://127.0.0.1:8766/health", timeout=2):
+            return True
+        time.sleep(1)
+    return False
+
+
+def _restore_backup(backup: Path) -> int:
+    if not backup.is_dir():
+        return 0
+    restored = 0
+    for src in backup.iterdir():
+        if not src.is_file():
+            continue
+        shutil.copy2(src, ROOT / src.name)
+        restored += 1
+    return restored
+
+
+def _request_core_shutdown() -> None:
+    try:
+        request = urllib.request.Request(
+            "http://127.0.0.1:8766/api/control/shutdown",
+            data=b"{}",
+            headers={"Content-Type": "application/json", "Accept": "application/json"},
+            method="POST",
+        )
+        with urllib.request.urlopen(request, timeout=4):
+            pass
+    except Exception:
+        pass
+
+
+def _restart_for_update() -> bool:
+    """Consume a promoted self-update request, verify it, and roll back on failure."""
+    if not RESTART_REQUEST.exists():
+        return False
+    try:
+        payload = json.loads(RESTART_REQUEST.read_text(encoding="utf-8-sig", errors="replace"))
+        payload = payload if isinstance(payload, dict) else {}
+    except Exception:
+        payload = {}
+    backup_raw = str(payload.get("backup") or "").strip()
+    backup = Path(backup_raw) if backup_raw else None
+    log(f"RESTART_REQUEST detected candidate={payload.get('candidate') or 'unknown'}")
+
+    _request_core_shutdown()
+    if not _wait_for_core_offline(20):
+        _stop_core_only()
+        _wait_for_core_offline(8)
+
+    # Remove the request before starting the replacement core so the new core
+    # cannot see the same request and immediately exit again.
+    try:
+        RESTART_REQUEST.unlink(missing_ok=True)
+    except Exception as exc:
+        log(f"could not clear restart request: {exc}")
+
+    start_core()
+    if _wait_for_core_health(45):
+        log("candidate restart passed health check")
+        return True
+
+    log("candidate restart failed health check")
+    _stop_core_only()
+    _wait_for_core_offline(8)
+    restored = _restore_backup(backup) if backup else 0
+    if restored <= 0:
+        log("rollback unavailable: backup was missing or empty")
+        return True
+
+    log(f"restored {restored} file(s) from rollback backup {backup}")
+    start_core()
+    if _wait_for_core_health(45):
+        log("rollback passed health check")
+    else:
+        log("rollback failed health check")
+    return True
 
 
 def stop_stale_tunnels() -> None:
@@ -563,9 +726,13 @@ SUPERVISOR_PID_FILE.write_text(str(os.getpid()), encoding="utf-8")
 log(f"supervisor started pid={os.getpid()}")
 try:
     while True:
+        if SUPERVISOR_STOP_FILE.exists():
+            log("supervisor stop request detected")
+            break
         # Keep each cycle independently recoverable. A watcher, bridge, tunnel,
         # or git failure must not terminate the supervisor that owns the tower.
         try:
+            _restart_for_update()
             start_game_watcher()
         except Exception as exc:
             log_exception("game-mode watcher cycle failed", exc)
@@ -581,8 +748,20 @@ try:
                 lock_repo()
         except Exception as exc:
             log_exception("supervisor service cycle failed", exc)
-        time.sleep(30)
+        for _ in range(30):
+            if SUPERVISOR_STOP_FILE.exists():
+                break
+            time.sleep(1)
 finally:
+    try:
+        if SUPERVISOR_STOP_FILE.exists():
+            stop_runtime_children()
+    except Exception as exc:
+        log_exception("runtime child shutdown failed", exc)
+    try:
+        SUPERVISOR_STOP_FILE.unlink(missing_ok=True)
+    except Exception:
+        pass
     try:
         if SUPERVISOR_PID_FILE.exists() and SUPERVISOR_PID_FILE.read_text(encoding="utf-8", errors="ignore").strip() == str(os.getpid()):
             SUPERVISOR_PID_FILE.unlink(missing_ok=True)
