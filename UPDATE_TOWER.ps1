@@ -670,6 +670,57 @@ if ($SupervisorRows.Count -ne 1) {
 }
 $SupervisorCount = $SupervisorRows.Count
 $QuantCount = @($RuntimeProcesses | Where-Object { ([string]$_.CommandLine) -match "quant_service\.mjs" }).Count
+$CopyCount = @($RuntimeProcesses | Where-Object { ([string]$_.CommandLine) -match "copy_trader_service\.mjs.*--daemon" }).Count
+
+# If the supervisor survived but a Node worker did not come up during the first
+# service cycle, start that missing worker once here. The supervisor will adopt
+# it on the next cycle and its process guard prevents duplicates.
+$GameModeNow = $false
+try {
+    $gamePathNow = Join-Path $Data "game_mode_state.json"
+    if (Test-Path $gamePathNow) {
+        $gameStateNow = Get-Content $gamePathNow -Raw -ErrorAction Stop | ConvertFrom-Json
+        $GameModeNow = [bool]$gameStateNow.active
+    }
+} catch {}
+
+if (-not $GameModeNow) {
+    $NodeCandidates = @()
+    $nodeCmd = Get-Command node.exe -ErrorAction SilentlyContinue
+    if ($nodeCmd) { $NodeCandidates += $nodeCmd.Source }
+    if ($env:ProgramFiles) { $NodeCandidates += (Join-Path $env:ProgramFiles "nodejs\node.exe") }
+    if (${env:ProgramFiles(x86)}) { $NodeCandidates += (Join-Path ${env:ProgramFiles(x86)} "nodejs\node.exe") }
+    if ($env:LOCALAPPDATA) { $NodeCandidates += (Join-Path $env:LOCALAPPDATA "Programs\nodejs\node.exe") }
+    if ($env:NVM_SYMLINK) { $NodeCandidates += (Join-Path $env:NVM_SYMLINK "node.exe") }
+    $NodeExe = $NodeCandidates | Where-Object { $_ -and (Test-Path $_) } | Select-Object -First 1
+
+    if ($NodeExe) {
+        $QuantDir = Join-Path $Root "quant"
+        if ($QuantCount -eq 0 -and (Test-Path (Join-Path $QuantDir "quant_service.mjs"))) {
+            Log "Quant worker was absent after supervisor startup; starting one verified fallback instance"
+            Start-Process -FilePath $NodeExe -ArgumentList "quant_service.mjs" -WorkingDirectory $QuantDir -WindowStyle Hidden -RedirectStandardOutput (Join-Path $Root "logs\quant_startup.out.log") -RedirectStandardError (Join-Path $Root "logs\quant_startup.err.log") | Out-Null
+        }
+        if ($GmxCount -eq 0 -and (Test-Path (Join-Path $QuantDir "gmx_live.mjs"))) {
+            Log "GMX daemon was absent after supervisor startup; starting one verified fallback instance"
+            Start-Process -FilePath $NodeExe -ArgumentList @("gmx_live.mjs","--daemon") -WorkingDirectory $QuantDir -WindowStyle Hidden -RedirectStandardOutput (Join-Path $Root "logs\gmx_live_startup.out.log") -RedirectStandardError (Join-Path $Root "logs\gmx_live_startup.err.log") | Out-Null
+        }
+        if ($CopyCount -eq 0 -and (Test-Path (Join-Path $QuantDir "copy_trader_service.mjs"))) {
+            Log "Copy research daemon was absent after supervisor startup; starting one verified fallback instance"
+            Start-Process -FilePath $NodeExe -ArgumentList @("copy_trader_service.mjs","--daemon") -WorkingDirectory $QuantDir -WindowStyle Hidden -RedirectStandardOutput (Join-Path $Root "logs\copy_trader_startup.out.log") -RedirectStandardError (Join-Path $Root "logs\copy_trader_startup.err.log") | Out-Null
+        }
+        Start-Sleep -Seconds 8
+        $RuntimeProcesses = @(Get-CimInstance Win32_Process -ErrorAction SilentlyContinue | Where-Object {
+            ([string]$_.CommandLine) -match "(?i)(runtime_supervisor_v074|myles_core\.py|dashboard_bridge\.py|public_gateway_v074\.py|quant_service\.mjs|gmx_live\.mjs|copy_trader_service\.mjs|game_mode_watch)"
+        })
+        $SupervisorRows = @($RuntimeProcesses | Where-Object { ([string]$_.CommandLine) -match "runtime_supervisor_v074\.py" })
+        $SupervisorCount = $SupervisorRows.Count
+        $QuantCount = @($RuntimeProcesses | Where-Object { ([string]$_.CommandLine) -match "quant_service\.mjs" }).Count
+        $GmxCount = @($RuntimeProcesses | Where-Object { ([string]$_.CommandLine) -match "gmx_live\.mjs.*--daemon" }).Count
+        $CopyCount = @($RuntimeProcesses | Where-Object { ([string]$_.CommandLine) -match "copy_trader_service\.mjs.*--daemon" }).Count
+    } else {
+        Log "FAIL: Node.js executable was not found; Quant/GMX workers cannot run"
+    }
+}
 
 # Verify the actual dashboard data path, not just listening ports/process names.
 $DashboardStatusOK = $false
@@ -688,7 +739,7 @@ try {
 
 $ReadToken = ""
 try { $ReadToken = (Get-Content (Join-Path $Data "dashboard_public_read_token.txt") -Raw -ErrorAction Stop).Trim() } catch {}
-$statusDeadline = (Get-Date).AddSeconds(95)
+$statusDeadline = (Get-Date).AddSeconds(180)
 while ((Get-Date) -lt $statusDeadline) {
     try {
         if (-not $ReadToken) { throw "public read token unavailable" }
@@ -747,6 +798,7 @@ $Summary += "Gateway 8791 listening: $Port8791"
 $Summary += "Supervisor count: $SupervisorCount"
 $Summary += "Quant service count: $QuantCount"
 $Summary += "GMX daemon count: $GmxCount"
+$Summary += "Copy research daemon count: $CopyCount"
 $Summary += "Dashboard live status verified: $DashboardStatusOK"
 $Summary += "Dashboard status age seconds: $DashboardStatusAgeSeconds"
 $Summary += "Gaming Performance Mode active: $GameModeActive"
