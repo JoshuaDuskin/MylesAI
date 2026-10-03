@@ -78,7 +78,7 @@ def scrub(value, key: str = ""):
 
 
 def request_local(path: str, method: str = "GET", body: bytes | None = None, headers: dict | None = None, timeout: int = 15):
-    request_headers = {"Accept": "application/json", "User-Agent": "MylesPublicGateway/0.7.5"}
+    request_headers = {"Accept": "application/json", "User-Agent": "MylesPublicGateway/0.7.6"}
     request_headers.update(headers or {})
     token = owner_token()
     if token:
@@ -211,7 +211,7 @@ def public_read_ok(headers) -> bool:
 
 
 class Handler(BaseHTTPRequestHandler):
-    server_version = "MylesGateway/0.7.5"
+    server_version = "MylesGateway/0.7.6"
 
     def log_message(self, fmt, *args):
         return
@@ -240,7 +240,16 @@ class Handler(BaseHTTPRequestHandler):
         if not (public_read_ok(self.headers) or owner_read_ok(self.headers)):
             self.send_json(401, {"ok": False, "error": "read token required"})
             return
-        status, response_headers, raw = request_local(self.path, "GET", None, None, 15)
+
+        # Public dashboard status must not depend on the private bridge being
+        # responsive. Build it directly from the core + canonical local Quant
+        # telemetry so the phone can stay live even while chat/pairing is down.
+        if self.path.startswith("/dashboard/status") or self.path.startswith("/api/public-status"):
+            fallback_code, fallback = fallback_status()
+            self.send_json(fallback_code, fallback)
+            return
+
+        status, response_headers, raw = request_local(self.path, "GET", None, None, 8)
         if self.path.startswith("/dashboard/health") and status >= 500:
             core_code, core_raw = request_core("/health")
             health = scrub(parse_json(core_raw))
@@ -248,15 +257,11 @@ class Handler(BaseHTTPRequestHandler):
                 200,
                 {
                     "ok": True,
-                    "gateway": {"ok": True, "version": "0.7.5"},
+                    "gateway": {"ok": True, "version": "0.7.6"},
                     "bridge": {"ok": False, "fallback": "core-health", "private_status": status},
                     "myles": {"ok": core_code == 200, "data": health},
                 },
             )
-            return
-        if self.path.startswith("/dashboard/status") and status >= 500:
-            fallback_code, fallback = fallback_status()
-            self.send_json(fallback_code, fallback)
             return
         try:
             value = parse_json(raw)
