@@ -1,7 +1,7 @@
 @echo off
 setlocal
 title MYLES Tower Update
-powershell.exe -NoProfile -ExecutionPolicy Bypass -NoExit -File "%~dp0UPDATE_TOWER.ps1"
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0UPDATE_TOWER.ps1"
 set "MYLES_EXIT=%ERRORLEVEL%"
 
 echo.
