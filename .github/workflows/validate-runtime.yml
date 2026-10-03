@@ -37,6 +37,17 @@ jobs:
       - name: Compile Python runtime
         run: python -m py_compile dashboard_bridge/dashboard_bridge.py bin/runtime_supervisor_v074.py bin/public_gateway_v074.py bin/game_mode_watch.py myles_core.py myles_tools.py
 
+      - name: Verify durable Windows startup contract
+        shell: bash
+        run: |
+          test -f bin/ensure_myles_runtime.ps1
+          grep -q "MylesAIRuntimeGuardian" UPDATE_TOWER.ps1
+          grep -q "MylesAI Runtime Guardian" UPDATE_TOWER.ps1
+          grep -q "RepetitionInterval" UPDATE_TOWER.ps1
+          grep -q "runtime_supervisor_v074.py" bin/ensure_myles_runtime.ps1
+          grep -q "consecutive_failures" bin/ensure_myles_runtime.ps1
+          echo "durable startup and recovery contract OK"
+
       - name: Run MYLES regression self-test
         run: python self_test.py
 
