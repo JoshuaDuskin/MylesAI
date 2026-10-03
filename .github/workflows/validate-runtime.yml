@@ -46,6 +46,8 @@ jobs:
           grep -q "RepetitionInterval" UPDATE_TOWER.ps1
           grep -q "runtime_supervisor_v074.py" bin/ensure_myles_runtime.ps1
           grep -q "consecutive_failures" bin/ensure_myles_runtime.ps1
+          ! grep -q -- "-NoExit" UPDATE_TOWER.cmd UPDATE_TOWER.ps1
+          ! grep -q "Launching the single owner console automatically" UPDATE_TOWER.ps1
           echo "durable startup and recovery contract OK"
 
       - name: Run MYLES regression self-test
