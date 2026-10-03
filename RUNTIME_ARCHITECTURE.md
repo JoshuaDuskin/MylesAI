@@ -8,6 +8,9 @@ Myles has one authoritative Windows runtime and one canonical repository:
 `START_MYLESAI.cmd` opens one visible owner console and ensures one hidden
 `bin/runtime_supervisor_v074.py` is running. The supervisor owns the durable
 services and restarts missing components without opening extra consoles.
+`bin/ensure_myles_runtime.ps1` is installed at per-user logon and as a
+five-minute recovery task. It restarts an absent supervisor immediately and
+only drains an unhealthy supervisor after three consecutive failed checks.
 
 ```text
 START_MYLESAI.cmd
