@@ -11,7 +11,7 @@ function Test-Administrator {
 }
 
 if (-not (Test-Administrator)) {
-    $elevateArgs = @("-NoProfile", "-ExecutionPolicy", "Bypass", "-NoExit", "-File", $PSCommandPath)
+    $elevateArgs = @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $PSCommandPath)
     $elevated = Start-Process -FilePath "powershell.exe" -ArgumentList $elevateArgs -Verb RunAs -Wait -PassThru
     if ($null -ne $elevated) {
         exit $elevated.ExitCode
@@ -884,22 +884,4 @@ Write-Host (Join-Path $Root "logs\tower_update_RESULT.txt")
 Write-Host "Saved log:" -ForegroundColor Cyan
 Write-Host (Join-Path $Root "logs\tower_update_latest.log")
 Write-Host ""
-Write-Host "The update result is saved. Launching the single owner console automatically..." -ForegroundColor Cyan
-Start-Sleep -Seconds 1
-
-Write-Host ""
-Write-Host "Starting the single owner console..." -ForegroundColor Cyan
-Start-Sleep -Seconds 2
-
-# Launch through an explicit persistent cmd.exe host. Calling a .cmd file
-# directly with Start-Process can return to PowerShell immediately on some
-# Windows builds, leaving the owner console invisible or already closed.
-$OwnerLauncher = Join-Path $Root "START_MYLESAI.cmd"
-$OwnerCommand = 'call "' + $OwnerLauncher + '"'
-try {
-    Start-Process -FilePath $env:ComSpec -ArgumentList @("/d", "/k", $OwnerCommand) -WorkingDirectory $Root -WindowStyle Normal | Out-Null
-    Write-Host "Owner console launched in a persistent Command Prompt window." -ForegroundColor Green
-} catch {
-    Write-Host ("Could not launch the owner console: " + $_.Exception.Message) -ForegroundColor Red
-    Write-Host "Run this manually if needed: $OwnerLauncher" -ForegroundColor Yellow
-}
+Write-Host "MYLES is running in the background. This updater does not open another console." -ForegroundColor Cyan
