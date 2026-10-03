@@ -85,7 +85,8 @@ jobs:
           ! grep -q "NOT PUBLISHED" index.html
           ! grep -q "937d" index.html
           grep -q "Published status fallback is legacy or stale" index.html
-          grep -q "timeout:18000" index.html
+          grep -q "timeout:20000" index.html
+          grep -q "/api/public-status" index.html
           echo "dashboard truth-only contract OK"
 
       - name: Verify GMX resilient feed contract
