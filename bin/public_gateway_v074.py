@@ -78,7 +78,7 @@ def scrub(value, key: str = ""):
 
 
 def request_local(path: str, method: str = "GET", body: bytes | None = None, headers: dict | None = None, timeout: int = 15):
-    request_headers = {"Accept": "application/json", "User-Agent": "MylesPublicGateway/0.7.6"}
+    request_headers = {"Accept": "application/json", "User-Agent": "MylesPublicGateway/0.7.7"}
     request_headers.update(headers or {})
     token = owner_token()
     if token:
@@ -168,6 +168,55 @@ def local_trading_snapshot():
         return None, {"status": "read_error", "verified": False, "detail": f"{type(error).__name__}: {error}"}
 
 
+def compact_status():
+    """Small read-only status payload for the phone dashboard.
+
+    Keep this deliberately compact so the public tunnel never has to carry the
+    full research/backtest payload just to render overview health and paper P&L.
+    """
+    code, raw = request_core("/api/public-status")
+    value = parse_json(raw)
+    if code != 200 or not value:
+        code, raw = request_core("/health")
+        value = parse_json(raw)
+    if not value:
+        return 502, {"ok": False, "error": "Myles status is unavailable"}
+
+    payload = scrub(value)
+    payload["schema_version"] = max(4, int(payload.get("schema_version") or 0))
+    payload["generated_at"] = datetime.now(timezone.utc).astimezone().isoformat(timespec="seconds")
+    payload.setdefault("ok", code == 200)
+    payload.setdefault("myles", {})
+    if isinstance(payload["myles"], dict):
+        payload["myles"].setdefault("online", code == 200)
+
+    trading, diagnostics = local_trading_snapshot()
+    payload["trading_diagnostics"] = diagnostics
+    if trading:
+        allowed = (
+            "schema_version", "generated_at", "controls", "runtime_activity",
+            "engine", "account_type", "mode", "balance", "equity",
+            "starting_equity", "total_pnl", "pnl_pct", "win_rate",
+            "max_drawdown", "positions", "markets", "market_errors", "risk",
+            "assumptions", "_verified", "_verified_source",
+            "_verified_age_seconds", "_verified_max_age_seconds",
+            "_blockers", "_telemetry_state",
+        )
+        compact = {key: trading.get(key) for key in allowed if key in trading}
+        curve = trading.get("equity_curve")
+        if isinstance(curve, list):
+            compact["equity_curve"] = curve[-180:]
+        recent = trading.get("recent_trades")
+        if isinstance(recent, list):
+            compact["recent_trades"] = recent[-20:]
+        payload["trading"] = scrub(compact)
+    else:
+        payload.pop("trading", None)
+
+    payload["bridge"] = {"online": True, "gateway": True, "read_only": True}
+    return 200 if code == 200 else 502, payload
+
+
 def fallback_status():
     code, raw = request_core("/api/public-status")
     value = parse_json(raw)
@@ -211,7 +260,7 @@ def public_read_ok(headers) -> bool:
 
 
 class Handler(BaseHTTPRequestHandler):
-    server_version = "MylesGateway/0.7.6"
+    server_version = "MylesGateway/0.7.7"
 
     def log_message(self, fmt, *args):
         return
@@ -241,28 +290,39 @@ class Handler(BaseHTTPRequestHandler):
             self.send_json(401, {"ok": False, "error": "read token required"})
             return
 
-        # Public dashboard status must not depend on the private bridge being
-        # responsive. Build it directly from the core + canonical local Quant
-        # telemetry so the phone can stay live even while chat/pairing is down.
+        # The phone overview uses one small canonical payload. This keeps Core,
+        # Quant, GMX and paper metrics independent from private chat/pairing and
+        # avoids sending the full research/backtest state through the tunnel.
         if self.path.startswith("/dashboard/status") or self.path.startswith("/api/public-status"):
-            fallback_code, fallback = fallback_status()
-            self.send_json(fallback_code, fallback)
+            summary_code, summary = compact_status()
+            self.send_json(summary_code, summary)
             return
 
-        status, response_headers, raw = request_local(self.path, "GET", None, None, 8)
-        if self.path.startswith("/dashboard/health") and status >= 500:
-            core_code, core_raw = request_core("/health")
-            health = scrub(parse_json(core_raw))
+        if self.path.startswith("/dashboard/health"):
+            summary_code, summary = compact_status()
+            bridge_status, _headers, _raw = request_local("/dashboard/health", "GET", None, None, 3)
+            myles = summary.get("myles") if isinstance(summary.get("myles"), dict) else {}
             self.send_json(
-                200,
+                200 if summary_code == 200 else summary_code,
                 {
-                    "ok": True,
-                    "gateway": {"ok": True, "version": "0.7.6"},
-                    "bridge": {"ok": False, "fallback": "core-health", "private_status": status},
-                    "myles": {"ok": core_code == 200, "data": health},
+                    "ok": summary_code == 200,
+                    "gateway": {"ok": True, "version": "0.7.7"},
+                    "bridge": {"ok": bridge_status == 200, "private_status": bridge_status},
+                    "myles": {
+                        "ok": bool(myles.get("online")),
+                        "data": {
+                            "ok": bool(myles.get("online")),
+                            "version": myles.get("version"),
+                            "status": summary.get("status"),
+                            "time": summary.get("generated_at"),
+                        },
+                    },
+                    "status": summary,
                 },
             )
             return
+
+        status, response_headers, raw = request_local(self.path, "GET", None, None, 8)
         try:
             value = parse_json(raw)
             raw = json.dumps(scrub(value), separators=(",", ":")).encode("utf-8")
