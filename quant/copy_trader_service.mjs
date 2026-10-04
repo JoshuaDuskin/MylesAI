@@ -29,7 +29,7 @@ const readJson = (file, fallback = null) => { try { return JSON.parse(fs.readFil
 function writeJson(file, value) { fs.mkdirSync(path.dirname(file), { recursive: true }); const tmp = `${file}.tmp-${process.pid}`; fs.writeFileSync(tmp, JSON.stringify(value, null, 2)); fs.renameSync(tmp, file); }
 function address(value) { const s = String(value || '').toLowerCase(); return /^0x[0-9a-f]{40}$/.test(s) ? s : null; }
 function usd30(value) { try { return Number(BigInt(String(value || 0))) / 1e30; } catch { return Number(value || 0); } }
-function defaults() { return { version: VERSION, enabled: true, auto_discovery: true, auto_select: true, shadow_copy_enabled: true, live_copy_enabled: false, discovery_period_days: 30, validation_period_days: 90, max_candidates: 20, max_selected_traders: 3, min_closed_trades: 12, min_win_rate_pct: 52, min_score: 55, max_copy_positions: 2, copy_margin_usd: 25, copy_leverage: 1.25, stop_loss_pct: 1.0, take_profit_pct: 2.0, poll_seconds: 180, selected_accounts: [] }; }
+function defaults() { return { version: VERSION, enabled: true, auto_discovery: true, auto_select: true, shadow_copy_enabled: true, live_copy_enabled: false, discovery_period_days: 30, validation_period_days: 90, discovery_interval_seconds: 900, max_candidates: 20, max_selected_traders: 3, min_closed_trades: 12, min_win_rate_pct: 52, min_score: 55, max_copy_positions: 2, copy_margin_usd: 25, copy_leverage: 1.25, stop_loss_pct: 1.0, take_profit_pct: 2.0, poll_seconds: 60, selected_accounts: [] }; }
 function config() { const d = defaults(), x = readJson(CONFIG_FILE, {}); return { ...d, ...x, selected_accounts: Array.isArray(x.selected_accounts) ? x.selected_accounts.map(address).filter(Boolean) : [] }; }
 function saveConfig(input) {
   const old = config(), x = input?.config && typeof input.config === 'object' ? input.config : input;
@@ -45,14 +45,17 @@ function saveConfig(input) {
   next.copy_leverage = clamp(next.copy_leverage, 1, 1.5);
   next.stop_loss_pct = clamp(next.stop_loss_pct, .25, 5);
   next.take_profit_pct = clamp(next.take_profit_pct, .25, 12);
-  next.poll_seconds = Math.round(clamp(next.poll_seconds, 60, 1800));
+  next.discovery_interval_seconds = Math.round(clamp(next.discovery_interval_seconds, 300, 21600));
+  next.poll_seconds = Math.round(clamp(next.poll_seconds, 30, 1800));
   writeJson(CONFIG_FILE, next); return next;
 }
 
 async function api(pathname, options = {}) {
   let last;
   for (const base of [API, 'https://arbitrum.gmxapi.ai/v1']) {
-    try { const r = await fetch(`${base}${pathname}`, { ...options, headers: { accept: 'application/json', ...(options.body ? { 'content-type': 'application/json' } : {}), ...(options.headers || {}) }, signal: AbortSignal.timeout(25000) }); if (!r.ok) throw new Error(`HTTP ${r.status}`); return await r.json(); } catch (e) { last = e; }
+    for (let attempt = 1; attempt <= 2; attempt += 1) {
+      try { const r = await fetch(`${base}${pathname}`, { ...options, headers: { accept: 'application/json', ...(options.body ? { 'content-type': 'application/json' } : {}), ...(options.headers || {}) }, signal: AbortSignal.timeout(20000) }); if (!r.ok) throw new Error(`HTTP ${r.status}`); return await r.json(); } catch (e) { last = e; if (attempt < 2) await sleep(500 * attempt); }
+    }
   }
   throw last || new Error('GMX API unavailable');
 }
@@ -140,10 +143,10 @@ function liveCopy(cfg, signals) {
 async function cycle(forceDiscovery = false) {
   const cfg = config(), previous = readJson(STATUS_FILE, {}); if (!cfg.enabled) return previous;
   let discovery = { candidates: previous.candidates || [], qualified: previous.qualified || [], selected_accounts: cfg.selected_accounts }, didDiscover = false;
-  const age = Date.now() - Date.parse(previous.discovery_at || 0); if (forceDiscovery || cfg.auto_discovery && (!Number.isFinite(age) || age > 6 * 3600 * 1000)) { discovery = await discover(cfg); didDiscover = true; }
+  const age = Date.now() - Date.parse(previous.discovery_at || 0); if (forceDiscovery || cfg.auto_discovery && (!Number.isFinite(age) || age > cfg.discovery_interval_seconds * 1000)) { discovery = await discover(cfg); didDiscover = true; }
   const selected = cfg.selected_accounts.length ? cfg.selected_accounts : discovery.selected_accounts || [], map = new Map((discovery.candidates || []).map(x => [x.account, x]));
   const positions = await sourcePositions(selected, map), signals = consensus(positions), actions = cfg.shadow_copy_enabled ? shadowCopy(cfg, signals) : [], liveActions = liveCopy(cfg, signals), liveStatus = readJson(LIVE_STATUS_FILE, {}), liveActive = !!(cfg.live_copy_enabled && liveStatus.armed && liveStatus.copy_trading?.enabled && Number(liveStatus.copy_trading?.authorized_until || 0) > Math.floor(Date.now() / 1000));
-  const status = { ok: true, version: VERSION, generated_at: iso(), discovery_at: didDiscover ? iso() : previous.discovery_at, data_source: 'GMX official API and SDK', mode: liveActive ? 'owner_authorized_live_copy' : 'paper_shadow_copy', live_copy_enabled: liveActive, safety_note: liveActive ? 'REAL GMX copying is active only for the owner-signed trader list and risk envelope. Manual positions are never adopted or closed by copy trading.' : 'Live copy is off. Paper shadow-copy may continue independently.', config: cfg, selected_accounts: selected, candidates: discovery.candidates || [], qualified: discovery.qualified || [], source_positions: positions, signals, recent_actions: actions, recent_live_actions: liveActions };
+  const generated=iso(),status = { ok: true, version: VERSION, generated_at: generated, discovery_at: didDiscover ? generated : previous.discovery_at, next_discovery_at: new Date(Date.now() + cfg.discovery_interval_seconds * 1000).toISOString(), data_source: 'GMX official API and SDK', source_health: { gmx_api: { available: true, endpoint: API, updated_at: generated }, gmx_sdk: { available: true, updated_at: generated } }, research_findings: { candidates: discovery.candidates?.length || 0, qualified: discovery.qualified?.length || 0, consensus_signals: signals.length, shadow_actions: actions.length, live_actions: liveActions.length, statement: signals.length ? `${signals.length} current GMX trader-consensus signal(s) are being shadow-tested.` : 'No qualified trader consensus is present; no paper copy entry is manufactured.' }, mode: liveActive ? 'owner_authorized_live_copy' : 'paper_shadow_copy', live_copy_enabled: liveActive, safety_note: liveActive ? 'REAL GMX copying is active only for the owner-signed trader list and risk envelope. Manual positions are never adopted or closed by copy trading.' : 'Live copy is off. Paper shadow-copy may continue independently.', config: cfg, selected_accounts: selected, candidates: discovery.candidates || [], qualified: discovery.qualified || [], source_positions: positions, signals, recent_actions: actions, recent_live_actions: liveActions };
   writeJson(STATUS_FILE, status); return status;
 }
 async function main() { const args = process.argv.slice(2), payload = flag => { const i = args.indexOf(flag); return i >= 0 ? JSON.parse(args[i + 1] || '{}') : null; }; try { if (args.includes('--status')) { console.log(JSON.stringify(readJson(STATUS_FILE, { ok: true, version: VERSION, generated_at: null, candidates: [], signals: [] }))); return; } const p = payload('--config'); if (p) { const c = saveConfig(p); console.log(JSON.stringify({ ok: true, config: c })); return; } if (args.includes('--discover')) { console.log(JSON.stringify(await cycle(true))); return; } if (args.includes('--once')) { console.log(JSON.stringify(await cycle(false))); return; } if (args.includes('--daemon')) { for (;;) { try { await cycle(false); } catch (e) { writeJson(STATUS_FILE, { ...readJson(STATUS_FILE, {}), ok: false, generated_at: iso(), error: String(e?.message || e) }); } await sleep(config().poll_seconds * 1000); } } console.log(JSON.stringify({ ok: true, version: VERSION })); } catch (e) { console.error(JSON.stringify({ ok: false, error: String(e?.message || e) })); process.exit(2); } }
