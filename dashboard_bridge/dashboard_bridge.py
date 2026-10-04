@@ -55,9 +55,20 @@ def refresh_pair_state() -> None:
         expires = float(pair_data.get("expires_epoch") or 0)
         pinned = bool(pair_data.get("pinned", False))
         if code:
+            # The owner explicitly uses one local tower pairing code indefinitely.
+            # Keep this secret local; never publish it to GitHub or the dashboard feed.
+            if not pinned:
+                pair_data["pinned"] = True
+                pair_data["expires_epoch"] = 0
+                try:
+                    tmp = PAIR_CODE_FILE.with_name(PAIR_CODE_FILE.name + ".tmp")
+                    tmp.write_text(json.dumps(pair_data, indent=2) + "\\n", encoding="utf-8")
+                    os.replace(tmp, PAIR_CODE_FILE)
+                except Exception:
+                    pass
             PAIR_CODE = code
-            PAIR_EXPIRES = expires
-            PAIR_PINNED = pinned
+            PAIR_EXPIRES = 0
+            PAIR_PINNED = True
     except Exception:
         pass
 
