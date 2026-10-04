@@ -68,6 +68,23 @@ function Age($Json) {
     if (-not $Json -or -not $Json.generated_at) { return $null }
     try { return [math]::Round(((Get-Date).ToUniversalTime() - [DateTime]::Parse($Json.generated_at).ToUniversalTime()).TotalSeconds,1) } catch { return $null }
 }
+function PinLocalPairingCode {
+    $pairFile = Join-Path $Data "dashboard_pair_code.json"
+    if (-not (Test-Path -LiteralPath $pairFile)) { return }
+    try {
+        $pair = Get-Content -LiteralPath $pairFile -Raw -Encoding UTF8 | ConvertFrom-Json
+        if ($pair.code) {
+            $pair.pinned = $true
+            $pair.expires_epoch = 0
+            $tmp = $pairFile + ".tmp"
+            ($pair | ConvertTo-Json -Depth 8) | Set-Content -LiteralPath $tmp -Encoding UTF8
+            Move-Item -LiteralPath $tmp -Destination $pairFile -Force
+            Write-Host "PASS: existing local pairing code pinned indefinitely."
+        }
+    } catch {
+        Write-Host "Pairing file was not changed: $($_.Exception.Message)"
+    }
+}
 
 try {
     Write-Host "============================================================"
@@ -87,6 +104,7 @@ try {
     $head = "unknown"
     if ($git -and (Test-Path -LiteralPath (Join-Path $Root ".git"))) { $head = (& $git.Source -C $Root rev-parse --short HEAD).Trim() }
     Write-Host ("Installed source commit: {0}" -f $head)
+    PinLocalPairingCode
 
     Step "Checking Quant, GMX, and copy-research source"
     CheckSources
