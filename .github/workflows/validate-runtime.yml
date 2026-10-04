@@ -72,6 +72,20 @@ jobs:
       - name: Check Quant syntax
         run: node --check quant/quant_service.mjs
 
+      - name: Check Quant copy-trader syntax
+        run: node --check quant/copy_trader_service.mjs
+
+      - name: Check dashboard inline JavaScript syntax
+        run: |
+          node - <<'NODE'
+          const fs = require('fs');
+          const html = fs.readFileSync('index.html', 'utf8');
+          const scripts = [...html.matchAll(/<script(?:\s[^>]*)?>([\s\S]*?)<\/script>/gi)];
+          if (!scripts.length) throw new Error('No inline dashboard script found');
+          new Function(scripts.at(-1)[1]);
+          console.log('dashboard inline JavaScript OK');
+          NODE
+
       - name: Run Quant self-test
         run: node quant/quant_service.mjs --self-test
       - name: Verify strict dashboard trading source
@@ -79,6 +93,8 @@ jobs:
           grep -q "data/trading_status.json" index.html
           grep -q "SIMULATED PAPER" index.html
           ! grep -q "paper_equity','balance','paper_balance" index.html
+          grep -q "data-chart-funds" index.html
+          grep -q "chart-funds-controls" index.html
 
       - name: Reject stale or simulated dashboard artifacts
         shell: bash
@@ -112,4 +128,6 @@ jobs:
           grep -q "_verified_source.*data/trading_status.json" bin/public_gateway_v074.py
           node --check quant/gmx_live.mjs
           node --check quant/copy_trader_service.mjs
+          grep -q "COPY_STATUS_FILE" quant/quant_service.mjs
+          grep -q "copy_traders" quant/quant_service.mjs
           echo "GMX fallback and gateway telemetry contract OK"
