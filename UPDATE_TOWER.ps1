@@ -47,6 +47,10 @@ if (-not (Test-Administrator)) {
             Write-Host "MYLES elevated updater completed a healthy run; normalizing the Windows wrapper exit code to 0."
             exit 0
         }
+        if ($resultUpdated -and $resultText -match "MYLES TOWER UPDATE RESULT") {
+            Write-Host "MYLES elevated updater wrote a completed but non-passing result; returning exit code 2 instead of the ambiguous Windows -1."
+            exit 2
+        }
     }
     exit ([int]$childExitCode)
 }
@@ -900,7 +904,8 @@ Copy-Item (Join-Path $Recovery "RESULT.txt") (Join-Path $Root "logs\tower_update
 
 $DataPlaneOK = $DashboardStatusOK -and ($GameModeActive -or ($QuantFeedOK -and $GmxMarketCount -gt 0))
 $WorkerCardinalityOK = $GameModeActive -or ($QuantCount -eq 1 -and $GmxCount -eq 1 -and $CopyCount -eq 1)
-if ($CoreOK -and $Port8790 -and $Port8791 -and $SupervisorCount -eq 1 -and $WorkerCardinalityOK -and $DataPlaneOK) {
+$TowerUpdatePass = $CoreOK -and $Port8790 -and $Port8791 -and $SupervisorCount -eq 1 -and $WorkerCardinalityOK -and $DataPlaneOK
+if ($TowerUpdatePass) {
     Write-Host ""
     Write-Host "MYLES TOWER UPDATE: PASS" -ForegroundColor Green
     Write-Host "The canonical runtime is back online." -ForegroundColor Green
@@ -917,3 +922,4 @@ Write-Host "Saved log:" -ForegroundColor Cyan
 Write-Host (Join-Path $Root "logs\tower_update_latest.log")
 Write-Host ""
 Write-Host "MYLES is running in the background. This updater does not open another console." -ForegroundColor Cyan
+if ($TowerUpdatePass) { exit 0 } else { exit 2 }
