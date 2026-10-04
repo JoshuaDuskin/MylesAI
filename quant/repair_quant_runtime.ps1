@@ -48,14 +48,15 @@ function StartQuant {
     if ($text) { try { return ($text | ConvertFrom-Json) } catch {} }
     return $null
 }
-function WaitStatus([int]$Seconds) {
+function WaitStatus([int]$Seconds,[string]$BeforeGeneratedAt) {
     $deadline = (Get-Date).AddSeconds($Seconds)
     do {
         $json = ReadStatus
         if ($json -and $json.generated_at) {
             try {
                 $age = ((Get-Date).ToUniversalTime() - [DateTime]::Parse($json.generated_at).ToUniversalTime()).TotalSeconds
-                if ($age -ge -5 -and $age -le 180) { return $json }
+                $changed = ([string]$json.generated_at -ne [string]$BeforeGeneratedAt)
+                if ($changed -and $age -ge -5 -and $age -le 180) { return $json }
             } catch {}
         }
         Start-Sleep -Seconds 2
@@ -90,6 +91,10 @@ try {
     CheckSources
     Write-Host "PASS: Node syntax checks passed."
 
+    $beforeStatus = ReadStatus
+    $beforeGeneratedAt = ""
+    if ($beforeStatus -and $beforeStatus.generated_at) { $beforeGeneratedAt = [string]$beforeStatus.generated_at }
+
     Step "Stopping old Quant workers only"
     StopQuant
     Step "Starting one Quant worker"
@@ -97,7 +102,7 @@ try {
     if ($launch -and $launch.pid) { Write-Host ("Quant PID: {0}" -f $launch.pid) }
 
     Step "Waiting for fresh paper telemetry"
-    $status = WaitStatus 75
+    $status = WaitStatus 75 $beforeGeneratedAt
     $age = Age $status
     $markets = 0
     $trades = 0
