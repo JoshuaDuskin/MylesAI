@@ -41,12 +41,13 @@ function CheckSources {
     }
 }
 function StartQuant {
-    if (-not (Test-Path -LiteralPath $StartScript)) { throw "Missing launcher: $StartScript" }
-    $output = & powershell.exe -NoProfile -ExecutionPolicy Bypass -File $StartScript
-    if ($LASTEXITCODE -ne 0) { throw "Quant launcher failed." }
-    $text = ($output -join "`n").Trim()
-    if ($text) { try { return ($text | ConvertFrom-Json) } catch {} }
-    return $null
+    $node = NodePath
+    if (-not (Test-Path -LiteralPath $QuantSource)) { throw "Missing Quant source: $QuantSource" }
+    $stdout = Join-Path $Logs "quant_repair_stdout.log"
+    $stderr = Join-Path $Logs "quant_repair_stderr.log"
+    $proc = Start-Process -FilePath $node -ArgumentList @("quant_service.mjs") -WorkingDirectory $Quant -WindowStyle Hidden -RedirectStandardOutput $stdout -RedirectStandardError $stderr -PassThru
+    if (-not $proc) { throw "Quant worker did not start." }
+    return @{ pid = $proc.Id; stdout = $stdout; stderr = $stderr }
 }
 function WaitStatus([int]$Seconds,[string]$BeforeGeneratedAt) {
     $deadline = (Get-Date).AddSeconds($Seconds)
