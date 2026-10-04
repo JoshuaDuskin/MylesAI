@@ -302,7 +302,7 @@ function updatePaper(state,candlesBySymbol,latest,config,researchResults=[]){
       // Manual positions must never replay the whole strategy candle after entry.
       // Their stop/target checks use the fresh GMX market mark only.
       let ex=p.source==='manual'?manualMarkExit(p,n(latest[symbol]?.price,c.close)):intrabarExit(p,c);
-      if(!ex&&p.source!=='manual'&&signal!==p.direction)ex={reason:'signal_exit',raw:c.close};
+      if(!ex&&p.source!=='manual'&&signal!==0&&signal!==p.direction)ex={reason:'signal_exit',raw:c.close};
       if(ex){closePaperPosition(state,symbol,ex.raw,latest[symbol]?.timestamp||c.timestamp,cost,ex.reason);exitedThisCandle=true;}
     }
     eq=stateEquity(state,latest);
