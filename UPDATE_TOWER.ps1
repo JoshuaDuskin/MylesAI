@@ -226,6 +226,21 @@ $processes = Get-CimInstance Win32_Process -ErrorAction SilentlyContinue | Where
     )
 }
 
+# Old updater revisions launched some Python services elevated. Their command
+# lines are not always visible to a non-elevated process, but their listening
+# ports still identify them authoritatively. Include those owners in the stop
+# set so no stale core/bridge/gateway process can lock data during preservation.
+$PortOwnerIds = @(Get-NetTCPConnection -State Listen -ErrorAction SilentlyContinue |
+    Where-Object { $_.LocalPort -in 8766,8790,8791 } |
+    ForEach-Object { [int]$_.OwningProcess } |
+    Where-Object { $_ -gt 0 -and $_ -ne $PID } |
+    Sort-Object -Unique)
+if ($PortOwnerIds.Count -gt 0) {
+    $PortOwnerProcesses = @(Get-CimInstance Win32_Process -ErrorAction SilentlyContinue |
+        Where-Object { [int]$_.ProcessId -in $PortOwnerIds })
+    $processes = @($processes + $PortOwnerProcesses | Sort-Object ProcessId -Unique)
+}
+
 foreach ($proc in $processes) {
     try {
         Log ("Stopping {0} PID {1}" -f $proc.Name, $proc.ProcessId)
@@ -234,15 +249,65 @@ foreach ($proc in $processes) {
 }
 Start-Sleep -Seconds 2
 
+# An interrupted older updater may have moved a runtime path into a prior
+# MylesAI_UpdatePreserve_* directory before failing. Recover only paths missing
+# from the live root, newest preservation folder first.
+$RuntimePathMap = @(
+    @{ RelativePath = ".venv"; PreserveName = "venv" },
+    @{ RelativePath = "data"; PreserveName = "data" },
+    @{ RelativePath = "logs"; PreserveName = "logs" },
+    @{ RelativePath = "backups"; PreserveName = "backups" },
+    @{ RelativePath = "self_updates"; PreserveName = "self_updates" },
+    @{ RelativePath = "quant\node_modules"; PreserveName = "quant_node_modules" },
+    @{ RelativePath = "bin\cloudflared.exe"; PreserveName = "cloudflared.exe" },
+    @{ RelativePath = "dashboard_site"; PreserveName = "dashboard_site_before" }
+)
+$PriorPreserves = @(Get-ChildItem $env:LOCALAPPDATA -Directory -Filter "MylesAI_UpdatePreserve_*" -ErrorAction SilentlyContinue |
+    Where-Object { $_.FullName -ne $Preserve } |
+    Sort-Object LastWriteTimeUtc -Descending)
+foreach ($mapping in $RuntimePathMap) {
+    $livePath = Join-Path $Root $mapping.RelativePath
+    if (Test-Path $livePath) { continue }
+    $source = $null
+    foreach ($candidate in $PriorPreserves) {
+        $candidatePath = Join-Path $candidate.FullName $mapping.PreserveName
+        if (Test-Path $candidatePath) {
+            $source = $candidatePath
+            break
+        }
+    }
+    if ($source) {
+        try {
+            New-Item -ItemType Directory -Force -Path (Split-Path $livePath -Parent) | Out-Null
+            Move-Item -Path $source -Destination $livePath -Force -ErrorAction Stop
+            Log ("PASS: recovered stranded runtime path before update: " + $mapping.RelativePath)
+        } catch {
+            Log ("WARNING: could not recover stranded runtime path " + $mapping.RelativePath + ": " + $_.Exception.Message)
+        }
+    }
+}
+
 function Move-ToPreserve {
     param([string]$RelativePath, [string]$PreserveName)
     $src = Join-Path $Root $RelativePath
     if (-not (Test-Path $src)) { return $false }
     $dst = Join-Path $Preserve $PreserveName
     New-Item -ItemType Directory -Force -Path (Split-Path $dst -Parent) | Out-Null
-    Move-Item -Path $src -Destination $dst -Force
-    Log ("Preserved local runtime path: " + $RelativePath)
-    return $true
+    for ($attempt = 1; $attempt -le 3; $attempt++) {
+        try {
+            Move-Item -Path $src -Destination $dst -Force -ErrorAction Stop
+            Log ("Preserved local runtime path: " + $RelativePath)
+            return $true
+        } catch {
+            if ($attempt -lt 3) { Start-Sleep -Seconds 2 }
+        }
+    }
+
+    # A locked runtime directory is safe to leave in place because these paths
+    # are local/ignored and the Git source reset does not remove them. Continue
+    # instead of aborting the entire tower restart.
+    Log ("WARNING: runtime path remained in place because Windows still had it locked: " + $RelativePath)
+    return $false
 }
 
 function Restore-FromPreserve {
@@ -251,7 +316,8 @@ function Restore-FromPreserve {
     if (-not (Test-Path $src)) { return $false }
     $dst = Join-Path $Root $RelativePath
     if (Test-Path $dst) {
-        Remove-Item $dst -Recurse -Force
+        Log ("Kept existing local runtime path: " + $RelativePath)
+        return $true
     }
     New-Item -ItemType Directory -Force -Path (Split-Path $dst -Parent) | Out-Null
     Move-Item -Path $src -Destination $dst -Force
