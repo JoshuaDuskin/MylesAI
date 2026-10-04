@@ -380,10 +380,10 @@ def save_quant_config(payload: Any) -> dict[str, Any]:
     cfg["schema_version"] = 3
     cfg["venue"] = "GMX"
     cfg["chain_id"] = 42161
-    timeframe = str(incoming.get("timeframe", cfg.get("timeframe", "1h")))
-    cfg["timeframe"] = timeframe if timeframe in QUANT_PERIODS else "1h"
+    timeframe = str(incoming.get("timeframe", cfg.get("timeframe", "1m")))
+    cfg["timeframe"] = timeframe if timeframe in QUANT_PERIODS else "1m"
     cfg["history_limit"] = int(clamp_num(incoming.get("history_limit", cfg.get("history_limit", 3000)), 300, 10000, 3000))
-    cfg["poll_seconds"] = int(clamp_num(incoming.get("poll_seconds", cfg.get("poll_seconds", 60)), 30, 900, 60))
+    cfg["poll_seconds"] = int(clamp_num(incoming.get("poll_seconds", cfg.get("poll_seconds", 30)), 15, 900, 30))
     cfg["starting_equity"] = clamp_num(incoming.get("starting_equity", cfg.get("starting_equity", 10000)), 100, 10_000_000, 10000)
 
     existing_markets = cfg.get("market_settings") if isinstance(cfg.get("market_settings"), dict) else {}
@@ -460,7 +460,7 @@ def save_quant_config(payload: Any) -> dict[str, Any]:
     research["paper_lab_enabled"] = bool(research_new.get("paper_lab_enabled", research_old.get("paper_lab_enabled", True)))
     research["tournament_enabled"] = bool(research_new.get("tournament_enabled", research_old.get("tournament_enabled", True)))
     research["entry_cooldown_bars"] = int(clamp_num(research_new.get("entry_cooldown_bars", research_old.get("entry_cooldown_bars", paper["entry_cooldown_bars"])), 0, 50, paper["entry_cooldown_bars"]))
-    research["interval_seconds"] = int(clamp_num(research_new.get("interval_seconds", research_old.get("interval_seconds", 900)), 120, 3600, 900))
+    research["interval_seconds"] = int(clamp_num(research_new.get("interval_seconds", research_old.get("interval_seconds", 120)), 120, 3600, 120))
     cfg["research_exploration"] = research
 
     cfg["strategies"] = {
