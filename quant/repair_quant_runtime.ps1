@@ -141,8 +141,8 @@ try {
     # between the repair and the new worker's first cycle.
     PinScalpPaperConfig
     Step "Starting one Quant worker"
-    $quantPid = StartQuant
-    Write-Host ("Quant PID: {0}" -f $quantPid)
+    $quantProcess = StartQuant
+    Write-Host ("Quant launcher process started: {0}" -f $quantProcess)
     Step "Waiting for fresh paper telemetry"
     $status = WaitFresh $before 90
     if (-not $status) { throw "Trading telemetry was not produced." }
