@@ -125,11 +125,18 @@
 .chart-controls>button.active,.chart-control-group button.active,.simple-chart-controls button.active{background:#dce7ff;color:#17213b;box-shadow:inset 0 0 0 1px rgba(255,255,255,.26)}
 .chart-control-group,.simple-chart-controls{border:1px solid rgba(180,201,241,.28);border-radius:10px;overflow:hidden;background:rgba(181,204,250,.09);display:flex;flex-wrap:nowrap;gap:0}
 .simple-chart-controls{width:max-content;margin-top:10px}
-.chart-funds-controls{display:flex;align-items:center;gap:5px;margin-left:auto;border:1px solid rgba(180,201,241,.22);border-radius:10px;overflow:hidden;background:rgba(181,204,250,.07)}
-.chart-funds-controls button{border:0;background:transparent;color:#b9c9e8;padding:7px 9px;font-size:8px;font-weight:850;cursor:pointer}
+.chart-funds-controls{display:flex;align-items:center;gap:0;margin-left:6px;border:1px solid rgba(180,201,241,.28);border-radius:10px;overflow:hidden;background:rgba(181,204,250,.09)}
+.chart-funds-controls button{border:0;border-right:1px solid rgba(191,210,247,.22);background:transparent;color:#b9c9e8;padding:8px 10px;font-size:8px;font-weight:850;cursor:pointer;white-space:nowrap}
+.chart-funds-controls button:last-child{border-right:0}
 .chart-funds-controls button.active{background:#dce7ff;color:#17213b}.chart-funds-controls button:disabled{opacity:.45;cursor:not-allowed}
 .chart-context-line{flex-wrap:wrap}.chart-context-line .chart-controls{margin-left:auto}.candle-wrap canvas,.chart-wrap canvas{touch-action:none;cursor:crosshair}
-.trading-hero>p,#executionReason,.live-note,.paper-lab-primary p,.paper-lab-activity>.compact-details-body>.simple-note,.simple-strategy-lab>.simple-note,.simple-strategy-lab .owner-live-note,.bot-decision-panel>.muted,.wallet-readiness p,#fundingDescription,.trade-panel[data-trade-panel="tradeConfigure"]>.research-note{display:none!important}
+.chart-source-text,#tradeDataSource{display:none!important}
+.research-status-text{display:inline-block;color:#9aabc8;font-size:8px;font-weight:850;letter-spacing:.12em;text-transform:uppercase;white-space:nowrap}
+#researchModeBadge,#tournamentStatus,#paperLabActivityBadge,#researchSourceSummary{border:0!important;background:transparent!important;box-shadow:none!important;padding:0!important;min-width:0!important;color:#9aabc8!important}
+.research-note,.quant-banner,.trading-hero>p,#executionReason,.live-note,.paper-lab-primary p,.paper-lab-activity>.compact-details-body>.simple-note,.simple-strategy-lab>.simple-note,.simple-strategy-lab .owner-live-note,.bot-decision-panel>.muted,.wallet-readiness p,#fundingDescription,.trade-panel[data-trade-panel="tradeConfigure"]>.research-note{display:none!important}
+.research-control-bar{display:flex;align-items:center;justify-content:space-between;gap:12px;border:1px solid rgba(99,221,255,.18);border-radius:14px;padding:13px 15px;background:linear-gradient(135deg,rgba(99,221,255,.045),rgba(111,140,255,.025));margin-top:12px}
+.research-control-bar strong{display:block;font-size:14px}.research-control-bar button{min-width:150px}
+.research-finding-summary{border:1px solid rgba(99,221,255,.16);border-radius:12px;background:rgba(99,221,255,.025);padding:11px 12px;color:#b7c7df;font-size:10px;line-height:1.5;margin:12px 0}
 .trade-panel[data-trade-panel="tradeFunding"] .section-heading h3{font-size:0}.trade-panel[data-trade-panel="tradeFunding"] .section-heading h3:after{content:'Wallet & safety';font-size:16px}
 @media(max-width:780px){.topbar{margin-left:-14px;margin-right:-14px;padding-left:14px;padding-right:14px;width:calc(100% + 28px)}.chart-funds-controls{margin-left:0}.chart-context-line .chart-controls{margin-left:0}.chart-control-group,.simple-chart-controls{max-width:100%;overflow-x:auto}.chart-control-group button,.simple-chart-controls button{padding-left:9px;padding-right:9px}}
 .quant-control-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:13px}
@@ -498,7 +505,7 @@
 
       <section class="view" data-view-panel="trading">
         <div class="trading-hero">
-          <div><span class="eyebrow">MYLES QUANT</span><h2>Trading Bot</h2><p>Continuous market research and simulated trading are separate controls. This screen shows every verified cycle, decision, position and result.</p></div>
+          <div><span class="eyebrow">MYLES QUANT</span><h2>Trading Bot</h2></div>
           <div class="trading-mode-box"><small>EXECUTION</small><strong id="executionMode">—</strong><span id="executionReason">Waiting for feed</span></div>
         </div>
 
@@ -510,7 +517,7 @@
 
         <div class="trade-panel active" data-trade-panel="tradeOverview">
           <div class="bot-command-card"><div class="bot-command-copy"><span class="eyebrow">PAPER TRADING BOT</span><div class="bot-command-title"><span id="paperBotDot" class="status-dot"></span><strong id="paperBotState">Checking bot…</strong></div><p id="paperBotDetail">Waiting for the tower to publish the current run.</p></div><div class="bot-command-actions"><input id="quantAutoTrading" type="checkbox" hidden><button id="quantAutoToggleButton" class="auto-toggle-btn"><i></i><span id="quantAutoToggleText">START PAPER BOT</span></button><button id="startFreshPaperRun" class="secondary-btn hidden" onclick="quantAction('reset_paper')">Archive failed run &amp; start fresh</button></div></div>
-          <div class="quant-banner"><div><strong>ACTIVE SIMULATION</strong><span>The screen follows the active research-shadow book while the validated forward account is halted. The failed main run stays preserved as evidence.</span></div><span class="status-chip paper">NO REAL FUNDS</span></div>
+          <div class="quant-banner"><strong>PAPER ONLY · LIVE LOCKED</strong></div>
           <div class="metric-grid">
             <article class="metric-card"><small>Active simulated equity</small><strong id="tradeEquity">—</strong><span id="tradeEquitySub">Simulated account</span></article>
             <article class="metric-card"><small>Active simulated P&amp;L</small><strong id="tradePnl">—</strong><span id="tradePnlSub">—</span></article>
@@ -519,7 +526,7 @@
           </div>
           <article class="panel live-wallet-strip bot-wallet-summary"><div><span class="eyebrow">LIVE WALLET</span><strong id="overviewLiveBalance">Not connected</strong><small id="overviewLiveNetwork">Set up later on Wallet</small></div><div><span class="eyebrow">LIVE P&amp;L</span><strong id="overviewLivePnl">—</strong><small id="overviewLivePnlSub">No live positions</small></div><div><span class="eyebrow">LIVE POSITIONS</span><strong id="overviewLivePositions">0</strong><small id="overviewLiveState">Owner-controlled</small></div></article>
           <div class="content-grid">
-            <article class="panel span-8"><div class="panel-heading"><div><span class="eyebrow">ACTIVE RESULTS</span><h3 id="tradeChartTitle">Active simulated equity</h3></div><span id="tradeDataSource" class="status-chip neutral">NO FEED</span></div><div class="chart-context-line"><strong id="tradeChartLiveLabel">Live paper equity</strong><div class="chart-controls" aria-label="Paper chart range"><button type="button" data-trade-range="5m">5M</button><button type="button" data-trade-range="15m">15M</button><button type="button" data-trade-range="1h">1H</button><button type="button" data-trade-range="6h" class="active">6H</button><button type="button" data-trade-range="24h">24H</button><button type="button" data-trade-range="all">ALL</button></div></div><div class="chart-wrap trade-chart"><canvas id="tradeChart"></canvas><div id="tradeChartEmpty" class="chart-empty">Waiting for the paper bot to publish equity.</div></div></article>
+            <article class="panel span-8"><div class="panel-heading"><div><span class="eyebrow">ACTIVE RESULTS</span><h3 id="tradeChartTitle">Active simulated equity</h3></div><span id="tradeDataSource" class="chart-source-text">—</span></div><div class="chart-context-line"><strong id="tradeChartLiveLabel">Paper equity</strong><div class="chart-controls" aria-label="Paper chart controls"><div class="chart-control-group" aria-label="Chart range"><button type="button" data-trade-range="5m">5M</button><button type="button" data-trade-range="15m">15M</button><button type="button" data-trade-range="1h">1H</button><button type="button" data-trade-range="6h" class="active">6H</button><button type="button" data-trade-range="24h">24H</button><button type="button" data-trade-range="all">ALL</button></div></div></div><div class="chart-wrap trade-chart"><canvas id="tradeChart"></canvas><div id="tradeChartEmpty" class="chart-empty">Waiting for the paper bot to publish equity.</div></div></article>
             <article class="panel span-4"><div class="panel-heading"><div><span class="eyebrow">MARKETS</span><h3>Live feed</h3></div></div><div id="marketCards" class="market-list"><div class="empty-row">No market feed published.</div></div></article>
             <article class="panel span-12 bot-decision-panel"><div class="panel-heading"><div><span class="eyebrow">MYLES' CURRENT DECISION</span><h3 id="botDecisionTitle">Evaluating the market</h3></div><span id="botDecisionBadge" class="status-chip paper">PAPER</span></div><div class="bot-decision-grid"><div><small>Approach</small><strong id="botChosenApproach">Scanning candidates</strong></div><div><small>Evidence</small><strong id="botDecisionEvidence">Waiting for research</strong></div><div><small>Copy-trader signal</small><strong id="botCopyConsensus">Waiting for scan</strong></div><div><small>What Myles is doing</small><strong id="botNextAction">Watching closed candles</strong></div></div><div class="muted top-gap">Research and backtests run automatically from tower telemetry. Use the Research tab for the current lab state; no chat command is required to keep it working.</div></article>
             <article class="panel span-12 activity-console"><div class="panel-heading"><div><span class="eyebrow">VERIFIED LIVE ACTIVITY</span><h3>What Myles is doing now</h3></div><span id="quantHeartbeatBadge" class="status-chip neutral">WAITING</span></div><div class="activity-cycle-grid"><div><small>Cycle</small><strong id="quantCycleNumber">—</strong></div><div><small>Last completed</small><strong id="quantCycleAge">—</strong></div><div><small>Next cycle</small><strong id="quantNextCycle">—</strong></div><div><small>Cycle time</small><strong id="quantCycleDuration">—</strong></div></div><div id="quantActivityStream" class="activity-stream"><div class="empty-row">Waiting for verified Quant activity.</div></div></article>
@@ -563,12 +570,12 @@
         </div>
 
         <div class="trade-panel" data-trade-panel="tradeConfigure">
-          <div class="section-heading"><div><span class="eyebrow">RESEARCH LAB</span><h3>Continuous market research</h3></div><span id="researchModeBadge" class="status-chip neutral">CHECKING</span></div>
-          <div class="research-note"><div><strong>Market research can run continuously without turning on the paper trading bot.</strong><span>It refreshes market intelligence, rotates candidates and runs the independent research tournament.</span><div id="researchLastRefresh" class="research-refresh-line">Waiting for the next verified research refresh.</div></div></div><div class="paper-lab-primary"><div><span class="eyebrow">CONTINUOUS MARKET RESEARCH</span><strong id="researchContinuousState">Checking…</strong><p id="researchContinuousDetail">Waiting for current Quant telemetry.</p></div><button id="researchContinuousToggle" class="primary-btn">START RESEARCH</button></div>
+          <div class="section-heading"><div><span class="eyebrow">RESEARCH LAB</span><h3>Research loop</h3></div><span id="researchModeBadge" class="research-status-text">CHECKING</span></div>
+          <div class="research-control-bar"><div><span class="eyebrow">RESEARCH</span><strong id="researchContinuousState">Checking…</strong><span id="researchContinuousDetail" class="hidden">Waiting for current Quant telemetry.</span></div><button id="researchContinuousToggle" class="secondary-btn">START</button></div>
           <div class="metric-grid top-gap"><article class="metric-card"><small>Backtests this refresh</small><strong id="labTested">—</strong><span>Candidate × market tests</span></article><article class="metric-card"><small>Forward-test pool</small><strong id="labEligible">—</strong><span>Positive + controlled near-misses</span></article><article class="metric-card"><small>Validated</small><strong id="labValidated">—</strong><span>Eligible for main paper</span></article><article class="metric-card"><small>Research window</small><strong id="labWindow">—</strong><span id="labMethod">Waiting for telemetry</span></article></div><details class="panel compact-details paper-lab-activity">
   <summary>
     <div><span class="eyebrow">STRICT PAPER LAB</span><h3>Selective forward test</h3></div>
-    <span id="paperLabActivityBadge" class="status-chip work">WAITING</span>
+    <span id="paperLabActivityBadge" class="research-status-text">WAITING</span>
   </summary>
   <div class="compact-details-body">
     <p class="simple-note">Only candidates close to validation appear here. This stays separate from the faster Strategy Lab experiments.</p>
@@ -581,13 +588,14 @@
   </div>
 </details>
 
-          <details class="panel compact-details research-intelligence top-gap">
+          <details class="panel compact-details research-intelligence top-gap" open>
   <summary>
     <div><span class="eyebrow">MYLES RESEARCH</span><h3>Why the market looks this way</h3></div>
-    <span id="researchSourceSummary" class="status-chip work">WAITING</span>
+    <span id="researchSourceSummary" class="research-status-text">WAITING FOR SOURCES</span>
   </summary>
   <div class="compact-details-body">
     <div id="researchSourceHealth" class="research-source-health"><span class="research-source-chip"><i></i>Waiting for source health</span></div>
+    <div id="researchFindingSummary" class="research-finding-summary">Waiting for current GMX and strategy findings.</div>
     <h4>Best ideas to test now</h4>
     <div id="researchHypotheses" class="hypothesis-list"><div class="empty-row">Waiting for regime-aware hypotheses.</div></div>
     <details class="inner-details"><summary>Market-by-market strength</summary><div class="inner-details-body"><div id="researchMarketIntel" class="intel-market-grid"><div class="empty-row">Waiting for market intelligence.</div></div></div></details>
@@ -597,11 +605,10 @@
 
           <article class="panel simple-strategy-lab owner-strategy-lab top-gap">
   <div class="panel-heading">
-    <div><span class="eyebrow">STRATEGY LAB</span><h3>Live simulated trading</h3></div>
-    <span id="tournamentStatus" class="status-chip work">WAITING</span>
+    <div><span class="eyebrow">STRATEGY LAB</span><h3>Paper Strategy Lab</h3></div>
+    <span id="tournamentStatus" class="research-status-text">PAPER LOOP</span>
   </div>
-  <p class="simple-note">Eight independent strategy books compete in simulated dollars. This is the main research view.</p>
-  <div class="owner-lab-metrics">
+    <div class="owner-lab-metrics">
     <div><small>Open now</small><strong id="tournamentOpen">—</strong></div>
     <div><small>Closed trades</small><strong id="tournamentTrades">—</strong></div>
     <div><small>Total P&amp;L</small><strong id="tournamentPnl">—</strong></div>
@@ -609,7 +616,7 @@
   <span id="tournamentBooks" class="hidden">—</span>
   <div class="simple-chart-card">
     <div class="simple-chart-head">
-      <div><span class="eyebrow">LIVE SIMULATED P&amp;L</span><h4>Strategy Lab</h4></div>
+      <div><span class="eyebrow">PAPER RESEARCH P&amp;L</span><h4>Strategy Lab</h4></div>
       <strong id="tournamentChartPnl">—</strong>
     </div>
     <div class="owner-live-note"><i class="owner-live-dot"></i><span>Mark-to-market updates every Quant cycle; entries and exits still obey the strategy signal.</span></div>
@@ -866,7 +873,7 @@
   function liveEquitySeries(){const l=state.live||{};return firstArray(l,['equity_curve','paper_equity_curve','portfolio_curve']).map(x=>({timestamp:first(x,['timestamp','time','ts'],null),value:num(first(x,['equity','value','balance','portfolio_value'],null))})).filter(x=>x.value!==null);}
   function activeSimulationSeries(m,a){return a.kind==='research'&&(num(m.researchPaper?.trades)||0)===0?[]:a.series;}
   function chartSeriesForFunds(m,a){if(state.chartFunds==='live')return liveEquitySeries();return activeSimulationSeries(m,a);}
-  function ensureChartFundsControls(kind){const selector=kind==='bot'?'.bot-performance-grid .chart-context-line':'.trade-panel[data-trade-panel="tradeOverview"] .chart-context-line';const host=document.querySelector(selector);if(!host)return null;let root=host.querySelector(`[data-chart-funds-group="${kind}"]`);if(!root){root=document.createElement('div');root.className='chart-funds-controls';root.dataset.chartFundsGroup=kind;root.setAttribute('aria-label','Chart funds');root.innerHTML='<button type="button" data-chart-funds="paper">PAPER</button><button type="button" data-chart-funds="live">LIVE</button>';host.appendChild(root);root.querySelectorAll('[data-chart-funds]').forEach(b=>b.addEventListener('click',()=>{if(b.disabled)return;state.chartFunds=b.dataset.chartFunds;renderAll();}));}const liveButton=root.querySelector('[data-chart-funds="live"]');if(liveButton)liveButton.disabled=!liveEquitySeries().length;root.querySelectorAll('[data-chart-funds]').forEach(b=>b.classList.toggle('active',b.dataset.chartFunds===state.chartFunds));return root;}
+  function ensureChartFundsControls(kind){const selector=kind==='bot'?'.bot-performance-grid .chart-context-line':'.trade-panel[data-trade-panel="tradeOverview"] .chart-context-line';const host=document.querySelector(selector);if(!host)return null;const controls=host.querySelector('.chart-controls')||host;let root=controls.querySelector(`[data-chart-funds-group="${kind}"]`);if(!root){root=document.createElement('div');root.className='chart-funds-controls';root.dataset.chartFundsGroup=kind;root.setAttribute('aria-label','Chart funds');root.innerHTML='<button type="button" data-chart-funds="paper">PAPER</button><button type="button" data-chart-funds="live">LIVE</button>';controls.appendChild(root);root.querySelectorAll('[data-chart-funds]').forEach(b=>b.addEventListener('click',()=>{if(b.disabled)return;state.chartFunds=b.dataset.chartFunds;renderAll();}));}const liveButton=root.querySelector('[data-chart-funds="live"]');if(liveButton)liveButton.disabled=!liveEquitySeries().length;root.querySelectorAll('[data-chart-funds]').forEach(b=>b.classList.toggle('active',b.dataset.chartFunds===state.chartFunds));return root;}
   function refreshFundChart(kind){const m=tradeMetrics(),a=activePaperView(m);if(kind==='trade'){const rows=filterChartRange(chartSeriesForFunds(m,a),state.tradeRange||'6h'),live=state.chartFunds==='live';setText('tradeChartLiveLabel',live?'Live wallet equity':'Live paper equity');drawChart('tradeChart','tradeChartEmpty',rows,{format:'money',label:live?'Live wallet equity':a.title,emptyText:live?'No live wallet equity feed is published.':'Waiting for the paper bot to publish equity.'});return;}const p=botChartPayload(m),live=state.chartFunds==='live',rows=live?filterChartRange(liveEquitySeries(),state.botChart?.range||'6h'):p.rows;drawChart('botPerformanceChart','botPerformanceEmpty',rows,{format:live?'money':p.format,label:live?'Live wallet equity':p.label,emptyText:live?'No live wallet equity feed is published.':p.context});}
   function serviceHealth(){const s=state.status||{},m=tradeMetrics(),diag=m.diagnostics||{};const sourceLive=state.statusSource==='LIVE TOWER';const quantStatus=String(first(m.engine,['status'],'')).toLowerCase();const quantFresh=m.verified&&['running','degraded'].includes(quantStatus);const quantKnown=m.available;const gmxFresh=quantFresh&&String(first(m.engine,['data_source'],'')).toLowerCase().includes('gmx')&&m.markets.length>0;const gmxKnown=quantKnown&&m.markets.length>0;const marketErrors=Object.keys(first(m.t,['market_errors'],{})||{}).length;const quantDetail=m.paused?'Heavy Quant is paused while a game is detected; last paper state is preserved.':quantFresh?String(first(m.engine,['version'],'Paper engine'))+' · '+String(first(m.runtimeActivity,['market_count'],0))+' markets'+(marketErrors?' · '+marketErrors+' feed warning'+(marketErrors===1?'':'s'):''):(diag.detail||'Waiting for canonical paper telemetry');const rows=[
     {name:'Myles Core',ok:runtimeOnline(s),label:runtimeOnline(s)?'ONLINE':'OFFLINE',detail:first(s,['myles.version','version'],'No version')},
@@ -967,8 +974,9 @@
   const intel=m.marketIntel||{},pipe=m.researchPipeline||{},health=intel.health||{},marketRows=pipe.markets||{},hyp=Array.isArray(pipe.top_hypotheses)?pipe.top_hypotheses:[];
   const sourceNames={gmx:'GMX',kraken:'Kraken',coinbase:'Coinbase',copy_traders:'Trader feed'};
   const hEntries=Object.entries(sourceNames).map(([k,label])=>{const row=health[k]||{},ok=Number(row.ok_markets||0),total=Number(row.total_markets||0);return{key:k,label,ok,total};});
+  const fallbackGmx=Math.max(Number(health.gmx?.ok_markets||0),Array.isArray(m.markets)?m.markets.length:0),gmxEntry=hEntries.find(x=>x.key==='gmx');if(gmxEntry&&fallbackGmx>0){gmxEntry.ok=fallbackGmx;gmxEntry.total=Math.max(gmxEntry.total,fallbackGmx);}
   const active=hEntries.filter(x=>x.ok>0).length;
-  setText('researchSourceSummary',active?`${active} SOURCES`:'NO SOURCES');
+  setText('researchSourceSummary',active?`${active} SOURCES`:'WAITING FOR SOURCES');
   const badge=$('researchSourceSummary');if(badge)badge.className=`status-chip ${active>=2?'live':active?'warn':'danger'}`;
   const hr=$('researchSourceHealth');if(hr)hr.innerHTML=hEntries.map(x=>`<span class="research-source-chip ${x.ok?'ok':''}"><i></i>${escapeHtml(x.label)} ${x.ok}/${x.total||'—'}</span>`).join('');
   const mr=$('researchMarketIntel'),entries=Object.entries(marketRows);
@@ -979,6 +987,7 @@
   const hh=$('researchHypotheses');if(hh)hh.innerHTML=hyp.length?hyp.slice(0,6).map(x=>`<div class="hypothesis-row"><div><strong>${escapeHtml(x.symbol||'—')} · ${escapeHtml(familyName(x.family))}</strong><p>${escapeHtml(x.thesis||'Waiting for thesis.')}</p></div><span class="hypothesis-score">${escapeHtml(String(Math.round(Number(x.score||0))))}</span></div>`).join(''):'<div class="empty-row">No regime-aware hypothesis has been ranked yet.</div>';
   const sourceMarkets=intel.markets||{},sourceText=Object.entries(sourceMarkets).map(([sym,row])=>{const names=Object.entries(row?.sources||{}).filter(([,v])=>v?.available).map(([k])=>sourceNames[k]||k);return `${sym}: ${names.join(' + ')||'no external source'}`;}).slice(0,5).join(' · ');
   setText('researchSourceDetail',sourceText?`${sourceText}. GMX remains the simulated execution mark; external venues are research inputs only.`:'GMX remains the simulated execution mark; external venues are research inputs only.');
+  const finding=pipe.findings||{},trader=pipe.trader_research||{},fallbackFinding=`GMX is publishing ${m.markets.length} live market${m.markets.length===1?'':'s'} on the ${first(m.researchLab,['timeframe'],'1m')} loop. ${first(m.researchLab,['tested_candidates'],0)} candidates tested, ${first(m.researchLab,['forward_test_candidates'],0)} forward candidates, ${first(m.researchLab,['validated_candidates'],0)} validated. Trader feed: ${trader.available?`${trader.candidates||0} candidates · ${trader.signals||0} signals`:'waiting'}.`;setText('researchFindingSummary',finding.headline?`${finding.headline} ${finding.detail||''}${finding.next_action?` Next: ${finding.next_action}`:''}`:fallbackFinding);
 }
   function friendlyStrategyName(book){return familyName(book?.family||'strategy');}
 function tournamentPnlSeries(rt,fallback){const start=num(rt?.starting_equity)||0;const curve=firstArray(rt||{},['equity_curve']);const source=curve.length?curve:(Array.isArray(fallback)?fallback:[]);return source.map(x=>({timestamp:first(x,['timestamp','time','ts'],null),value:(num(first(x,['equity','value'],null))??start)-start}));}
