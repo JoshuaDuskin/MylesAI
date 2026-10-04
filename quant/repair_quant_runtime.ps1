@@ -137,6 +137,7 @@ try {
     Write-Host ("Quant PID: {0}" -f $pid)
     Step "Waiting for fresh paper telemetry"
     $status = WaitFresh $before 90
+    if (-not $status) { throw "Trading telemetry was not produced." }
     $age = Age $status
     $markets = @($status.markets).Count
     $trades = @($status.recent_trades).Count
