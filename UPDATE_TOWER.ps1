@@ -10,13 +10,45 @@ function Test-Administrator {
     return $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
 }
 
+$ResultPathBeforeElevation = Join-Path $env:LOCALAPPDATA "MylesAI\logs\tower_update_RESULT.txt"
+$ResultWriteBeforeElevation = if (Test-Path -LiteralPath $ResultPathBeforeElevation) { (Get-Item -LiteralPath $ResultPathBeforeElevation).LastWriteTimeUtc } else { [DateTime]::MinValue.ToUniversalTime() }
+
 if (-not (Test-Administrator)) {
     $elevateArgs = @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $PSCommandPath)
     $elevated = Start-Process -FilePath "powershell.exe" -ArgumentList $elevateArgs -Verb RunAs -Wait -PassThru
-    if ($null -ne $elevated) {
-        exit $elevated.ExitCode
+    $childExitCode = if ($null -ne $elevated) { [int64]$elevated.ExitCode } else { 1 }
+    if ($childExitCode -eq 0) {
+        exit 0
     }
-    exit 1
+
+    # Windows PowerShell can report the elevated child as -1 even after the
+    # updater has completed successfully. Trust only a newly written, healthy
+    # result file; otherwise preserve the failure for the caller.
+    if ($childExitCode -lt 0 -or $childExitCode -eq 4294967295) {
+        $resultUpdated = $false
+        $resultText = ""
+        try {
+            if (Test-Path -LiteralPath $ResultPathBeforeElevation) {
+                $resultWriteAfterElevation = (Get-Item -LiteralPath $ResultPathBeforeElevation).LastWriteTimeUtc
+                $resultUpdated = $resultWriteAfterElevation -gt $ResultWriteBeforeElevation
+                if ($resultUpdated) {
+                    $resultText = Get-Content -LiteralPath $ResultPathBeforeElevation -Raw -Encoding UTF8 -ErrorAction Stop
+                }
+            }
+        } catch {}
+        $healthyResult = $resultText -match "Core 8766 healthy: True" -and
+            $resultText -match "Bridge 8790 listening: True" -and
+            $resultText -match "Gateway 8791 listening: True" -and
+            $resultText -match "Supervisor count: 1" -and
+            $resultText -match "Dashboard live status verified: True" -and
+            $resultText -match "Quant feed verified: True" -and
+            $resultText -match "GMX market count: [1-9]"
+        if ($resultUpdated -and $healthyResult) {
+            Write-Host "MYLES elevated updater completed a healthy run; normalizing the Windows wrapper exit code to 0."
+            exit 0
+        }
+    }
+    exit ([int]$childExitCode)
 }
 
 $Root = Join-Path $env:LOCALAPPDATA "MylesAI"
