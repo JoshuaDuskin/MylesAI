@@ -52,6 +52,8 @@ function PinScalpPaperConfig {
     Set-Prop $paper "enabled" $true
     Set-Prop $paper "auto_trading_enabled" $true
     Set-Prop $paper "adaptive_strategy_selection" $true
+    Set-Prop $paper "require_candidate_evidence" $true
+    Set-Prop $paper "min_forward_stress_return_pct" 0
     Set-Prop $paper "emergency_stop" $false
     $research = $cfg.research_exploration
     if (-not $research) { $research = [pscustomobject]@{}; Set-Prop $cfg "research_exploration" $research }
@@ -60,6 +62,10 @@ function PinScalpPaperConfig {
     Set-Prop $research "paper_lab_enabled" $true
     Set-Prop $research "tournament_enabled" $true
     Set-Prop $research "interval_seconds" 120
+    $validation = $cfg.validation
+    if (-not $validation) { $validation = [pscustomobject]@{}; Set-Prop $cfg "validation" $validation }
+    Set-Prop $validation "min_base_return_pct" 0
+    Set-Prop $validation "min_stress_return_pct" 0
     $live = $cfg.live_execution
     if (-not $live) { $live = [pscustomobject]@{}; Set-Prop $cfg "live_execution" $live }
     Set-Prop $live "enabled" $false
@@ -125,13 +131,15 @@ try {
         if ($LASTEXITCODE -ne 0) { throw "Canonical source update failed." }
     }
     PinPairing
-    PinScalpPaperConfig
     Step "Checking Quant, GMX, and trader-feed source"
     CheckSources
     $beforeStatus = ReadStatus
     $before = if ($beforeStatus) { [string]$beforeStatus.generated_at } else { "" }
     Step "Stopping old Quant workers only"
     StopQuant
+    # Pin after stopping Quant so an old worker cannot rewrite the config
+    # between the repair and the new worker's first cycle.
+    PinScalpPaperConfig
     Step "Starting one Quant worker"
     $pid = StartQuant
     Write-Host ("Quant PID: {0}" -f $pid)
@@ -145,6 +153,10 @@ try {
     $cycle = if ($status.runtime_activity) { $status.runtime_activity.cycle } else { 0 }
     $engine = if ($status.engine) { $status.engine.status } else { "missing" }
     $locked = [bool]$status.execution_locked
+    $actualTimeframe = if ($status.configuration) { [string]$status.configuration.timeframe } else { "missing" }
+    $gate = if ($status.research_runtime) { $status.research_runtime.paper_entry_gate } else { $null }
+    $gateStatus = if ($gate) { [string]$gate.status } else { "missing" }
+    $gateEligible = if ($gate) { [int]$gate.eligible_candidates } else { 0 }
     Write-Host ""
     Write-Host "============================================================"
     Write-Host " MYLES QUANT REPAIR RESULT"
@@ -157,9 +169,11 @@ try {
     Write-Host ("Quant cycle: {0}" -f $cycle)
     Write-Host ("Recent paper trades: {0}" -f $trades)
     Write-Host ("Open paper positions: {0}" -f $positions)
-    Write-Host "Timeframe target: 1m scalp loop"
+    Write-Host ("Timeframe: {0}" -f $actualTimeframe)
+    Write-Host ("Paper entry evidence gate: {0}" -f $gateStatus)
+    Write-Host ("Evidence-qualified candidates: {0}" -f $gateEligible)
     Write-Host "============================================================"
-    if (-not $status -or $age -eq $null -or $age -gt 180 -or $markets -lt 1 -or $engine -ne "running" -or -not $locked) { throw "Quant did not produce fresh locked paper telemetry. Inspect $Logs." }
+    if (-not $status -or $age -eq $null -or $age -gt 180 -or $markets -lt 1 -or $engine -ne "running" -or -not $locked -or $actualTimeframe -ne "1m") { throw "Quant did not produce fresh locked 1m paper telemetry. Inspect $Logs." }
     Write-Host "SUCCESS: Quant is running with fresh GMX-backed paper telemetry."
     Write-Host ("Quant log: {0}" -f (Join-Path $Logs "quant.log"))
     Write-Host ("Quant errors: {0}" -f (Join-Path $Logs "quant-error.log"))
