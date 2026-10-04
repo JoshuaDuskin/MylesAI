@@ -317,8 +317,8 @@ function updatePaper(state,candlesBySymbol,latest,config,researchResults=[]){
     }else if(exitedThisCandle){decision='close';reason='exit_signal_or_risk';}
     else if(state.halted){decision='hold';reason=state.halt_reason||'risk_halt';}
     else if(!autoAllowed){decision='hold';reason='paper_auto_trading_disabled';}
-    else if(state.positions[symbol]){decision='hold';reason='position_open'};
-    else if(openCount>=n(config.risk.max_concurrent_positions,2)){decision='hold';reason='max_concurrent_positions'};
+    else if(state.positions[symbol]){decision='hold';reason='position_open'}
+    else if(openCount>=n(config.risk.max_concurrent_positions,2)){decision='hold';reason='max_concurrent_positions'}
     state.decision_feed.push({at:iso(),symbol,strategy,signal:signal>0?'long':signal<0?'short':'flat',source:choice.source,action:decision,reason});
     state.last_candle_ts[symbol]=c.timestamp;
   }
