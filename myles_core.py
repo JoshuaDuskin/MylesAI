@@ -1090,10 +1090,27 @@ def _preempt_continuous_for_owner() -> None:
     set_setting("continuous.next_spawn_epoch", str(int(time.time()) + 15))
 
 
+def _direct_fortnite_launch() -> str:
+    if os.name != "nt":
+        return "Fortnite launch is only available on the Windows tower."
+    uri = "com.epicgames.launcher://apps/Fortnite?action=launch&silent=true"
+    try:
+        subprocess.Popen(["cmd.exe", "/c", "start", "", uri], creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+        return "Fortnite launch requested through Epic Games Launcher."
+    except Exception as exc:
+        return f"Fortnite could not be launched: {type(exc).__name__}: {exc}"
+
+
 def handle_owner_message(text: str, source: str) -> dict[str, Any]:
     raw = str(text or "").strip()
     if not raw:
         return {"kind": "chat", "reply": ""}
+
+    if re.search(r"\b(?:open|launch|start)\s+fortnite\b", raw, re.I):
+        add_message(source, "user", raw, None)
+        final = _direct_fortnite_launch()
+        message_id = add_message(source, "assistant", final, None)
+        return {"kind": "conversation", "reply": final, "message_id": message_id}
 
     # Authentication is the one normal owner gate. When the owner confirms it is done,
     # resume the same blocked job/workspace instead of creating a duplicate task.
