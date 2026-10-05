@@ -194,6 +194,27 @@ function promoteValidatedStrategies(config,results){
   }
   return promotions;
 }
+function adaptPaperStrategiesFromResults(config,results,paper){
+  if(config.paper?.adaptive_strategy_selection===false||config.research_exploration?.tournament_enabled===false)return[];
+  const trades=Array.isArray(paper?.trades)?paper.trades:[],changes=[];
+  for(const symbol of SUPPORTED_RESEARCH_MARKETS){
+    const marketTrades=trades.filter(t=>t.symbol===symbol);
+    if(marketTrades.length<3)continue;
+    let losingStreak=0;
+    for(let i=marketTrades.length-1;i>=0&&i>=marketTrades.length-5;i--){if(n(marketTrades[i]?.pnl,0)<0)losingStreak++;else break;}
+    if(losingStreak<3)continue;
+    const current=config.market_settings?.[symbol]?.paper_strategy||'trend_momentum';
+    const candidates=results.filter(r=>r.symbol===symbol&&paperCandidateEligible(r,config)).slice().sort((a,b)=>candidateScore(b)-candidateScore(a));
+    const best=candidates[0];
+    if(!best||best.strategy===current)continue;
+    const incumbent=results.find(r=>r.symbol===symbol&&r.strategy===current);
+    const incumbentScore=incumbent?candidateScore(incumbent):-100000;
+    if(candidateScore(best)<incumbentScore+.25)continue;
+    if(config.market_settings?.[symbol])config.market_settings[symbol].paper_strategy=best.strategy;
+    changes.push({at:iso(),symbol,from:current,to:best.strategy,loss_streak:losingStreak,score:candidateScore(best),reason:'rotated paper strategy after repeated losses; candidate still passed the forward/stress gate'});
+  }
+  return changes;
+}
 let researchState=loadResearchState();
 let cachedResearchResults=Array.isArray(researchState.results)?researchState.results:[];
 let lastResearchEpoch=n(researchState.last_run_epoch,0);
@@ -488,9 +509,9 @@ function telemetry(config,candlesBySymbol,latest,results,paper,errors,meta={}){
     research_history:researchState.history.slice(-120),
     family_progress:familyProgress,
     market_intel:{health:{gmx:{available:marketCount>0,ok_markets:marketCount,total_markets:enabled.length,last_update_at:marketCount?now:null},copy_traders:{available:copyFresh,ok_markets:copyFresh?new Set(copySignals.map(x=>x.symbol)).size:0,total_markets:enabled.length,last_update_at:copyFresh?copyRaw.generated_at:null,candidate_count:copyRaw.candidates?.length||0,qualified_count:copyQualified.length}},markets:marketIntelMarkets},
-    research_pipeline:{markets:pipelineMarkets,top_hypotheses:hypotheses,families:familyRows,findings,trader_research:{available:copyFresh,source:copyRaw.data_source||'GMX official API and SDK',generated_at:copyRaw.generated_at||null,age_seconds:copyAge,candidates:copyRaw.candidates?.length||0,qualified:copyQualified.length,signals:copySignals.length,selected_accounts:copyRaw.selected_accounts?.length||0},active_strategy_by_market:Object.fromEntries(enabled.map(symbol=>[symbol,config.market_settings?.[symbol]?.paper_strategy||'trend_momentum']))},
+    research_pipeline:{markets:pipelineMarkets,top_hypotheses:hypotheses,families:familyRows,findings,trader_research:{available:copyFresh,source:copyRaw.data_source||'GMX official API and SDK',generated_at:copyRaw.generated_at||null,age_seconds:copyAge,candidates:copyRaw.candidates?.length||0,qualified:copyQualified.length,signals:copySignals.length,selected_accounts:copyRaw.selected_accounts?.length||0},strategy_adaptations:(researchState.adaptations||[]).slice(-12),active_strategy_by_market:Object.fromEntries(enabled.map(symbol=>[symbol,config.market_settings?.[symbol]?.paper_strategy||'trend_momentum']))},
     research_tournament:{enabled:config.research_exploration?.tournament_enabled!==false,slot_count:books.length,open_positions:positions.length,trades:allTrades.length,pnl:round(pnl,2),equity_curve:paper.equity_curve||[],books,recent_trades:allTrades.slice(-30)},
-    runtime_activity:{cycle:cycleSequence,cycle_number:cycleSequence,last_cycle_at:now,cycle_completed_at:now,next_cycle_at:new Date(Date.now()+config.poll_seconds*1000).toISOString(),duration_ms:meta.duration_ms??null,poll_seconds:config.poll_seconds,market_count:marketCount,market_error_count:Object.keys(errors).length,research_enabled:researchOn,research_last_run_at:lastResearchEpoch?new Date(lastResearchEpoch*1000).toISOString():null,paper_bot_enabled:paperBotOn,open_positions:positions.length,closed_trades:allTrades.length},
+    runtime_activity:{cycle:cycleSequence,cycle_number:cycleSequence,last_cycle_at:now,cycle_completed_at:now,next_cycle_at:new Date(Date.now()+config.poll_seconds*1000).toISOString(),duration_ms:meta.duration_ms??null,poll_seconds:config.poll_seconds,market_count:marketCount,market_error_count:Object.keys(errors).length,research_enabled:researchOn,research_last_run_at:lastResearchEpoch?new Date(lastResearchEpoch*1000).toISOString():null,paper_bot_enabled:paperBotOn,open_positions:positions.length,closed_trades:allTrades.length,strategy_adaptations:Array.isArray(meta.strategy_adaptations)?meta.strategy_adaptations:[]},
     activity_feed:activity,
     engine:{name:'Myles Quant',version:VERSION,status:'running',health:marketCount?'ok':'degraded',venue:config.venue,chain_id:config.chain_id,data_source:'GMX Oracle /prices/candles + 1m market marks'},
     account_type:'SIMULATED PAPER',mode:'paper',execution_locked:true,live_execution:config.live_execution,
@@ -566,7 +587,15 @@ async function cycle({backtestOnly=false}={}){
   if(!paper||paper.version!==3)paper=createPaperState(config);
   const previousPositions=new Set(Object.keys(paper.positions||{}));
   const previousTradeCount=Array.isArray(paper.trades)?paper.trades.length:0;
-  if(!backtestOnly&&config.paper.enabled)paper=updatePaper(paper,candlesBySymbol,latest,config,results);
+  let adaptations=[];
+  if(!backtestOnly&&config.paper.enabled){
+    paper=updatePaper(paper,candlesBySymbol,latest,config,results);
+    adaptations=adaptPaperStrategiesFromResults(config,results,paper);
+    if(adaptations.length){
+      writeJsonAtomic(CONFIG_FILE,normalizeConfig(config));
+      researchState.adaptations=[...(researchState.adaptations||[]),...adaptations].slice(-120);
+    }
+  }
   const currentPositions=new Set(Object.keys(paper.positions||{}));
   for(const symbol of currentPositions){
     if(previousPositions.has(symbol))continue;
@@ -576,10 +605,13 @@ async function cycle({backtestOnly=false}={}){
   for(const trade of (paper.trades||[]).slice(previousTradeCount)){
     researchState.activity_feed.push({at:trade.closed_at||iso(),type:'paper_result',title:n(trade.pnl,0)>=0?'Paper trade won':'Paper trade lost',detail:trade.symbol+' '+String(trade.side||'').toUpperCase()+' · '+String(trade.reason||'closed'),value:n(trade.pnl,0)});
   }
+  for(const adaptation of adaptations){
+    researchState.activity_feed.push({at:adaptation.at,type:'strategy_adaptation',title:'Paper strategy adapted',detail:adaptation.symbol+': '+adaptation.from+' → '+adaptation.to+' after '+adaptation.loss_streak+' consecutive losses',value:adaptation.score});
+  }
   researchState.activity_feed=researchState.activity_feed.slice(-120);
   writeJsonAtomic(RESEARCH_FILE,researchState);
   writeJsonAtomic(STATE_FILE,paper);
-  const status=telemetry(config,candlesBySymbol,latest,results,paper,errors,{duration_ms:Date.now()-cycleStarted});
+  const status=telemetry(config,candlesBySymbol,latest,results,paper,errors,{duration_ms:Date.now()-cycleStarted,strategy_adaptations:adaptations});
   writeJsonAtomic(STATUS_FILE,status);
   return status;
 }
