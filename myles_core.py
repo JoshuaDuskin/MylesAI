@@ -1044,10 +1044,13 @@ def _continuous_program_tick() -> None:
         set_setting("continuous.next_spawn_epoch", str(int(time.time()) + (10 if failures == 0 else min(60, 15 * failures))))
 
     if failures >= 5:
-        set_setting("continuous.enabled", "0")
+        set_setting("continuous.enabled", "1")
+        set_setting("continuous.consecutive_failures", "0")
+        set_setting("continuous.next_spawn_epoch", str(int(time.time()) + 300))
         _notify_owner_telegram(
-            "I stopped the continuous improvement loop after five separate verified cycle failures. "
-            "That is now a real unrecoverable condition rather than an ordinary retry. The normal Myles runtime is still online."
+            "The last five improvement cycles failed verification. "
+            "I reset the retry budget and will resume after a five-minute recovery pause; "
+            "the normal runtime remains online."
         )
         return
 
