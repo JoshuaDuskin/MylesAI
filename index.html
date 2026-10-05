@@ -7,7 +7,7 @@
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
   <meta http-equiv="Pragma" content="no-cache" />
   <meta http-equiv="Expires" content="0" />
-  <meta name="myles-build" content="0.10.65-compact-live-status" />
+  <meta name="myles-build" content="0.10.67-mobile-containment-adaptive-paper" />
   <meta name="color-scheme" content="dark" />
   <title>Myles Control Center</title>
   <style>
@@ -1014,7 +1014,7 @@
   const hh=$('researchHypotheses');if(hh)hh.innerHTML=hyp.length?hyp.slice(0,6).map(x=>`<div class="hypothesis-row"><div><strong>${escapeHtml(x.symbol||'—')} · ${escapeHtml(familyName(x.family))}</strong><p>${escapeHtml(x.thesis||'Waiting for thesis.')}</p></div><span class="hypothesis-score">${escapeHtml(String(Math.round(Number(x.score||0))))}</span></div>`).join(''):'<div class="empty-row">No regime-aware hypothesis has been ranked yet.</div>';
   const sourceMarkets=intel.markets||{},sourceText=Object.entries(sourceMarkets).map(([sym,row])=>{const names=Object.entries(row?.sources||{}).filter(([,v])=>v?.available).map(([k])=>sourceNames[k]||k);return `${sym}: ${names.join(' + ')||'no external source'}`;}).slice(0,5).join(' · ');
   setText('researchSourceDetail',sourceText?`${sourceText}. GMX remains the simulated execution mark; external venues are research inputs only.`:'GMX remains the simulated execution mark; external venues are research inputs only.');
-  const finding=pipe.findings||{},trader=pipe.trader_research||{},fallbackFinding=`GMX is publishing ${m.markets.length} live market${m.markets.length===1?'':'s'} on the ${first(m.researchLab,['timeframe'],'1m')} loop. ${first(m.researchLab,['tested_candidates'],0)} candidates tested, ${first(m.researchLab,['forward_test_candidates'],0)} forward candidates, ${first(m.researchLab,['validated_candidates'],0)} validated. Trader feed: ${trader.available?`${trader.candidates||0} candidates · ${trader.signals||0} signals`:'waiting'}.`;setText('researchFindingSummary',finding.headline?`${finding.headline} ${finding.detail||''}${finding.next_action?` Next: ${finding.next_action}`:''}`:fallbackFinding);
+  const finding=pipe.findings||{},trader=pipe.trader_research||{},shadow=num(first(m.researchLab,['paper_entry_gate.shadow_candidates'],0))||0,adaptations=Array.isArray(m.runtimeActivity?.strategy_adaptations)?m.runtimeActivity.strategy_adaptations.length:0,fallbackFinding=`GMX is publishing ${m.markets.length} live market${m.markets.length===1?'':'s'} on the ${first(m.researchLab,['timeframe'],'1m')} loop. ${first(m.researchLab,['tested_candidates'],0)} candidates tested, ${first(m.researchLab,['forward_test_candidates'],0)} forward candidates, ${shadow} shadow candidates, ${first(m.researchLab,['validated_candidates'],0)} validated${adaptations?`. ${adaptations} strategy adaptation${adaptations===1?'':'s'} recorded`:''}. Trader feed: ${trader.available?`${trader.candidates||0} candidates · ${trader.signals||0} signals`:'waiting'}.`;setText('researchFindingSummary',finding.headline?`${finding.headline} ${finding.detail||''}${finding.next_action?` Next: ${finding.next_action}`:''}`:fallbackFinding);
 }
   function friendlyStrategyName(book){return familyName(book?.family||'strategy');}
 function tournamentPnlSeries(rt,fallback){const start=num(rt?.starting_equity)||0;const curve=firstArray(rt||{},['equity_curve']);const source=curve.length?curve:(Array.isArray(fallback)?fallback:[]);return source.map(x=>({timestamp:first(x,['timestamp','time','ts'],null),value:(num(first(x,['equity','value'],null))??start)-start}));}
