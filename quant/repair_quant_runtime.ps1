@@ -53,6 +53,7 @@ function PinScalpPaperConfig {
     Set-Prop $paper "auto_trading_enabled" $true
     Set-Prop $paper "adaptive_strategy_selection" $true
     Set-Prop $paper "require_candidate_evidence" $true
+    Set-Prop $paper "allow_research_shadow_entries" $true
     Set-Prop $paper "min_forward_stress_return_pct" 0
     Set-Prop $paper "emergency_stop" $false
     $research = $cfg.research_exploration
@@ -75,6 +76,28 @@ function PinScalpPaperConfig {
     ($cfg | ConvertTo-Json -Depth 30) | Set-Content -LiteralPath $tmp -Encoding UTF8
     Move-Item -LiteralPath $tmp -Destination $ConfigFile -Force
     Write-Host "PASS: 1-minute scalp paper loop and continuous research pinned; live execution locked."
+}
+function RecoverPaperRiskHalt {
+    $stateFile = Join-Path $Data "quant_paper_state_v3.json"
+    if (-not (Test-Path -LiteralPath $stateFile)) { return }
+    try {
+        $state = Get-Content -LiteralPath $stateFile -Raw -Encoding UTF8 | ConvertFrom-Json
+        if ($state.version -eq 3 -and $state.halted -eq $true -and $state.halt_reason -ne "owner_emergency_stop") {
+            $equity = [double]$state.cash
+            if ($equity -le 0) { return }
+            Set-Prop $state "halted" $false
+            Set-Prop $state "halt_reason" "research_shadow_recovery"
+            Set-Prop $state "halt_cycles" 0
+            Set-Prop $state "peak_equity" $equity
+            Set-Prop $state "day_start_equity" $equity
+            $tmp = "$stateFile.tmp"
+            ($state | ConvertTo-Json -Depth 30) | Set-Content -LiteralPath $tmp -Encoding UTF8
+            Move-Item -LiteralPath $tmp -Destination $stateFile -Force
+            Write-Host "PASS: paper risk halt recovered for labelled research shadow testing; history preserved."
+        }
+    } catch {
+        Write-Host ("WARN: paper state recovery skipped: " + $_.Exception.Message)
+    }
 }
 function StopQuant {
     $rows = @(Get-CimInstance Win32_Process -ErrorAction SilentlyContinue | Where-Object { $_.CommandLine -and $_.CommandLine -match "quant_service\.mjs" })
@@ -140,6 +163,7 @@ try {
     # Pin after stopping Quant so an old worker cannot rewrite the config
     # between the repair and the new worker's first cycle.
     PinScalpPaperConfig
+    RecoverPaperRiskHalt
     Step "Starting one Quant worker"
     $quantProcess = StartQuant
     Write-Host ("Quant launcher process started: {0}" -f $quantProcess)
