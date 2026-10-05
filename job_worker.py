@@ -756,8 +756,23 @@ def _owner_repo_policy_refusal(job_id: str, name: str, args: dict) -> str | None
     return None
 
 
+def _launch_fortnite_direct() -> str:
+    if os.name != "nt":
+        return "FORTNITE_LAUNCH_UNAVAILABLE: Windows launch is only supported on the tower."
+    uri = "com.epicgames.launcher://apps/Fortnite?action=launch&silent=true"
+    try:
+        subprocess.Popen(["cmd.exe", "/c", "start", "", uri], creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+        return "FORTNITE_LAUNCH_REQUESTED: Epic Games Launcher was asked to open Fortnite."
+    except Exception as exc:
+        return f"FORTNITE_LAUNCH_ERROR: {type(exc).__name__}: {exc}"
+
+
 def execute_tool(job_id: str, name: str, args: dict) -> str:
     set_job(job_id, phase=f"tool:{name}", heartbeat_at=now_iso())
+    if name == "launch_fortnite":
+        result = _launch_fortnite_direct()
+        trace(job_id, "tool.result", result, tool=name, ok=result.startswith("FORTNITE_LAUNCH_REQUESTED"))
+        return result
     policy_refusal = _owner_repo_policy_refusal(job_id, name, args)
     if policy_refusal:
         trace(job_id, "tool.refused", policy_refusal, tool=name, ok=False)
