@@ -17,6 +17,8 @@ START_MYLESAI.cmd
   ├─ visible: bin/myles_console_v074.py
   └─ hidden: bin/runtime_supervisor_v074.py
        ├─ myles_core.py                 127.0.0.1:8766
+       │   ├─ resilient Qwen/Ollama conversation runtime
+       │   ├─ optional privacy-safe TypeSafe Jev decision adapter
        │   ├─ durable job monitor / job_worker.py
        │   ├─ Telegram conversation loop
        │   └─ capability/plugin hooks
@@ -32,6 +34,36 @@ START_MYLESAI.cmd
 Root `runtime_supervisor.py` and `myles_console.py` are import-safe
 compatibility entry points only. `setup_myles.py` and `restart_helper.py`
 are retired guards/shims and do not own runtime startup.
+
+## Conversation and decision path
+
+Ordinary conversation stays in the conversation lane. Explicit owner actions may
+start or modify durable jobs; questions, venting, feedback, and context do not.
+The local model runtime discovers an installed Ollama model, prefers Qwen, starts
+Ollama when it is absent, and degrades to truthful natural replies while it
+recovers instead of returning a controller error.
+
+TypeSafe Jev is an optional typed decision coprocessor, never the conversational
+brain. When enabled and locally credentialed, it receives only boolean and
+bucketed abstract routing state through the official System One Choice contract.
+It never receives owner text, conversation history, memory, files, credentials,
+or tool output. Low confidence, timeout, missing credentials, or schema failure
+preserves the local rules/Qwen decision.
+
+Background actions run through the durable job worker and verified tools. Work
+is not marked complete without real tool evidence. Safe transient failures retry
+internally; durable jobs resume in their existing workspace. Owner interaction
+is reserved for authentication, MFA, consent, or a risky irreversible choice.
+
+## Continuous learning boundary
+
+MYLES may improve reusable tools, recovery logic, prompts, and candidate
+strategies, but it may not silently rewrite the live runtime. Runtime
+self-improvements are cloned, verified, and promoted through the supervisor's
+restart-and-rollback contract. Quant research continuously evaluates the full
+enabled market-by-strategy matrix, records evaluator faults, uses stressed-cost
+and walk-forward gates, and remains paper-only until the owner separately arms
+live execution.
 
 ## Dashboard data path
 
