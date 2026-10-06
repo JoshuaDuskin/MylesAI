@@ -33,6 +33,9 @@ from myles_runtime_v9 import (
     followup_action_request, refers_to_previous_result, execution_promise_text,
     behavior_feedback_request, self_capability_request, compact_task_signature,
 )
+from myles_model_runtime import (
+    fallback_conversation, model_chat, model_health_dict, verify_with_jev,
+)
 
 CORE_LOG = ROOT / "logs" / "core.log"
 WORKER_LOG = ROOT / "logs" / "worker.log"
@@ -337,82 +340,49 @@ def recover_job(job_id: str, reason: str = "Owner requested recovery") -> str:
 
 
 def _conversation_call(messages: list[dict[str, Any]]) -> dict[str, Any]:
-    cfg = load_config()
-    body = json.dumps({
-        "model": cfg["model"],
-        "messages": messages,
-        "stream": False,
-        "think": False,
-        "tools": CONVERSATION_TOOLS,
-        "options": {"temperature": 0.35},
-        "keep_alive": "0" if bool(cfg.get("light_mode")) else "10m",
-    }).encode("utf-8")
-    req = urllib.request.Request(
-        cfg["ollama_url"], data=body, method="POST", headers={"Content-Type": "application/json"}
+    """One resilient local-model call with installed-model discovery and recovery."""
+    return model_chat(
+        load_config(),
+        messages,
+        tools=CONVERSATION_TOOLS,
+        temperature=0.35,
     )
-    with urllib.request.urlopen(req, timeout=int(cfg.get("conversation_timeout_seconds", 120))) as r:
-        return json.loads(r.read().decode("utf-8"))
 
 
 def _router_call(raw: str) -> dict[str, Any]:
-    """Semantic router for ambiguous messages.
-
-    The exact latest owner message is always appended explicitly so recent history
-    cannot hide or dilute it. High-confidence action/control requests are handled
-    before this function and do not depend on model classification.
-    """
+    """Classify an ambiguous owner message without making router failure fatal."""
     cfg = load_config()
     history = history_for_model(14)
-    # handle_owner_message records raw before routing; avoid duplicating that same
-    # message in history when we append it explicitly below.
     if history and history[-1].get("role") == "user" and str(history[-1].get("content") or "").strip() == str(raw or "").strip():
         history = history[:-1]
 
     last_error = ""
-    for attempt in range(1, 4):
+    for attempt in range(1, 3):
         messages = [{"role": "system", "content": ROUTER_SYSTEM}] + history + [
             {"role": "user", "content": str(raw or "").strip()}
         ]
         if attempt > 1:
             messages.append({
                 "role": "system",
-                "content": (
-                    "Your previous routing response was invalid. Return exactly one JSON object "
-                    "with keys intent and task. No prose or Markdown."
-                ),
+                "content": "Return exactly one JSON object with keys intent and task. No prose or Markdown.",
             })
-        body = json.dumps({
-            "model": cfg["model"],
-            "messages": messages,
-            "stream": False,
-            "think": False,
-            "format": "json",
-            "options": {"temperature": 0.0},
-            "keep_alive": "0" if bool(cfg.get("light_mode")) else "10m",
-        }).encode("utf-8")
-        req = urllib.request.Request(
-            cfg["ollama_url"], data=body, method="POST", headers={"Content-Type": "application/json"}
-        )
         try:
-            with urllib.request.urlopen(req, timeout=int(cfg.get("conversation_timeout_seconds", 120))) as r:
-                data = json.loads(r.read().decode("utf-8"))
+            data = model_chat(cfg, messages, json_mode=True, temperature=0.0)
             content = clean_model_text(str((data.get("message") or {}).get("content") or ""))
             route = json.loads(content)
             if not isinstance(route, dict):
                 raise ValueError("router result was not an object")
             intent = str(route.get("intent") or "chat").strip().lower()
-            if intent not in {"chat", "lookup", "local_lookup", "feedback", "start", "modify", "status", "stop", "replace", "resume", "light_on", "light_off", "continuous_on", "continuous_off"}:
+            allowed = {"chat", "lookup", "local_lookup", "feedback", "start", "modify", "status", "stop", "replace", "resume", "light_on", "light_off", "continuous_on", "continuous_off"}
+            if intent not in allowed:
                 intent = "chat"
-            task = str(route.get("task") or "").strip()
-            return {"intent": intent, "task": task}
+            return {"intent": intent, "task": str(route.get("task") or "").strip()}
         except Exception as exc:
             last_error = f"{type(exc).__name__}: {exc}"
             log(f"semantic router retry attempt={attempt} error={last_error}")
 
-    # Router failure must not invent or destroy work. High-confidence actions were
-    # already handled deterministically before reaching here, so chat is safest.
-    log(f"semantic router exhausted retries; falling back to chat: {last_error}")
-    return {"intent": "chat", "task": ""}
+    log(f"semantic router unavailable; safe chat fallback: {last_error}")
+    return {"intent": "chat", "task": "", "_router_error": last_error}
 
 
 PINETREE_BLOCK_TERMS = ("pinetree", "pinetreepayments", "pinetree-payments", "pinetree-payments.com", "app.pinetree-payments")
@@ -543,19 +513,7 @@ def _speak_to_owner(controller_result: str) -> str:
     messages: list[dict[str, Any]] = [{"role": "system", "content": SPEAK_SYSTEM}]
     messages.extend(history_for_model(18))
     messages.append({"role": "system", "content": "CONTROLLER_RESULT:\n" + controller_result})
-    body = json.dumps({
-        "model": cfg["model"],
-        "messages": messages,
-        "stream": False,
-        "think": False,
-        "options": {"temperature": 0.35},
-        "keep_alive": "0" if bool(cfg.get("light_mode")) else "10m",
-    }).encode("utf-8")
-    req = urllib.request.Request(
-        cfg["ollama_url"], data=body, method="POST", headers={"Content-Type": "application/json"}
-    )
-    with urllib.request.urlopen(req, timeout=int(cfg.get("conversation_timeout_seconds", 120))) as r:
-        data = json.loads(r.read().decode("utf-8"))
+    data = model_chat(cfg, messages, temperature=0.35)
     return clean_model_text(str((data.get("message") or {}).get("content") or ""))
 
 
@@ -1182,6 +1140,21 @@ def handle_owner_message(text: str, source: str) -> dict[str, Any]:
 
         intent = route["intent"]
         task = str(route.get("task") or "").strip()
+        if forced is None and intent not in {"continuous_on", "continuous_off", "dashboard_url", "capabilities"}:
+            local_intent = intent
+            intent, jev_meta = verify_with_jev(
+                raw,
+                local_intent,
+                has_active=bool(active_now),
+                has_recent_cancelled=bool(cancelled_now),
+                cfg=load_config(),
+                secrets=load_secrets(),
+            )
+            log(
+                "decision route "
+                f"local={local_intent} final={intent} "
+                f"jev_used={bool(jev_meta.get('used'))} jev_decision={jev_meta.get('decision')}"
+            )
 
         # Conversational corrections always outrank an action verb such as
         # "fix" inside a question. This prevents messages like "I didn't ask
@@ -1366,8 +1339,11 @@ def handle_owner_message(text: str, source: str) -> dict[str, Any]:
                     else:
                         final = "I haven't started a computer task from that message, so I won't claim that I'm working on one."
     except Exception as exc:
-        log(f"conversation error: {type(exc).__name__}: {exc}")
-        final = "My local conversation controller hit an error. I did not pretend that anything started."
+        error_text = f"{type(exc).__name__}: {exc}"
+        log(f"conversation error: {error_text}")
+        set_setting("conversation.last_error", error_text[:1000])
+        set_setting("conversation.last_error_at", now_iso())
+        final = fallback_conversation(raw, status_text(), model_error=error_text)
     finally:
         CHAT_BUSY.clear()
 
@@ -1599,6 +1575,14 @@ class ApiHandler(BaseHTTPRequestHandler):
                 "time": now_iso(),
                 "telegram_configured": bool(token and owner_id),
                 "light_mode": bool(load_config().get("light_mode")),
+                "model_runtime": model_health_dict(load_config()),
+                "decision_adapter": {
+                    "jev_enabled": bool(load_config().get("jev_enabled")),
+                    "jev_configured": bool(load_config().get("jev_url") or load_secrets().get("MYLES_JEV_URL")),
+                    "privacy_mode": "abstract_state_only",
+                },
+                "last_conversation_error": get_setting("conversation.last_error", ""),
+                "last_conversation_error_at": get_setting("conversation.last_error_at", ""),
                 "status": status_text(),
             })
         if path == "/api/messages":
