@@ -35,7 +35,7 @@ jobs:
           python-version: "3.12"
 
       - name: Compile Python runtime
-        run: python -m py_compile dashboard_bridge/dashboard_bridge.py bin/runtime_supervisor_v074.py bin/public_gateway_v074.py bin/game_mode_watch.py myles_core.py myles_tools.py
+        run: python -m py_compile dashboard_bridge/dashboard_bridge.py bin/runtime_supervisor_v074.py bin/public_gateway_v074.py bin/game_mode_watch.py myles_core.py myles_model_runtime.py myles_tools.py
 
       - name: Verify durable Windows startup contract
         shell: bash
