@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import shutil
 import time
+import urllib.error
 from pathlib import Path
 
 import myles_common
@@ -15,7 +16,7 @@ def main():
     myles_common.init_db()
     cfg = myles_common.load_config()
     checks = {
-        "version": myles_common.APP_VERSION == "10.0.0",
+        "version": myles_common.APP_VERSION == "10.0.1",
         "config_loads": isinstance(cfg, dict),
         "telegram_setting_present": "telegram_enabled" in cfg,
         "root_exists": myles_common.ROOT.exists(),
@@ -42,6 +43,44 @@ def main():
     checks["conversation_fallback_is_natural"] = (
         myles_model_runtime.fallback_conversation("Yo") == "Hey — I’m here. What’s up?"
         and "task" not in myles_model_runtime.fallback_conversation("Yo").lower()
+    )
+
+    original_model_health = myles_model_runtime.ensure_model_runtime
+    original_model_request = myles_model_runtime._json_request
+    retry_requests = []
+    recovery_forces = []
+
+    def fake_model_health(_cfg, force=False):
+        recovery_forces.append(bool(force))
+        return myles_model_runtime.ModelHealth(
+            True,
+            model="qwen-test",
+            endpoint="http://127.0.0.1:11434",
+            recovered=bool(force),
+        )
+
+    def flaky_model_request(_url, _payload=None, timeout=15, headers=None):
+        retry_requests.append({"timeout": timeout, "headers": headers})
+        if len(retry_requests) == 1:
+            raise urllib.error.URLError("temporary refused connection")
+        return {"message": {"role": "assistant", "content": "recovered"}}
+
+    try:
+        myles_model_runtime.ensure_model_runtime = fake_model_health
+        myles_model_runtime._json_request = flaky_model_request
+        recovered_reply = myles_model_runtime.model_chat(
+            {},
+            [{"role": "user", "content": "Are you there?"}],
+            timeout=5,
+        )
+    finally:
+        myles_model_runtime.ensure_model_runtime = original_model_health
+        myles_model_runtime._json_request = original_model_request
+
+    checks["model_replays_turn_after_recovery"] = (
+        len(retry_requests) == 2
+        and True in recovery_forces
+        and recovered_reply.get("message", {}).get("content") == "recovered"
     )
     abstract = myles_model_runtime.abstract_decision_state(
         "Open my private report and stop the current job",
@@ -142,6 +181,17 @@ def main():
         'if re.search(r"\\b(?:open|launch|start)\\s+fortnite\\b", raw, re.I):' in core_source
         and core_source.index('if re.search(r"\\b(?:open|launch|start)\\s+fortnite\\b", raw, re.I):')
             < core_source.index('CHAT_BUSY.set()')
+    )
+    checks["fortnite_success_requires_process_verification"] = (
+        "_fortnite_process_running()" in core_source
+        and "verified the Fortnite process started" in core_source
+        and "I won't claim the game opened" in core_source
+        and "FORTNITE_LAUNCH_VERIFIED" in worker_source
+        and "FORTNITE_LAUNCH_REQUESTED" not in worker_source
+    )
+    checks["supervisor_recovers_stale_ollama"] = (
+        "retired unreachable Ollama serve process" in supervisor_source
+        and "Ollama conversation service recovered" in supervisor_source
     )
     checks["conversation_errors_have_safe_fallback"] = (
         "fallback_conversation(raw, status_text()" in core_source

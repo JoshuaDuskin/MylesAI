@@ -756,22 +756,105 @@ def _owner_repo_policy_refusal(job_id: str, name: str, args: dict) -> str | None
     return None
 
 
+def _windows_process_names() -> set[str]:
+    if os.name != "nt":
+        return set()
+    try:
+        result = subprocess.run(
+            ["tasklist", "/FO", "CSV", "/NH"],
+            text=True,
+            capture_output=True,
+            timeout=8,
+            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+        )
+        return {
+            match.group(1).strip().lower()
+            for line in (result.stdout or "").splitlines()
+            if (match := re.match(r'^"([^"]+)"', line.strip()))
+        }
+    except Exception:
+        return set()
+
+
+def _fortnite_process_running() -> bool:
+    return any(
+        name.startswith("fortniteclient") or name == "fortnite.exe"
+        for name in _windows_process_names()
+    )
+
+
+def _epic_process_running() -> bool:
+    names = _windows_process_names()
+    return "epicgameslauncher.exe" in names or "epicwebhelper.exe" in names
+
+
+def _epic_launcher_candidates() -> list[Path]:
+    candidates: list[Path] = []
+    for base in (os.environ.get("ProgramFiles(x86)"), os.environ.get("ProgramFiles")):
+        if base:
+            candidates.append(
+                Path(base) / "Epic Games" / "Launcher" / "Portal" / "Binaries" / "Win64" / "EpicGamesLauncher.exe"
+            )
+    local = os.environ.get("LOCALAPPDATA")
+    if local:
+        candidates.append(
+            Path(local) / "EpicGamesLauncher" / "Saved" / "EpicGamesLauncher.exe"
+        )
+    return candidates
+
+
 def _launch_fortnite_direct() -> str:
     if os.name != "nt":
         return "FORTNITE_LAUNCH_UNAVAILABLE: Windows launch is only supported on the tower."
-    uri = "com.epicgames.launcher://apps/Fortnite?action=launch&silent=true"
-    try:
-        subprocess.Popen(["cmd.exe", "/c", "start", "", uri], creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
-        return "FORTNITE_LAUNCH_REQUESTED: Epic Games Launcher was asked to open Fortnite."
-    except Exception as exc:
-        return f"FORTNITE_LAUNCH_ERROR: {type(exc).__name__}: {exc}"
+    if _fortnite_process_running():
+        return "FORTNITE_ALREADY_RUNNING: Fortnite is already running."
 
+    uri = "com.epicgames.launcher://apps/Fortnite?action=launch&silent=true"
+    errors: list[str] = []
+    dispatched = False
+    try:
+        getattr(os, "startfile")(uri)
+        dispatched = True
+    except Exception as exc:
+        errors.append(f"Windows URI: {type(exc).__name__}: {exc}")
+
+    for _ in range(4):
+        if _fortnite_process_running():
+            return "FORTNITE_LAUNCH_VERIFIED: Fortnite process started."
+        time.sleep(1)
+
+    launcher = next((path for path in _epic_launcher_candidates() if path.is_file()), None)
+    if launcher:
+        try:
+            subprocess.Popen(
+                [str(launcher), uri],
+                cwd=str(launcher.parent),
+                creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+            dispatched = True
+        except Exception as exc:
+            errors.append(f"Epic launcher: {type(exc).__name__}: {exc}")
+
+    deadline = time.time() + 25
+    while time.time() < deadline:
+        if _fortnite_process_running():
+            return "FORTNITE_LAUNCH_VERIFIED: Fortnite process started."
+        time.sleep(1)
+
+    if _epic_process_running():
+        return "FORTNITE_LAUNCH_UNVERIFIED: Epic Games Launcher opened, but Fortnite did not appear."
+    if dispatched:
+        return "FORTNITE_LAUNCH_UNVERIFIED: The request was sent, but no Fortnite or Epic process appeared."
+    detail = "; ".join(errors) or "No Epic Games Launcher or Windows URI handler was available."
+    return f"FORTNITE_LAUNCH_ERROR: {detail}"
 
 def execute_tool(job_id: str, name: str, args: dict) -> str:
     set_job(job_id, phase=f"tool:{name}", heartbeat_at=now_iso())
     if name == "launch_fortnite":
         result = _launch_fortnite_direct()
-        trace(job_id, "tool.result", result, tool=name, ok=result.startswith("FORTNITE_LAUNCH_REQUESTED"))
+        trace(job_id, "tool.result", result, tool=name, ok=result.startswith(("FORTNITE_LAUNCH_VERIFIED", "FORTNITE_ALREADY_RUNNING")))
         return result
     policy_refusal = _owner_repo_policy_refusal(job_id, name, args)
     if policy_refusal:

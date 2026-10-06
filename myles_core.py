@@ -1048,16 +1048,109 @@ def _preempt_continuous_for_owner() -> None:
     set_setting("continuous.next_spawn_epoch", str(int(time.time()) + 15))
 
 
+def _windows_process_names() -> set[str]:
+    if os.name != "nt":
+        return set()
+    try:
+        result = subprocess.run(
+            ["tasklist", "/FO", "CSV", "/NH"],
+            text=True,
+            capture_output=True,
+            timeout=8,
+            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+        )
+        return {
+            match.group(1).strip().lower()
+            for line in (result.stdout or "").splitlines()
+            if (match := re.match(r'^"([^"]+)"', line.strip()))
+        }
+    except Exception:
+        return set()
+
+
+def _fortnite_process_running() -> bool:
+    return any(
+        name.startswith("fortniteclient") or name == "fortnite.exe"
+        for name in _windows_process_names()
+    )
+
+
+def _epic_process_running() -> bool:
+    names = _windows_process_names()
+    return "epicgameslauncher.exe" in names or "epicwebhelper.exe" in names
+
+
+def _epic_launcher_candidates() -> list[Path]:
+    candidates: list[Path] = []
+    for base in (os.environ.get("ProgramFiles(x86)"), os.environ.get("ProgramFiles")):
+        if base:
+            candidates.append(
+                Path(base) / "Epic Games" / "Launcher" / "Portal" / "Binaries" / "Win64" / "EpicGamesLauncher.exe"
+            )
+    local = os.environ.get("LOCALAPPDATA")
+    if local:
+        candidates.append(
+            Path(local) / "EpicGamesLauncher" / "Saved" / "EpicGamesLauncher.exe"
+        )
+    return candidates
+
+
 def _direct_fortnite_launch() -> str:
+    """Launch Fortnite and report only process state that was actually observed."""
     if os.name != "nt":
         return "Fortnite launch is only available on the Windows tower."
-    uri = "com.epicgames.launcher://apps/Fortnite?action=launch&silent=true"
-    try:
-        subprocess.Popen(["cmd.exe", "/c", "start", "", uri], creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
-        return "Fortnite launch requested through Epic Games Launcher."
-    except Exception as exc:
-        return f"Fortnite could not be launched: {type(exc).__name__}: {exc}"
+    if _fortnite_process_running():
+        return "Fortnite is already running."
 
+    uri = "com.epicgames.launcher://apps/Fortnite?action=launch&silent=true"
+    errors: list[str] = []
+    dispatched = False
+
+    try:
+        getattr(os, "startfile")(uri)
+        dispatched = True
+    except Exception as exc:
+        errors.append(f"Windows URI: {type(exc).__name__}: {exc}")
+
+    # Give the URI handler a moment, then invoke the installed Epic launcher
+    # directly as a fallback. Passing the URI to a running launcher is safe.
+    for _ in range(4):
+        if _fortnite_process_running():
+            return "Fortnite is opening now. I verified the Fortnite process started."
+        time.sleep(1)
+
+    launcher = next((path for path in _epic_launcher_candidates() if path.is_file()), None)
+    if launcher:
+        try:
+            subprocess.Popen(
+                [str(launcher), uri],
+                cwd=str(launcher.parent),
+                creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+            dispatched = True
+        except Exception as exc:
+            errors.append(f"Epic launcher: {type(exc).__name__}: {exc}")
+
+    deadline = time.time() + 25
+    while time.time() < deadline:
+        if _fortnite_process_running():
+            return "Fortnite is opening now. I verified the Fortnite process started."
+        time.sleep(1)
+
+    if _epic_process_running():
+        return (
+            "Epic Games Launcher opened, but I could not verify that Fortnite started. "
+            "I won't claim the game opened."
+        )
+    if dispatched:
+        return (
+            "I sent the Fortnite launch request, but neither Fortnite nor Epic Games Launcher "
+            "appeared. I could not verify it opened."
+        )
+    detail = "; ".join(errors) or "No Epic Games Launcher or Windows URI handler was available."
+    return f"Fortnite could not be launched: {detail}"
 
 def handle_owner_message(text: str, source: str) -> dict[str, Any]:
     raw = str(text or "").strip()
