@@ -224,12 +224,12 @@ def fallback_conversation(raw: str, status: str = "", *, model_error: str = "") 
     if re.fullmatch(r"(thanks|thank you|appreciate it)[.! ]*", low):
         return "You got it."
     if re.search(r"\bhow are you\b", low):
-        return "I’m here and ready. My local language model is recovering, but controls and queued work are still available."
+        return "I’m here and ready. What’s up?"
     if re.search(r"\bwhat (?:are you|you) doing\b|\bstatus\b", low) and status:
         return status
     if "?" in text:
-        return "I’m here, but my local language model is temporarily unavailable, so I can’t give you a trustworthy answer yet. I’m recovering it automatically."
-    return "I heard you. My local language model is temporarily unavailable, and I’m recovering it automatically. I did not turn this conversation into a task."
+        return "I couldn’t answer that cleanly just now. Try me again in a second."
+    return "I heard you. I couldn’t process that cleanly just now, so I didn’t turn it into a task."
 
 
 def abstract_decision_state(raw: str, proposed_intent: str, *, has_active: bool, has_recent_cancelled: bool) -> dict[str, Any]:
