@@ -114,7 +114,7 @@ def read_env_file(path: Path) -> dict[str, str]:
 
 def load_secrets() -> dict[str, str]:
     out = read_env_file(SECRETS_PATH)
-    for key in ("MYLES_TELEGRAM_TOKEN", "MYLES_OWNER_ID", "MYLES_TELEGRAM_USER_ID"):
+    for key in ("MYLES_TELEGRAM_TOKEN", "MYLES_OWNER_ID", "MYLES_TELEGRAM_USER_ID", "TYPESAFE_API_KEY", "MYLES_JEV_API_KEY", "MYLES_JEV_URL"):
         value = os.environ.get(key, "").strip()
         if value:
             out[key] = value
@@ -124,7 +124,7 @@ def load_secrets() -> dict[str, str]:
 def save_secrets(values: dict[str, str]) -> None:
     SECRETS_PATH.parent.mkdir(parents=True, exist_ok=True)
     lines = []
-    for key in ("MYLES_TELEGRAM_TOKEN", "MYLES_OWNER_ID"):
+    for key in ("MYLES_TELEGRAM_TOKEN", "MYLES_OWNER_ID", "TYPESAFE_API_KEY", "MYLES_JEV_API_KEY", "MYLES_JEV_URL"):
         value = str(values.get(key) or "").strip()
         if value:
             lines.append(f"{key}={value}")
