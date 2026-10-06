@@ -148,7 +148,7 @@ def main():
         and "My local conversation controller hit an error" not in core_source
     )
     checks["model_health_is_observable"] = (
-        '"model_runtime": model_health_dict(load_config())' in core_source
+        '"model_runtime": model_health_dict(runtime_cfg)' in core_source
         and '"privacy_mode": "abstract_state_only"' in core_source
     )
     checks["core_strong_action_bypasses_router"] = (
