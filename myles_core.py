@@ -286,7 +286,14 @@ def status_text() -> str:
         latest_terminal = next((j for j in jobs if j.get("state") in {"failed", "completed", "cancelled"}), None)
         tail = ""
         if latest_terminal and latest_terminal.get("state") == "failed":
-            tail = f" Last task failed: {str(latest_terminal.get('error') or 'unknown error')[:500]}"
+            failed_phase = str(latest_terminal.get("phase") or "").replace("_", " ").strip()
+            raw_error = str(latest_terminal.get("error") or "").lower()
+            if any(marker in raw_error for marker in ("ollama", "local model", "urlopen", "winerror 10061", "connection refused")):
+                tail = " The last task hit a local model/runtime connection problem and did not complete."
+            elif failed_phase:
+                tail = f" The last task did not complete during {failed_phase}."
+            else:
+                tail = " The last task did not complete."
         elif latest_terminal and latest_terminal.get("state") == "completed":
             tail = f" Last completed task: {_owner_job_summary(latest_terminal)}"
         continuous_tail = ""
@@ -1048,15 +1055,80 @@ def _preempt_continuous_for_owner() -> None:
     set_setting("continuous.next_spawn_epoch", str(int(time.time()) + 15))
 
 
+def _windows_process_running(*names: str) -> bool:
+    if os.name != "nt":
+        return False
+    try:
+        completed = subprocess.run(
+            ["tasklist", "/FO", "CSV", "/NH"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+        )
+        listing = str(completed.stdout or "").lower()
+        return any(str(name or "").lower() in listing for name in names if name)
+    except Exception:
+        return False
+
+
+def _epic_launcher_executable() -> Path | None:
+    candidates: list[Path] = []
+    for root_name in ("ProgramFiles(x86)", "ProgramFiles"):
+        root = str(os.environ.get(root_name) or "").strip()
+        if root:
+            candidates.append(Path(root) / "Epic Games" / "Launcher" / "Portal" / "Binaries" / "Win64" / "EpicGamesLauncher.exe")
+    return next((path for path in candidates if path.is_file()), None)
+
+
+def _fortnite_launch_followup(raw: str) -> bool:
+    low = re.sub(r"\s+", " ", str(raw or "").strip().lower())
+    failure_phrases = (
+        "don't see it", "do not see it", "can't see it", "cannot see it",
+        "didn't open", "did not open", "isn't opening", "is not opening",
+        "not opening", "still not open", "nothing happened", "not on the screen",
+    )
+    if not any(phrase in low for phrase in failure_phrases):
+        return False
+    context = " ".join(str(row.get("content") or "") for row in recent_messages(8)).lower()
+    return "fortnite" in context
+
+
 def _direct_fortnite_launch() -> str:
     if os.name != "nt":
         return "Fortnite launch is only available on the Windows tower."
-    uri = "com.epicgames.launcher://apps/Fortnite?action=launch&silent=true"
+    fortnite_processes = (
+        "fortniteclient-win64-shipping.exe",
+        "fortnitelauncher.exe",
+        "fortniteclient-win64-shipping_eac_eos.exe",
+    )
+    if _windows_process_running(*fortnite_processes):
+        return "Fortnite is already running."
+
+    uri = "com.epicgames.launcher://apps/Fortnite?action=launch"
+    launcher = _epic_launcher_executable()
+    launch_error = ""
     try:
-        subprocess.Popen(["cmd.exe", "/c", "start", "", uri], creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
-        return "Fortnite launch requested through Epic Games Launcher."
+        if launcher:
+            subprocess.Popen([str(launcher), uri])
+        elif hasattr(os, "startfile"):
+            os.startfile(uri)  # type: ignore[attr-defined]
+        else:
+            subprocess.Popen(["cmd.exe", "/c", "start", "", uri], creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
     except Exception as exc:
-        return f"Fortnite could not be launched: {type(exc).__name__}: {exc}"
+        launch_error = f"{type(exc).__name__}: {exc}"
+
+    deadline = time.time() + 12
+    while time.time() < deadline:
+        if _windows_process_running(*fortnite_processes):
+            return "Fortnite is opening now."
+        time.sleep(1)
+
+    if _windows_process_running("epicgameslauncher.exe"):
+        return "Epic Games Launcher is open and I sent Fortnite the launch command, but Fortnite has not started yet. I won't pretend it did."
+    if launch_error:
+        return "I couldn't launch Fortnite. Epic Games Launcher returned an error; check the launcher on the tower."
+    return "I sent the Fortnite launch command, but I can't verify that Epic or Fortnite started."
 
 
 def handle_owner_message(text: str, source: str) -> dict[str, Any]:
@@ -1064,7 +1136,7 @@ def handle_owner_message(text: str, source: str) -> dict[str, Any]:
     if not raw:
         return {"kind": "chat", "reply": ""}
 
-    if re.search(r"\b(?:open|launch|start)\s+fortnite\b", raw, re.I):
+    if re.search(r"\b(?:open|launch|start)\s+fortnite\b", raw, re.I) or _fortnite_launch_followup(raw):
         add_message(source, "user", raw, None)
         final = _direct_fortnite_launch()
         message_id = add_message(source, "assistant", final, None)
