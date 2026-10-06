@@ -54,6 +54,42 @@ def main():
         and set(abstract).issuperset({"proposed_intent", "has_active_task", "has_explicit_action_verb"})
     )
 
+    captured_jev = {}
+    original_jev_request = myles_model_runtime._json_request
+
+    def fake_jev_request(url, payload, timeout=3, headers=None):
+        captured_jev.update({"url": url, "payload": payload, "headers": headers or {}})
+        return {
+            "model": "jev-test",
+            "answers": {
+                "intent": {"type": "choice", "choice": "chat", "confidence": 0.97}
+            },
+        }
+
+    try:
+        myles_model_runtime._json_request = fake_jev_request
+        jev_route, jev_meta = myles_model_runtime.verify_with_jev(
+            "Open my private report",
+            "start",
+            has_active=False,
+            has_recent_cancelled=False,
+            cfg={
+                "jev_enabled": True,
+                "jev_url": "https://api.typesafe.ai/v1/systemone",
+                "jev_model": "jev-latest",
+                "jev_min_confidence": 0.60,
+            },
+            secrets={"TYPESAFE_API_KEY": "test-only"},
+        )
+    finally:
+        myles_model_runtime._json_request = original_jev_request
+    checks["jev_official_choice_contract"] = (
+        jev_route == "chat"
+        and jev_meta.get("used") is True
+        and captured_jev.get("payload", {}).get("questions", {}).get("intent", {}).get("type") == "choice"
+        and "private report" not in json.dumps(captured_jev.get("payload", {})).lower()
+    )
+
     core_source = Path(myles_core.__file__).read_text(encoding="utf-8")
     worker_source = Path(job_worker.__file__).read_text(encoding="utf-8")
     tools_source = Path(myles_tools.__file__).read_text(encoding="utf-8")
