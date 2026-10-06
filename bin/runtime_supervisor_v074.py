@@ -516,9 +516,13 @@ def read_token() -> str:
 
 
 def start_ollama_service() -> None:
-    """Keep the local conversation provider available; model residency stays game-managed."""
+    """Keep Ollama reachable and replace a stale serve process when necessary."""
     if http_ok("http://127.0.0.1:11434/api/tags", timeout=3):
         return
+    time.sleep(0.75)
+    if http_ok("http://127.0.0.1:11434/api/tags", timeout=3):
+        return
+
     candidates = [
         shutil.which("ollama.exe"),
         shutil.which("ollama"),
@@ -526,16 +530,46 @@ def start_ollama_service() -> None:
         str(Path(os.environ.get("ProgramFiles", "")) / "Ollama" / "ollama.exe"),
     ]
     executable = next((Path(x) for x in candidates if x and Path(x).is_file()), None)
-    if not executable or has(r"ollama(?:\.exe)?\s+serve"):
+    if not executable:
+        log("Ollama is unreachable and its executable was not found")
         return
-    hidden_popen(
+
+    stale_rows = matching_process_rows(r"ollama(?:\.exe)?\s+serve")
+    for pid, _command in stale_rows:
+        if pid <= 0 or pid == os.getpid():
+            continue
+        try:
+            if os.name == "nt":
+                subprocess.run(
+                    ["taskkill", "/PID", str(pid), "/T", "/F"],
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                    timeout=8,
+                    creationflags=CREATE_NO_WINDOW,
+                )
+            else:
+                os.kill(pid, 15)
+            log(f"retired unreachable Ollama serve process pid={pid}")
+        except Exception as exc:
+            log(f"failed to retire stale Ollama pid={pid}: {exc}")
+
+    process = hidden_popen(
         [executable, "serve"],
         cwd=executable.parent,
         stdout_path=LOGS / "ollama_startup.out.log",
         stderr_path=LOGS / "ollama_startup.err.log",
     )
-    log("Ollama conversation service restart requested")
+    if not process:
+        log("Ollama conversation service restart failed to start")
+        return
 
+    deadline = time.time() + 20
+    while time.time() < deadline:
+        if http_ok("http://127.0.0.1:11434/api/tags", timeout=3):
+            log(f"Ollama conversation service recovered pid={process.pid}")
+            return
+        time.sleep(0.75)
+    log(f"Ollama restart did not become reachable within 20 seconds pid={process.pid}")
 
 def start_core() -> None:
     if http_ok("http://127.0.0.1:8766/health"):
