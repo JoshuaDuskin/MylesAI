@@ -10,7 +10,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-APP_VERSION = "9.7.0"
+APP_VERSION = "10.0.0"
 ROOT = Path(__file__).resolve().parent
 DATA = ROOT / "data"
 WORKSPACES = ROOT / "workspaces"
@@ -34,6 +34,10 @@ DEFAULT_CONFIG = {
     "core_port": 8766,
     "model_timeout_seconds": 180,
     "conversation_timeout_seconds": 120,
+    "model_healthcheck_seconds": 30,
+    "jev_enabled": False,
+    "jev_url": "",
+    "jev_timeout_seconds": 3,
     "tool_timeout_seconds": 1800,
     "max_agent_steps": 60,
     "max_conversation_steps": 6,
