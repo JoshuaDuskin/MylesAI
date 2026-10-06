@@ -10,7 +10,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-APP_VERSION = "9.7.0"
+APP_VERSION = "10.0.0"
 ROOT = Path(__file__).resolve().parent
 DATA = ROOT / "data"
 WORKSPACES = ROOT / "workspaces"
@@ -34,6 +34,12 @@ DEFAULT_CONFIG = {
     "core_port": 8766,
     "model_timeout_seconds": 180,
     "conversation_timeout_seconds": 120,
+    "model_healthcheck_seconds": 30,
+    "jev_enabled": False,
+    "jev_url": "https://api.typesafe.ai/v1/systemone",
+    "jev_model": "jev-latest",
+    "jev_min_confidence": 0.60,
+    "jev_timeout_seconds": 3,
     "tool_timeout_seconds": 1800,
     "max_agent_steps": 60,
     "max_conversation_steps": 6,
@@ -108,7 +114,7 @@ def read_env_file(path: Path) -> dict[str, str]:
 
 def load_secrets() -> dict[str, str]:
     out = read_env_file(SECRETS_PATH)
-    for key in ("MYLES_TELEGRAM_TOKEN", "MYLES_OWNER_ID", "MYLES_TELEGRAM_USER_ID"):
+    for key in ("MYLES_TELEGRAM_TOKEN", "MYLES_OWNER_ID", "MYLES_TELEGRAM_USER_ID", "TYPESAFE_API_KEY", "MYLES_JEV_API_KEY", "MYLES_JEV_URL"):
         value = os.environ.get(key, "").strip()
         if value:
             out[key] = value
@@ -118,7 +124,7 @@ def load_secrets() -> dict[str, str]:
 def save_secrets(values: dict[str, str]) -> None:
     SECRETS_PATH.parent.mkdir(parents=True, exist_ok=True)
     lines = []
-    for key in ("MYLES_TELEGRAM_TOKEN", "MYLES_OWNER_ID"):
+    for key in ("MYLES_TELEGRAM_TOKEN", "MYLES_OWNER_ID", "TYPESAFE_API_KEY", "MYLES_JEV_API_KEY", "MYLES_JEV_URL"):
         value = str(values.get(key) or "").strip()
         if value:
             lines.append(f"{key}={value}")

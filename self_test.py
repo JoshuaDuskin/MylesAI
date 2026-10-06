@@ -8,13 +8,14 @@ from pathlib import Path
 import myles_common
 import myles_runtime_v9 as rt
 import myles_quick
+import myles_model_runtime
 
 
 def main():
     myles_common.init_db()
     cfg = myles_common.load_config()
     checks = {
-        "version": myles_common.APP_VERSION == "9.7.0",
+        "version": myles_common.APP_VERSION == "10.0.0",
         "config_loads": isinstance(cfg, dict),
         "telegram_setting_present": "telegram_enabled" in cfg,
         "root_exists": myles_common.ROOT.exists(),
@@ -37,6 +38,57 @@ def main():
     checks["console_import"] = True
     checks["telegram_config_import"] = True
     checks["quick_lookup_import"] = True
+    checks["model_runtime_import"] = True
+    checks["conversation_fallback_is_natural"] = (
+        myles_model_runtime.fallback_conversation("Yo") == "Hey — I’m here. What’s up?"
+        and "task" not in myles_model_runtime.fallback_conversation("Yo").lower()
+    )
+    abstract = myles_model_runtime.abstract_decision_state(
+        "Open my private report and stop the current job",
+        "start",
+        has_active=True,
+        has_recent_cancelled=False,
+    )
+    checks["jev_envelope_excludes_owner_text"] = (
+        "private report" not in json.dumps(abstract).lower()
+        and set(abstract).issuperset({"proposed_intent", "has_active_task", "has_explicit_action_verb"})
+    )
+
+    captured_jev = {}
+    original_jev_request = myles_model_runtime._json_request
+
+    def fake_jev_request(url, payload, timeout=3, headers=None):
+        captured_jev.update({"url": url, "payload": payload, "headers": headers or {}})
+        return {
+            "model": "jev-test",
+            "answers": {
+                "intent": {"type": "choice", "choice": "chat", "confidence": 0.97}
+            },
+        }
+
+    try:
+        myles_model_runtime._json_request = fake_jev_request
+        jev_route, jev_meta = myles_model_runtime.verify_with_jev(
+            "Open my private report",
+            "start",
+            has_active=False,
+            has_recent_cancelled=False,
+            cfg={
+                "jev_enabled": True,
+                "jev_url": "https://api.typesafe.ai/v1/systemone",
+                "jev_model": "jev-latest",
+                "jev_min_confidence": 0.60,
+            },
+            secrets={"TYPESAFE_API_KEY": "test-only"},
+        )
+    finally:
+        myles_model_runtime._json_request = original_jev_request
+    checks["jev_official_choice_contract"] = (
+        jev_route == "chat"
+        and jev_meta.get("used") is True
+        and captured_jev.get("payload", {}).get("questions", {}).get("intent", {}).get("type") == "choice"
+        and "private report" not in json.dumps(captured_jev.get("payload", {})).lower()
+    )
 
     core_source = Path(myles_core.__file__).read_text(encoding="utf-8")
     worker_source = Path(job_worker.__file__).read_text(encoding="utf-8")
@@ -85,6 +137,19 @@ def main():
     checks["long_dashboard_prompt_not_status"] = (
         rt.looks_like_status_request(dashboard_prompt, has_active=False) is False
         and rt.deterministic_control(dashboard_prompt, has_active=False, has_recent_cancelled=False) is None
+    )
+    checks["fortnite_bypasses_model_router"] = (
+        'if re.search(r"\\b(?:open|launch|start)\\s+fortnite\\b", raw, re.I):' in core_source
+        and core_source.index('if re.search(r"\\b(?:open|launch|start)\\s+fortnite\\b", raw, re.I):')
+            < core_source.index('CHAT_BUSY.set()')
+    )
+    checks["conversation_errors_have_safe_fallback"] = (
+        "fallback_conversation(raw, status_text()" in core_source
+        and "My local conversation controller hit an error" not in core_source
+    )
+    checks["model_health_is_observable"] = (
+        '"model_runtime": model_health_dict(runtime_cfg)' in core_source
+        and '"privacy_mode": "abstract_state_only"' in core_source
     )
     checks["core_strong_action_bypasses_router"] = (
         'elif strong_action_request(raw) and not natural_question(raw):' in core_source
