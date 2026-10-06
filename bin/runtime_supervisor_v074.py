@@ -515,6 +515,28 @@ def read_token() -> str:
     return token
 
 
+def start_ollama_service() -> None:
+    """Keep the local conversation provider available; model residency stays game-managed."""
+    if http_ok("http://127.0.0.1:11434/api/tags", timeout=3):
+        return
+    candidates = [
+        shutil.which("ollama.exe"),
+        shutil.which("ollama"),
+        str(Path(os.environ.get("LOCALAPPDATA", "")) / "Programs" / "Ollama" / "ollama.exe"),
+        str(Path(os.environ.get("ProgramFiles", "")) / "Ollama" / "ollama.exe"),
+    ]
+    executable = next((Path(x) for x in candidates if x and Path(x).is_file()), None)
+    if not executable or has(r"ollama(?:\.exe)?\s+serve"):
+        return
+    hidden_popen(
+        [executable, "serve"],
+        cwd=executable.parent,
+        stdout_path=LOGS / "ollama_startup.out.log",
+        stderr_path=LOGS / "ollama_startup.err.log",
+    )
+    log("Ollama conversation service restart requested")
+
+
 def start_core() -> None:
     if http_ok("http://127.0.0.1:8766/health"):
         return
@@ -803,6 +825,7 @@ try:
         try:
             owner = owner_token()
             read = read_token()
+            start_ollama_service()
             start_core()
             gaming = light_mode_active()
             start_services(owner, read)
