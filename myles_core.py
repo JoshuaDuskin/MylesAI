@@ -1568,17 +1568,21 @@ class ApiHandler(BaseHTTPRequestHandler):
         path = urllib.parse.urlparse(self.path).path
         if path == "/health":
             token, owner_id = _telegram_credentials()
+            runtime_cfg = load_config()
+            runtime_secrets = load_secrets()
+            jev_key = runtime_secrets.get("TYPESAFE_API_KEY") or runtime_secrets.get("MYLES_JEV_API_KEY")
+            jev_url = runtime_cfg.get("jev_url") or runtime_secrets.get("MYLES_JEV_URL")
             return self._json(200, {
                 "ok": True,
                 "version": APP_VERSION,
                 "pid": os.getpid(),
                 "time": now_iso(),
                 "telegram_configured": bool(token and owner_id),
-                "light_mode": bool(load_config().get("light_mode")),
-                "model_runtime": model_health_dict(load_config()),
+                "light_mode": bool(runtime_cfg.get("light_mode")),
+                "model_runtime": model_health_dict(runtime_cfg),
                 "decision_adapter": {
-                    "jev_enabled": bool(load_config().get("jev_enabled")),
-                    "jev_configured": bool(load_config().get("jev_url") or load_secrets().get("MYLES_JEV_URL")),
+                    "jev_enabled": bool(runtime_cfg.get("jev_enabled")),
+                    "jev_configured": bool(jev_url and jev_key),
                     "privacy_mode": "abstract_state_only",
                 },
                 "last_conversation_error": get_setting("conversation.last_error", ""),
