@@ -257,31 +257,114 @@ def verify_with_jev(
     cfg: dict[str, Any],
     secrets: dict[str, str],
 ) -> tuple[str, dict[str, Any]]:
-    """Optionally verify a local route with Jev using abstract state only.
+    """Optionally verify a local route with TypeSafe Jev using abstract state only.
 
-    The adapter is fail-open to the local decision: unavailable Jev never breaks chat.
+    This uses the official System One Choice contract. Jev never receives the
+    owner's message, memory, files, credentials, or tool output. It is a
+    fail-open decision coprocessor: any missing key, timeout, schema error, or
+    low-confidence answer preserves the local Qwen/rules decision.
     """
     enabled = bool(cfg.get("jev_enabled"))
-    url = str(cfg.get("jev_url") or secrets.get("MYLES_JEV_URL") or "").strip()
-    api_key = str(secrets.get("MYLES_JEV_API_KEY") or "").strip()
-    meta = {"enabled": enabled, "configured": bool(url), "used": False, "decision": "local"}
-    if not enabled or not url:
+    url = str(
+        cfg.get("jev_url")
+        or secrets.get("MYLES_JEV_URL")
+        or "https://api.typesafe.ai/v1/systemone"
+    ).strip()
+    api_key = str(
+        secrets.get("TYPESAFE_API_KEY")
+        or secrets.get("MYLES_JEV_API_KEY")
+        or ""
+    ).strip()
+    model = str(cfg.get("jev_model") or "jev-latest").strip()
+    minimum_confidence = max(0.0, min(1.0, float(cfg.get("jev_min_confidence", 0.60))))
+    meta = {
+        "enabled": enabled,
+        "configured": bool(url and api_key),
+        "used": False,
+        "decision": "local",
+        "provider": "typesafe_jev",
+        "privacy_mode": "abstract_state_only",
+    }
+    if not enabled or not url or not api_key:
         return proposed_intent, meta
+
     envelope = abstract_decision_state(
         raw,
         proposed_intent,
         has_active=has_active,
         has_recent_cancelled=has_recent_cancelled,
     )
-    headers = {"Authorization": f"Bearer {api_key}"} if api_key else {}
+    allowed = {
+        "accept", "chat", "lookup", "local_lookup", "feedback", "start",
+        "modify", "status", "stop", "replace", "resume", "light_on", "light_off",
+    }
+    criteria = {
+        "accept": "The proposed local intent is already the safest accurate route.",
+        "chat": "Ordinary conversation or a question; do not create a background task.",
+        "lookup": "A factual lookup that does not mutate owner state.",
+        "local_lookup": "A read-only lookup of local state.",
+        "feedback": "Behavior correction or preference feedback, not a new job.",
+        "start": "A clear new action request when no existing task should be modified.",
+        "modify": "A clear change to the active or most recent owner-requested task.",
+        "status": "A request for status, progress, or explanation only.",
+        "stop": "An explicit request to stop or cancel active work.",
+        "replace": "An explicit request to replace active work with a different task.",
+        "resume": "An explicit request to continue previously stopped work.",
+        "light_on": "An explicit request to turn a light on.",
+        "light_off": "An explicit request to turn a light off.",
+    }
+    payload = {
+        "model": model,
+        "state": envelope,
+        "questions": {
+            "intent": {
+                "type": "choice",
+                "instructions": (
+                    "Choose the safest owner-intent route from abstract state only. "
+                    "Prefer chat for casual conversation; never infer a destructive "
+                    "or mutating action without an explicit action signal."
+                ),
+                "criteria": criteria,
+            }
+        },
+    }
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type": "application/json",
+    }
     try:
-        response = _json_request(url, {"decision": envelope}, timeout=int(cfg.get("jev_timeout_seconds", 3)), headers=headers)
-        decision = str(response.get("intent") or response.get("decision") or "accept").strip().lower()
-        allowed = {"chat", "lookup", "local_lookup", "feedback", "start", "modify", "status", "stop", "replace", "resume", "light_on", "light_off", "accept"}
+        response = _json_request(
+            url,
+            payload,
+            timeout=int(cfg.get("jev_timeout_seconds", 3)),
+            headers=headers,
+        )
+        answer = (
+            (response.get("answers") or {}).get("intent")
+            or (response.get("choices") or {}).get("intent")
+            or {}
+        )
+        decision = str(answer.get("choice") or "").strip().lower()
+        confidence = float(answer.get("confidence", 0.0) or 0.0)
         if decision not in allowed:
-            raise ValueError("invalid typed decision")
-        meta.update({"used": True, "decision": decision})
+            raise ValueError("invalid Jev Choice answer")
+        if confidence < minimum_confidence:
+            meta.update({
+                "decision": "local_low_confidence",
+                "confidence": confidence,
+                "model": str(response.get("model") or model),
+            })
+            return proposed_intent, meta
+        meta.update({
+            "used": True,
+            "decision": decision,
+            "confidence": confidence,
+            "model": str(response.get("model") or model),
+        })
         return (proposed_intent if decision == "accept" else decision), meta
     except Exception as exc:
-        meta.update({"error": f"{type(exc).__name__}: {exc}"[:500], "decision": "local_fallback"})
+        meta.update({
+            "error": f"{type(exc).__name__}: {exc}"[:500],
+            "decision": "local_fallback",
+        })
         return proposed_intent, meta
