@@ -641,6 +641,8 @@ def _local_artifact_answer(raw: str) -> str:
 
 def _specific_job_result_request(raw: str) -> bool:
     text = str(raw or "")
+    if strong_action_request(text) and not natural_question(text):
+        return False
     return bool(
         re.search(r"\bM83-\d{8}-\d{6}-[A-Za-z0-9]+\b", text, re.I)
         and re.search(r"\b(result|outcome|found|finding|blocker|finished|completed|status)\b", text, re.I)
