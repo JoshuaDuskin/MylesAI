@@ -15,7 +15,7 @@ def main():
     myles_common.init_db()
     cfg = myles_common.load_config()
     checks = {
-        "version": myles_common.APP_VERSION == "10.1.2",
+        "version": myles_common.APP_VERSION == "10.1.3",
         "config_loads": isinstance(cfg, dict),
         "telegram_setting_present": "telegram_enabled" in cfg,
         "root_exists": myles_common.ROOT.exists(),
@@ -192,6 +192,9 @@ def main():
             "What was the exact result from M83-20261007-233905-ef3303?"
         )
         and not myles_core._specific_job_result_request("What was the exact result?")
+        and not myles_core._specific_job_result_request(
+            "Create a real background task continuing M83-20261007-233905-ef3303 and fix its blocker."
+        )
         and 'route = {"intent": "job_result", "task": ""}' in core_source
         and "_specific_job_result_answer(raw)" in core_source
     )
