@@ -639,6 +639,41 @@ def _local_artifact_answer(raw: str) -> str:
     return "I couldn't verify a local report or result file from the current Myles folders and task history."
 
 
+def _specific_job_result_request(raw: str) -> bool:
+    text = str(raw or "")
+    return bool(
+        re.search(r"\bM83-\d{8}-\d{6}-[A-Za-z0-9]+\b", text, re.I)
+        and re.search(r"\b(result|outcome|found|finding|blocker|finished|completed|status)\b", text, re.I)
+    )
+
+
+def _specific_job_result_answer(raw: str) -> str:
+    match = re.search(r"\b(M83-\d{8}-\d{6}-[A-Za-z0-9]+)\b", str(raw or ""), re.I)
+    if not match:
+        return "I need the task ID to read that exact result."
+    job_id = match.group(1)
+    job = get_job(job_id)
+    if not job:
+        return f"I couldn't find task {job_id} in the local job database."
+    state = str(job.get("state") or "unknown")
+    phase = str(job.get("phase") or "unknown")
+    if state == "completed":
+        result = clean_model_text(str(job.get("result") or "")).strip()
+        if result:
+            return result[:6000]
+        return f"Task {job_id} is completed, but it did not store a textual result."
+    if state == "failed":
+        error = clean_model_text(str(job.get("error") or "No failure detail was stored."))
+        return f"Task {job_id} failed during {phase}: {error}"
+    if state == "cancelled":
+        return f"Task {job_id} was cancelled during {phase}."
+    truth = job_truth(job)
+    return (
+        f"Task {job_id} is {state} in phase {phase}. "
+        f"Worker alive: {truth.get('live_worker')}; heartbeat age: {truth.get('heartbeat_age_seconds')}s."
+    )
+
+
 def _behavior_feedback_reply(raw: str) -> str:
     low = str(raw or "").lower()
     if any(x in low for x in ("quick search", "google search", "quick lookup", "not a whole", "not a job", "not a task")):
@@ -1233,6 +1268,8 @@ def handle_owner_message(text: str, source: str) -> dict[str, Any]:
                 route = {"intent": "capabilities", "task": ""}
             elif behavior_feedback_request(raw):
                 route = {"intent": "feedback", "task": ""}
+            elif _specific_job_result_request(raw):
+                route = {"intent": "job_result", "task": ""}
             elif _local_location_request(raw):
                 route = {"intent": "local_lookup", "task": ""}
             elif quick.looks_like_quick_public_lookup(raw):
@@ -1261,7 +1298,7 @@ def handle_owner_message(text: str, source: str) -> dict[str, Any]:
 
         intent = route["intent"]
         task = str(route.get("task") or "").strip()
-        if forced is None and intent not in {"agent", "continuous_on", "continuous_off", "dashboard_url", "capabilities"}:
+        if forced is None and intent not in {"agent", "job_result", "continuous_on", "continuous_off", "dashboard_url", "capabilities"}:
             local_intent = intent
             intent, jev_meta = verify_with_jev(
                 raw,
@@ -1338,6 +1375,9 @@ def handle_owner_message(text: str, source: str) -> dict[str, Any]:
         elif intent == "feedback":
             result = _behavior_feedback_reply(raw)
             controller = "OWNER_ACTION=feedback\n" + result
+        elif intent == "job_result":
+            result = _specific_job_result_answer(raw)
+            controller = "OWNER_ACTION=job_result\n" + result
         elif intent == "agent":
             result, agent_job = _conversation_agent_turn(raw, source)
             if agent_job:
@@ -1428,6 +1468,8 @@ def handle_owner_message(text: str, source: str) -> dict[str, Any]:
             elif intent == "local_lookup":
                 final = result
             elif intent == "feedback":
+                final = result
+            elif intent == "job_result":
                 final = result
             elif intent == "agent":
                 final = result
