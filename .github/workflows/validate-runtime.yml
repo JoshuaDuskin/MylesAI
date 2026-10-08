@@ -35,17 +35,20 @@ jobs:
           python-version: "3.12"
 
       - name: Compile Python runtime
-        run: python -m py_compile dashboard_bridge/dashboard_bridge.py bin/runtime_supervisor_v074.py bin/public_gateway_v074.py bin/game_mode_watch.py myles_core.py myles_model_runtime.py myles_tools.py
+        run: python -m py_compile dashboard_bridge/dashboard_bridge.py bin/runtime_supervisor_v074.py bin/public_gateway_v074.py bin/game_mode_watch.py bin/ensure_myles_runtime.py myles_core.py myles_model_runtime.py myles_windows.py myles_tools.py job_worker.py
 
       - name: Verify durable Windows startup contract
         shell: bash
         run: |
-          test -f bin/ensure_myles_runtime.ps1
+          test -f bin/ensure_myles_runtime.py
+          test ! -f bin/ensure_myles_runtime.ps1
           grep -q "MylesAIRuntimeGuardian" UPDATE_TOWER.ps1
           grep -q "MylesAI Runtime Guardian" UPDATE_TOWER.ps1
           grep -q "RepetitionInterval" UPDATE_TOWER.ps1
-          grep -q "runtime_supervisor_v074.py" bin/ensure_myles_runtime.ps1
-          grep -q "consecutive_failures" bin/ensure_myles_runtime.ps1
+          grep -q 'New-ScheduledTaskAction -Execute $PythonW' UPDATE_TOWER.ps1
+          grep -q "runtime_supervisor_v074.py" bin/ensure_myles_runtime.py
+          grep -q "consecutive_failures" bin/ensure_myles_runtime.py
+          ! grep -q 'TaskAction = New-ScheduledTaskAction -Execute "powershell.exe"' UPDATE_TOWER.ps1
           ! grep -q -- "-NoExit" UPDATE_TOWER.cmd UPDATE_TOWER.ps1
           ! grep -q "Launching the single owner console automatically" UPDATE_TOWER.ps1
           echo "durable startup and recovery contract OK"

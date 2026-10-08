@@ -534,26 +534,27 @@ if (-not (Test-Path $Supervisor)) {
 # safe: they can request startup concurrently, but only one logical owner stays
 # alive. Older updater revisions removed every auto-start entry and never put a
 # replacement back, which left the tower offline after reboot.
-$Guardian = Join-Path $Root "bin\ensure_myles_runtime.ps1"
+$Guardian = Join-Path $Root "bin\ensure_myles_runtime.py"
 if (-not (Test-Path $Guardian -PathType Leaf)) {
     Fail "Canonical runtime guardian is missing after update."
 }
-$GuardianCommand = 'powershell.exe -NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File "' + $Guardian + '"'
+$GuardianCommand = '"' + $PythonW + '" "' + $Guardian + '"'
 try {
     New-Item -Path $RunKeyPath -Force | Out-Null
     New-ItemProperty -Path $RunKeyPath -Name "MylesAIRuntimeGuardian" -Value $GuardianCommand -PropertyType String -Force | Out-Null
-    Log "PASS: installed canonical per-user MYLES startup guardian"
+    Log "PASS: installed canonical windowless per-user MYLES startup guardian"
 } catch {
     Fail ("Could not install the canonical per-user startup guardian: " + $_.Exception.Message)
 }
 
 try {
     $TaskName = "MylesAI Runtime Guardian"
-    $TaskAction = New-ScheduledTaskAction -Execute "powershell.exe" -Argument ('-NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File "' + $Guardian + '"')
+    $TaskAction = New-ScheduledTaskAction -Execute $PythonW -Argument ('"' + $Guardian + '"') -WorkingDirectory $Root
     $TaskTrigger = New-ScheduledTaskTrigger -Once -At (Get-Date).AddMinutes(1) -RepetitionInterval (New-TimeSpan -Minutes 5)
     $TaskPrincipal = New-ScheduledTaskPrincipal -UserId ([Security.Principal.WindowsIdentity]::GetCurrent().Name) -LogonType Interactive -RunLevel Limited
-    Register-ScheduledTask -TaskName $TaskName -Action $TaskAction -Trigger $TaskTrigger -Principal $TaskPrincipal -Description "Keeps the single canonical MYLES runtime online." -Force | Out-Null
-    Log "PASS: installed five-minute MYLES runtime recovery task"
+    $TaskSettings = New-ScheduledTaskSettingsSet -Hidden -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable
+    Register-ScheduledTask -TaskName $TaskName -Action $TaskAction -Trigger $TaskTrigger -Principal $TaskPrincipal -Settings $TaskSettings -Description "Keeps the single canonical MYLES runtime online without opening a console." -Force | Out-Null
+    Log "PASS: installed windowless five-minute MYLES runtime recovery task"
 } catch {
     Log ("WARNING: periodic runtime recovery task could not be installed; logon startup remains active: " + $_.Exception.Message)
 }

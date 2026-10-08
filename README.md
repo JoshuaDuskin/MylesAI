@@ -41,3 +41,8 @@ The updater backs up the current Git state, preserves local runtime data/depende
 The updater also installs the canonical hidden runtime guardian at Windows
 logon and on a five-minute recovery schedule, so a reboot or an unexpected
 supervisor exit does not leave the phone dashboard offline.
+
+The guardian runs through `pythonw.exe`, not a recurring PowerShell window.
+MYLES durable jobs can inspect the real desktop, focus visible applications,
+capture screenshots for local vision reasoning, and perform verified mouse and
+keyboard actions. Desktop screenshots remain local to the tower.

@@ -178,30 +178,49 @@ def model_chat(
     health = ensure_model_runtime(cfg)
     if not health.available:
         raise ModelRuntimeError(f"{health.error_kind}: {health.detail}")
-    payload: dict[str, Any] = {
-        "model": health.model,
-        "messages": messages,
-        "stream": False,
-        "think": False,
-        "options": {"temperature": float(temperature)},
-        "keep_alive": "0" if bool(cfg.get("light_mode")) else "10m",
-    }
-    if tools:
-        payload["tools"] = tools
-    if json_mode:
-        payload["format"] = "json"
-    try:
-        return _json_request(
-            _ollama_chat_url(cfg),
-            payload,
-            timeout=timeout or int(cfg.get("conversation_timeout_seconds", 120)),
-        )
-    except urllib.error.HTTPError as exc:
-        detail = exc.read().decode("utf-8", errors="replace")[:800]
-        raise ModelRuntimeError(f"ollama_http_{exc.code}: {detail}") from exc
-    except Exception as exc:
-        ensure_model_runtime(cfg, force=True)
-        raise ModelRuntimeError(f"ollama_chat_failed: {type(exc).__name__}: {exc}") from exc
+
+    request_timeout = timeout or int(cfg.get("conversation_timeout_seconds", 120))
+    last_error: BaseException | None = None
+    for attempt in range(2):
+        payload: dict[str, Any] = {
+            "model": health.model,
+            "messages": messages,
+            "stream": False,
+            "think": False,
+            "options": {"temperature": float(temperature)},
+            "keep_alive": "0" if bool(cfg.get("light_mode")) else "10m",
+        }
+        if tools:
+            payload["tools"] = tools
+        if json_mode:
+            payload["format"] = "json"
+        try:
+            return _json_request(
+                _ollama_chat_url(cfg),
+                payload,
+                timeout=request_timeout,
+            )
+        except urllib.error.HTTPError as exc:
+            detail = exc.read().decode("utf-8", errors="replace")[:800]
+            last_error = ModelRuntimeError(f"ollama_http_{exc.code}: {detail}")
+            # A client/schema failure will not be repaired by restarting Ollama.
+            if exc.code < 500 or attempt:
+                raise last_error from exc
+        except Exception as exc:
+            last_error = exc
+            if attempt:
+                break
+
+        # A refused/reset connection is common after sleep or an Ollama update.
+        # Recover the service, select the model that is actually installed, and
+        # replay this exact owner turn once instead of throwing the stale error.
+        health = ensure_model_runtime(cfg, force=True)
+        if not health.available:
+            raise ModelRuntimeError(f"{health.error_kind}: {health.detail}") from last_error
+
+    raise ModelRuntimeError(
+        f"ollama_chat_failed_after_recovery: {type(last_error).__name__}: {last_error}"
+    ) from last_error
 
 
 def model_health_dict(cfg: dict[str, Any], *, refresh: bool = False) -> dict[str, Any]:

@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import compileall
 import base64
+import ctypes
+from ctypes import wintypes
 import json
 import hashlib
 import threading
@@ -1143,6 +1145,301 @@ $o | ConvertTo-Json -Depth 5
     return run_powershell(job_id, cmd, 30)
 
 
+def _enable_windows_dpi_awareness() -> None:
+    """Keep screenshot pixels, window bounds, and pointer coordinates aligned."""
+    if os.name != "nt":
+        return
+    try:
+        # DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2. Older Windows versions
+        # can reject it, so retain the system-aware fallback below.
+        if ctypes.windll.user32.SetProcessDpiAwarenessContext(ctypes.c_void_p(-4)):
+            return
+    except Exception:
+        pass
+    try:
+        ctypes.windll.user32.SetProcessDPIAware()
+    except Exception:
+        pass
+
+
+def desktop_windows(job_id: str) -> str:
+    """Return visible top-level Windows without spawning a console."""
+    if os.name != "nt":
+        return "TOOL_ERROR: desktop control is only available on the Windows tower."
+    _enable_windows_dpi_awareness()
+    user32 = ctypes.windll.user32
+    rows: list[dict[str, Any]] = []
+    enum_type = ctypes.WINFUNCTYPE(ctypes.c_bool, ctypes.c_void_p, ctypes.c_void_p)
+
+    @enum_type
+    def collect(hwnd, _lparam):
+        try:
+            if not user32.IsWindowVisible(hwnd):
+                return True
+            length = int(user32.GetWindowTextLengthW(hwnd))
+            if length <= 0:
+                return True
+            title = ctypes.create_unicode_buffer(length + 1)
+            user32.GetWindowTextW(hwnd, title, length + 1)
+            rect = wintypes.RECT()
+            user32.GetWindowRect(hwnd, ctypes.byref(rect))
+            pid = ctypes.c_ulong()
+            user32.GetWindowThreadProcessId(hwnd, ctypes.byref(pid))
+            rows.append({
+                "handle": int(hwnd),
+                "pid": int(pid.value),
+                "title": title.value,
+                "bounds": [int(rect.left), int(rect.top), int(rect.right), int(rect.bottom)],
+            })
+        except Exception:
+            pass
+        return True
+
+    user32.EnumWindows(collect, 0)
+    out = json.dumps({"visible_windows": rows[:120]}, ensure_ascii=False, indent=2)
+    trace(job_id, "tool.result", out[:12000], tool="desktop_windows", ok=True)
+    return out
+
+
+def desktop_activate_window(job_id: str, title_contains: str) -> str:
+    """Restore and focus the first visible window whose title contains text."""
+    if os.name != "nt":
+        return "TOOL_ERROR: desktop control is only available on the Windows tower."
+    _enable_windows_dpi_awareness()
+    needle = str(title_contains or "").strip().lower()
+    if not needle:
+        return "TOOL_ERROR: title_contains is required."
+    user32 = ctypes.windll.user32
+    found: list[tuple[int, str]] = []
+    enum_type = ctypes.WINFUNCTYPE(ctypes.c_bool, ctypes.c_void_p, ctypes.c_void_p)
+
+    @enum_type
+    def collect(hwnd, _lparam):
+        try:
+            if not user32.IsWindowVisible(hwnd):
+                return True
+            length = int(user32.GetWindowTextLengthW(hwnd))
+            title = ctypes.create_unicode_buffer(length + 1)
+            user32.GetWindowTextW(hwnd, title, length + 1)
+            if needle in title.value.lower():
+                found.append((int(hwnd), title.value))
+                return False
+        except Exception:
+            pass
+        return True
+
+    user32.EnumWindows(collect, 0)
+    if not found:
+        result = f"TOOL_ERROR: no visible window title contains {title_contains!r}."
+        trace(job_id, "tool.result", result, tool="desktop_activate_window", ok=False)
+        return result
+    hwnd, title = found[0]
+    user32.ShowWindow(hwnd, 9)  # SW_RESTORE
+    user32.BringWindowToTop(hwnd)
+    ok = bool(user32.SetForegroundWindow(hwnd))
+    if not ok:
+        # Windows normally prevents arbitrary foreground stealing. A harmless
+        # ALT press grants the current interactive process one retry without
+        # opening a helper shell or leaving the modifier held down.
+        user32.keybd_event(0x12, 0, 0, 0)
+        user32.keybd_event(0x12, 0, 0x0002, 0)
+        ok = bool(user32.SetForegroundWindow(hwnd))
+    result = json.dumps({"activated": ok, "handle": hwnd, "title": title}, ensure_ascii=False)
+    trace(job_id, "tool.result", result, tool="desktop_activate_window", ok=ok)
+    if ok:
+        set_job(job_id, material_progress_at=now_iso())
+    return result
+
+
+def desktop_screenshot(job_id: str, path: str = "") -> str:
+    """Capture the interactive Windows virtual desktop for visual reasoning.
+
+    The worker recognizes the JSON marker and attaches the PNG to the next local
+    model turn. No image leaves the tower.
+    """
+    if os.name != "nt":
+        return "TOOL_ERROR: desktop screenshots are only available on the Windows tower."
+    destination = _expand(path) if str(path or "").strip() else (
+        WORKSPACES / job_id / f"desktop_{datetime.now().strftime('%Y%m%d_%H%M%S_%f')}.png"
+    )
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    safe_path = str(destination).replace("'", "''")
+    command = rf"""
+$ErrorActionPreference='Stop'
+Add-Type -TypeDefinition 'using System.Runtime.InteropServices; public static class MylesNative {{ [DllImport("user32.dll")] public static extern bool SetProcessDPIAware(); }}'
+[MylesNative]::SetProcessDPIAware() | Out-Null
+Add-Type -AssemblyName System.Windows.Forms
+Add-Type -AssemblyName System.Drawing
+$b=[System.Windows.Forms.SystemInformation]::VirtualScreen
+$bmp=New-Object System.Drawing.Bitmap $b.Width,$b.Height
+$g=[System.Drawing.Graphics]::FromImage($bmp)
+try {{
+  $g.CopyFromScreen($b.Left,$b.Top,0,0,$bmp.Size)
+  $bmp.Save('{safe_path}',[System.Drawing.Imaging.ImageFormat]::Png)
+  [ordered]@{{left=$b.Left;top=$b.Top;width=$b.Width;height=$b.Height;path='{safe_path}'}} | ConvertTo-Json -Compress
+}} finally {{
+  $g.Dispose()
+  $bmp.Dispose()
+}}
+"""
+    completed = subprocess.run(
+        ["powershell.exe", "-NoLogo", "-NoProfile", "-NonInteractive", "-Command", command],
+        capture_output=True,
+        text=True,
+        errors="replace",
+        timeout=30,
+        creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+    )
+    if completed.returncode != 0 or not destination.is_file():
+        result = "TOOL_ERROR: desktop screenshot failed: " + str(completed.stderr or completed.stdout or "unknown error")[-2000:]
+        trace(job_id, "tool.result", result, tool="desktop_screenshot", ok=False)
+        return result
+    try:
+        meta = json.loads(str(completed.stdout or "{}").strip().splitlines()[-1])
+    except Exception:
+        meta = {"path": str(destination)}
+    meta.update({"kind": "desktop_screenshot", "path": str(destination)})
+    result = "MYLES_DESKTOP_IMAGE " + json.dumps(meta, ensure_ascii=False)
+    trace(job_id, "tool.result", result, tool="desktop_screenshot", ok=True)
+    set_job(job_id, material_progress_at=now_iso())
+    return result
+
+
+def desktop_click(
+    job_id: str,
+    x: int,
+    y: int,
+    button: str = "left",
+    clicks: int = 1,
+) -> str:
+    """Move the real pointer and click at an observed desktop coordinate."""
+    if os.name != "nt":
+        return "TOOL_ERROR: desktop control is only available on the Windows tower."
+    _enable_windows_dpi_awareness()
+    button_name = str(button or "left").strip().lower()
+    flags = {
+        "left": (0x0002, 0x0004),
+        "right": (0x0008, 0x0010),
+        "middle": (0x0020, 0x0040),
+    }.get(button_name)
+    if not flags:
+        return "TOOL_ERROR: button must be left, right, or middle."
+    count = max(1, min(int(clicks), 3))
+    user32 = ctypes.windll.user32
+    if not user32.SetCursorPos(int(x), int(y)):
+        return f"TOOL_ERROR: could not move the pointer to ({int(x)}, {int(y)})."
+    for index in range(count):
+        user32.mouse_event(flags[0], 0, 0, 0, 0)
+        user32.mouse_event(flags[1], 0, 0, 0, 0)
+        if index + 1 < count:
+            time.sleep(0.12)
+    result = json.dumps({"clicked": True, "x": int(x), "y": int(y), "button": button_name, "clicks": count})
+    trace(job_id, "tool.result", result, tool="desktop_click", ok=True)
+    set_job(job_id, material_progress_at=now_iso())
+    return result
+
+
+def _send_virtual_keys(keys: list[int]) -> None:
+    user32 = ctypes.windll.user32
+    for key in keys:
+        user32.keybd_event(int(key), 0, 0, 0)
+    for key in reversed(keys):
+        user32.keybd_event(int(key), 0, 0x0002, 0)
+
+
+def desktop_key(job_id: str, keys: str) -> str:
+    """Send a key or chord such as ENTER, ALT+F4, CTRL+L, or WIN+D."""
+    if os.name != "nt":
+        return "TOOL_ERROR: desktop control is only available on the Windows tower."
+    mapping = {
+        "CTRL": 0x11, "CONTROL": 0x11, "SHIFT": 0x10, "ALT": 0x12,
+        "WIN": 0x5B, "WINDOWS": 0x5B, "ENTER": 0x0D, "RETURN": 0x0D,
+        "TAB": 0x09, "ESC": 0x1B, "ESCAPE": 0x1B, "SPACE": 0x20,
+        "BACKSPACE": 0x08, "DELETE": 0x2E, "HOME": 0x24, "END": 0x23,
+        "PAGEUP": 0x21, "PAGEDOWN": 0x22, "LEFT": 0x25, "UP": 0x26,
+        "RIGHT": 0x27, "DOWN": 0x28,
+    }
+    for number in range(1, 13):
+        mapping[f"F{number}"] = 0x6F + number
+    names = [part.strip().upper() for part in str(keys or "").split("+") if part.strip()]
+    codes: list[int] = []
+    for name in names:
+        if name in mapping:
+            codes.append(mapping[name])
+        elif len(name) == 1 and (name.isalpha() or name.isdigit()):
+            codes.append(ord(name))
+        else:
+            return f"TOOL_ERROR: unsupported key name {name!r}."
+    if not codes:
+        return "TOOL_ERROR: keys is required."
+    _send_virtual_keys(codes)
+    result = json.dumps({"sent": True, "keys": "+".join(names)})
+    trace(job_id, "tool.result", result, tool="desktop_key", ok=True)
+    set_job(job_id, material_progress_at=now_iso())
+    return result
+
+
+def desktop_type(job_id: str, text: str) -> str:
+    """Type Unicode text into the focused control using native SendInput."""
+    if os.name != "nt":
+        return "TOOL_ERROR: desktop control is only available on the Windows tower."
+    value = str(text or "")
+    if len(value) > 8000:
+        return "TOOL_ERROR: desktop_type is limited to 8000 characters per call."
+
+    ULONG_PTR = ctypes.c_size_t
+
+    class KEYBDINPUT(ctypes.Structure):
+        _fields_ = [
+            ("wVk", ctypes.c_ushort),
+            ("wScan", ctypes.c_ushort),
+            ("dwFlags", ctypes.c_ulong),
+            ("time", ctypes.c_ulong),
+            ("dwExtraInfo", ULONG_PTR),
+        ]
+
+    class MOUSEINPUT(ctypes.Structure):
+        _fields_ = [
+            ("dx", ctypes.c_long),
+            ("dy", ctypes.c_long),
+            ("mouseData", ctypes.c_ulong),
+            ("dwFlags", ctypes.c_ulong),
+            ("time", ctypes.c_ulong),
+            ("dwExtraInfo", ULONG_PTR),
+        ]
+
+    class HARDWAREINPUT(ctypes.Structure):
+        _fields_ = [
+            ("uMsg", ctypes.c_ulong),
+            ("wParamL", ctypes.c_ushort),
+            ("wParamH", ctypes.c_ushort),
+        ]
+
+    class INPUT_UNION(ctypes.Union):
+        # INPUT is a tagged union. Including every native arm is important on
+        # 64-bit Windows because SendInput rejects an undersized cbSize.
+        _fields_ = [("mi", MOUSEINPUT), ("ki", KEYBDINPUT), ("hi", HARDWAREINPUT)]
+
+    class INPUT(ctypes.Structure):
+        _anonymous_ = ("union",)
+        _fields_ = [("type", ctypes.c_ulong), ("union", INPUT_UNION)]
+
+    units = [int.from_bytes(value.encode("utf-16-le")[i:i + 2], "little") for i in range(0, len(value.encode("utf-16-le")), 2)]
+    inputs = []
+    for unit in units:
+        inputs.append(INPUT(type=1, ki=KEYBDINPUT(0, unit, 0x0004, 0, 0)))
+        inputs.append(INPUT(type=1, ki=KEYBDINPUT(0, unit, 0x0004 | 0x0002, 0, 0)))
+    if inputs:
+        array = (INPUT * len(inputs))(*inputs)
+        sent = int(ctypes.windll.user32.SendInput(len(inputs), array, ctypes.sizeof(INPUT)))
+        if sent != len(inputs):
+            return f"TOOL_ERROR: Windows accepted {sent}/{len(inputs)} keyboard events."
+    result = json.dumps({"typed": True, "characters": len(value)})
+    trace(job_id, "tool.result", result, tool="desktop_type", ok=True)
+    set_job(job_id, material_progress_at=now_iso())
+    return result
+
+
 def _ensure_playwright(job_id: str) -> str | None:
     try:
         import playwright.sync_api  # noqa
@@ -1259,7 +1556,8 @@ def self_clone_candidate(job_id: str, description: str = "") -> str:
     dest = UPDATES / f"candidate_{stamp}"
     dest.mkdir(parents=True, exist_ok=True)
     include = [
-        "myles_common.py", "myles_runtime_v9.py", "myles_capabilities.py", "myles_quick.py",
+        "myles_common.py", "myles_runtime_v9.py", "myles_model_runtime.py", "myles_windows.py",
+        "myles_capabilities.py", "myles_quick.py",
         "myles_tools.py", "job_worker.py", "myles_core.py",
         "myles_console.py", "configure_telegram.py", "restart_helper.py",
         "self_test.py", "README.txt",
@@ -1288,7 +1586,8 @@ def self_verify_candidate(job_id: str, candidate_path: str) -> str:
         return "REFUSED: candidate must be inside the Myles self_updates directory."
 
     required = {
-        "myles_common.py", "myles_runtime_v9.py", "myles_capabilities.py", "myles_quick.py",
+        "myles_common.py", "myles_runtime_v9.py", "myles_model_runtime.py", "myles_windows.py",
+        "myles_capabilities.py", "myles_quick.py",
         "myles_tools.py", "job_worker.py", "myles_core.py",
         "restart_helper.py", "self_test.py",
     }
