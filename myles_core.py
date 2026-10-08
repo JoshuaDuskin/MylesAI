@@ -26,6 +26,7 @@ from myles_common import (
 import myles_capabilities as capabilities
 import myles_tools as tools
 import myles_quick as quick
+from myles_windows import launch_fortnite_verified
 from myles_runtime_v9 import (
     deterministic_control, explicit_stop_requested, explicit_resume_requested,
     looks_like_status_request, likely_action_request, strong_action_request,
@@ -77,11 +78,12 @@ You are Myles, the owner's local personal AI on his Windows tower.
 
 The owner talks to you normally. Treat ordinary language as ordinary conversation. Do not require slash commands, special prefixes, task IDs, or canned command syntax.
 
-You have four conversation-level tools:
+You have five conversation-level tools:
 - start_background_job: launch real computer/project work without blocking the conversation.
 - get_current_work: truthfully inspect current work/progress.
 - stop_current_work: cancel the current owner task.
 - set_light_mode: hold heavy queued work when the owner explicitly wants lightweight/gaming behavior.
+- launch_fortnite: open Fortnite and report success only after its Windows process is verified.
 
 IMPORTANT BEHAVIOR:
 - If the owner is chatting, asking a normal question, venting, making a comment, or giving context, answer naturally. Do NOT create a task just because he sent a message.
@@ -655,7 +657,7 @@ def _telegram_plain_text(value: str) -> str:
 
 def _conversation_tool(name: str, args: dict[str, Any], source: str) -> str:
     if name == "launch_fortnite":
-        return "STARTED task=Open Fortnite state=RUNNING tool=launch_fortnite"
+        return _direct_fortnite_launch()
     if name == "start_background_job":
         prompt = str(args.get("prompt") or "").strip()
         if not prompt:
@@ -682,6 +684,89 @@ def _conversation_tool(name: str, args: dict[str, Any], source: str) -> str:
         save_config(cfg)
         return "Light mode is on; heavy queued work will wait." if enabled else "Light mode is off; normal queued work can run."
     return f"ERROR: unknown conversation tool {name}"
+
+
+def _parse_tool_arguments(value: Any) -> dict[str, Any] | None:
+    if isinstance(value, dict):
+        return value
+    if isinstance(value, str):
+        try:
+            parsed = json.loads(value)
+            return parsed if isinstance(parsed, dict) else None
+        except Exception:
+            return None
+    return None
+
+
+def _conversation_tool_authorized(name: str, raw: str, args: dict[str, Any]) -> bool:
+    """Enforce owner intent in code before any model-selected chat tool runs."""
+    if name == "get_current_work":
+        return True
+    if name == "stop_current_work":
+        return explicit_stop_requested(raw)
+    if name == "launch_fortnite":
+        return bool(re.search(r"\b(?:open|launch|start)\s+fortnite\b", raw, re.I)) or _fortnite_launch_followup(raw)
+    if name == "set_light_mode":
+        forced = deterministic_control(raw, has_active=bool(active_job()), has_recent_cancelled=bool(_latest_cancelled_job()))
+        return forced in {"light_on", "light_off"}
+    if name == "start_background_job":
+        return bool(
+            self_capability_request(raw)
+            or (
+                (strong_action_request(raw) or followup_action_request(raw) or likely_action_request(raw))
+                and not natural_question(raw)
+                and not behavior_feedback_request(raw)
+            )
+        )
+    return False
+
+
+def _conversation_agent_turn(raw: str, source: str) -> tuple[str, str | None]:
+    """Run one guarded conversational agent turn with optional verified tools.
+
+    This replaces the old classifier-then-speaker path for ordinary language.
+    Tool follow-up calls remain in the same agent turn, and code-level intent
+    gates prevent the local model from turning casual conversation into work.
+    """
+    history = history_for_model(18)
+    if history and history[-1].get("role") == "user" and str(history[-1].get("content") or "").strip() == raw:
+        history = history[:-1]
+    messages: list[dict[str, Any]] = [{"role": "system", "content": CONVERSATION_SYSTEM}]
+    messages.extend(history)
+    messages.append({"role": "user", "content": raw})
+    started_job: str | None = None
+
+    for _step in range(3):
+        data = _conversation_call(messages)
+        message = data.get("message") or {}
+        content = clean_model_text(str(message.get("content") or ""))
+        calls = message.get("tool_calls") or []
+        assistant_message: dict[str, Any] = {"role": "assistant", "content": content}
+        if calls:
+            assistant_message["tool_calls"] = calls
+        messages.append(assistant_message)
+
+        if not calls:
+            return (content or "I'm here."), started_job
+
+        for call in calls[:3]:
+            function = call.get("function") or {}
+            name = str(function.get("name") or "").strip()
+            args = _parse_tool_arguments(function.get("arguments") or {})
+            if name not in {str(row["function"]["name"]) for row in CONVERSATION_TOOLS} or args is None:
+                result = "TOOL_REFUSED: malformed or unknown conversation tool call."
+            elif not _conversation_tool_authorized(name, raw, args):
+                result = (
+                    "TOOL_REFUSED: the owner's latest message did not explicitly authorize "
+                    "that action. Continue as normal conversation and do not claim work started."
+                )
+            else:
+                result = _conversation_tool(name, args, source)
+                if "task_id=" in result:
+                    started_job = result.split("task_id=", 1)[1].split(" ", 1)[0]
+            messages.append({"role": "tool", "content": result})
+
+    return "I understood you, but I couldn't complete that turn cleanly. I didn't pretend anything ran.", started_job
 
 
 def _latest_cancelled_job() -> dict[str, Any] | None:
@@ -1055,32 +1140,6 @@ def _preempt_continuous_for_owner() -> None:
     set_setting("continuous.next_spawn_epoch", str(int(time.time()) + 15))
 
 
-def _windows_process_running(*names: str) -> bool:
-    if os.name != "nt":
-        return False
-    try:
-        completed = subprocess.run(
-            ["tasklist", "/FO", "CSV", "/NH"],
-            capture_output=True,
-            text=True,
-            timeout=5,
-            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
-        )
-        listing = str(completed.stdout or "").lower()
-        return any(str(name or "").lower() in listing for name in names if name)
-    except Exception:
-        return False
-
-
-def _epic_launcher_executable() -> Path | None:
-    candidates: list[Path] = []
-    for root_name in ("ProgramFiles(x86)", "ProgramFiles"):
-        root = str(os.environ.get(root_name) or "").strip()
-        if root:
-            candidates.append(Path(root) / "Epic Games" / "Launcher" / "Portal" / "Binaries" / "Win64" / "EpicGamesLauncher.exe")
-    return next((path for path in candidates if path.is_file()), None)
-
-
 def _fortnite_launch_followup(raw: str) -> bool:
     low = re.sub(r"\s+", " ", str(raw or "").strip().lower())
     failure_phrases = (
@@ -1095,40 +1154,16 @@ def _fortnite_launch_followup(raw: str) -> bool:
 
 
 def _direct_fortnite_launch() -> str:
-    if os.name != "nt":
-        return "Fortnite launch is only available on the Windows tower."
-    fortnite_processes = (
-        "fortniteclient-win64-shipping.exe",
-        "fortnitelauncher.exe",
-        "fortniteclient-win64-shipping_eac_eos.exe",
-    )
-    if _windows_process_running(*fortnite_processes):
-        return "Fortnite is already running."
-
-    uri = "com.epicgames.launcher://apps/Fortnite?action=launch"
-    launcher = _epic_launcher_executable()
-    launch_error = ""
-    try:
-        if launcher:
-            subprocess.Popen([str(launcher), uri])
-        elif hasattr(os, "startfile"):
-            os.startfile(uri)  # type: ignore[attr-defined]
-        else:
-            subprocess.Popen(["cmd.exe", "/c", "start", "", uri], creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
-    except Exception as exc:
-        launch_error = f"{type(exc).__name__}: {exc}"
-
-    deadline = time.time() + 12
-    while time.time() < deadline:
-        if _windows_process_running(*fortnite_processes):
-            return "Fortnite is opening now."
-        time.sleep(1)
-
-    if _windows_process_running("epicgameslauncher.exe"):
-        return "Epic Games Launcher is open and I sent Fortnite the launch command, but Fortnite has not started yet. I won't pretend it did."
-    if launch_error:
-        return "I couldn't launch Fortnite. Epic Games Launcher returned an error; check the launcher on the tower."
-    return "I sent the Fortnite launch command, but I can't verify that Epic or Fortnite started."
+    result = launch_fortnite_verified(timeout_seconds=40)
+    if result.startswith("FORTNITE_RUNNING:"):
+        return result.split(":", 1)[1].strip()
+    if result.startswith("FORTNITE_NOT_VERIFIED:"):
+        return result.split(":", 1)[1].strip()
+    if result.startswith("FORTNITE_LAUNCH_ERROR:"):
+        return "I couldn't launch Fortnite. " + result.split(":", 1)[1].strip()
+    if result.startswith("FORTNITE_LAUNCH_UNAVAILABLE:"):
+        return result.split(":", 1)[1].strip()
+    return result
 
 
 def handle_owner_message(text: str, source: str) -> dict[str, Any]:
@@ -1208,11 +1243,14 @@ def handle_owner_message(text: str, source: str) -> dict[str, Any]:
                     "task": _standalone_followup_task(raw, parent) if parent else raw,
                 }
             else:
-                route = _router_call(raw)
+                # Ordinary and ambiguous language uses one guarded agent turn.
+                # The former classifier + speaker split doubled the failure
+                # surface and never executed the declared conversation tools.
+                route = {"intent": "agent", "task": ""}
 
         intent = route["intent"]
         task = str(route.get("task") or "").strip()
-        if forced is None and intent not in {"continuous_on", "continuous_off", "dashboard_url", "capabilities"}:
+        if forced is None and intent not in {"agent", "continuous_on", "continuous_off", "dashboard_url", "capabilities"}:
             local_intent = intent
             intent, jev_meta = verify_with_jev(
                 raw,
@@ -1289,6 +1327,11 @@ def handle_owner_message(text: str, source: str) -> dict[str, Any]:
         elif intent == "feedback":
             result = _behavior_feedback_reply(raw)
             controller = "OWNER_ACTION=feedback\n" + result
+        elif intent == "agent":
+            result, agent_job = _conversation_agent_turn(raw, source)
+            if agent_job:
+                started_job = agent_job
+            controller = "OWNER_ACTION=agent\n" + result
         elif intent == "start":
             result = _start_task(task or raw, source)
             if result.startswith("task_id="):
@@ -1375,6 +1418,10 @@ def handle_owner_message(text: str, source: str) -> dict[str, Any]:
                 final = result
             elif intent == "feedback":
                 final = result
+            elif intent == "agent":
+                final = result
+                if execution_promise_text(final) and not started_job:
+                    final = "I haven't started a computer task from that message, so I won't claim that I'm working on one."
             elif intent == "status":
                 final = status_text()
             elif intent == "stop":

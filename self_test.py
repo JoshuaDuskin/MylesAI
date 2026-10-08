@@ -15,7 +15,7 @@ def main():
     myles_common.init_db()
     cfg = myles_common.load_config()
     checks = {
-        "version": myles_common.APP_VERSION == "10.0.0",
+        "version": myles_common.APP_VERSION == "10.1.0",
         "config_loads": isinstance(cfg, dict),
         "telegram_setting_present": "telegram_enabled" in cfg,
         "root_exists": myles_common.ROOT.exists(),
@@ -28,6 +28,7 @@ def main():
     import myles_capabilities
     import job_worker
     import myles_core
+    import myles_windows
     import myles_console
     import configure_telegram
 
@@ -39,6 +40,7 @@ def main():
     checks["telegram_config_import"] = True
     checks["quick_lookup_import"] = True
     checks["model_runtime_import"] = True
+    checks["windows_action_layer_import"] = True
     checks["conversation_fallback_is_natural"] = (
         myles_model_runtime.fallback_conversation("Yo") == "Hey — I’m here. What’s up?"
         and "task" not in myles_model_runtime.fallback_conversation("Yo").lower()
@@ -90,6 +92,31 @@ def main():
         and "private report" not in json.dumps(captured_jev.get("payload", {})).lower()
     )
 
+    original_model_request = myles_model_runtime._json_request
+    original_model_health = myles_model_runtime.ensure_model_runtime
+    replay_calls = {"count": 0}
+
+    def fake_model_health(_cfg, force=False):
+        return myles_model_runtime.ModelHealth(True, model="qwen-test", endpoint="http://127.0.0.1:11434", recovered=force)
+
+    def flaky_model_request(_url, _payload, timeout=15, headers=None):
+        replay_calls["count"] += 1
+        if replay_calls["count"] == 1:
+            raise ConnectionRefusedError("test recovery")
+        return {"message": {"role": "assistant", "content": "recovered"}}
+
+    try:
+        myles_model_runtime.ensure_model_runtime = fake_model_health
+        myles_model_runtime._json_request = flaky_model_request
+        replay_result = myles_model_runtime.model_chat({}, [{"role": "user", "content": "Yo"}])
+    finally:
+        myles_model_runtime.ensure_model_runtime = original_model_health
+        myles_model_runtime._json_request = original_model_request
+    checks["conversation_replays_after_model_recovery"] = (
+        replay_calls["count"] == 2
+        and replay_result.get("message", {}).get("content") == "recovered"
+    )
+
     core_source = Path(myles_core.__file__).read_text(encoding="utf-8")
     worker_source = Path(job_worker.__file__).read_text(encoding="utf-8")
     tools_source = Path(myles_tools.__file__).read_text(encoding="utf-8")
@@ -103,6 +130,8 @@ def main():
     stop_source = stop_path.read_text(encoding="utf-8") if stop_path.exists() else ""
     console_path = myles_common.ROOT / "bin" / "myles_console_v074.py"
     console_source = console_path.read_text(encoding="utf-8") if console_path.exists() else ""
+    guardian_path = myles_common.ROOT / "bin" / "ensure_myles_runtime.py"
+    guardian_source = guardian_path.read_text(encoding="utf-8") if guardian_path.exists() else ""
 
     # --- Conversation/control routing ---
     checks["semantic_natural_language_router"] = (
@@ -139,9 +168,17 @@ def main():
         and rt.deterministic_control(dashboard_prompt, has_active=False, has_recent_cancelled=False) is None
     )
     checks["fortnite_bypasses_model_router"] = (
-        'if re.search(r"\\b(?:open|launch|start)\\s+fortnite\\b", raw, re.I):' in core_source
-        and core_source.index('if re.search(r"\\b(?:open|launch|start)\\s+fortnite\\b", raw, re.I):')
+        'if re.search(r"\\b(?:open|launch|start)\\s+fortnite\\b", raw, re.I) or _fortnite_launch_followup(raw):' in core_source
+        and core_source.index('if re.search(r"\\b(?:open|launch|start)\\s+fortnite\\b", raw, re.I) or _fortnite_launch_followup(raw):')
             < core_source.index('CHAT_BUSY.set()')
+        and "launch_fortnite_verified" in core_source
+        and "FORTNITE_RUNNING" in Path(myles_windows.__file__).read_text(encoding="utf-8")
+    )
+    checks["single_guarded_conversation_agent_path"] = (
+        'route = {"intent": "agent", "task": ""}' in core_source
+        and "def _conversation_agent_turn" in core_source
+        and "def _conversation_tool_authorized" in core_source
+        and "_conversation_agent_turn(raw, source)" in core_source
     )
     checks["conversation_errors_have_safe_fallback"] = (
         "fallback_conversation(raw, status_text()" in core_source
@@ -372,6 +409,13 @@ def main():
         and "myles_console_v074.py" in start_source
         and "MYLES_SUPERVISOR_RUNNING" in start_source
     )
+    checks["windowless_runtime_guardian"] = (
+        guardian_path.exists()
+        and "runtime_supervisor_v074.py" in guardian_source
+        and "CREATE_NO_WINDOW" in guardian_source
+        and "DETACHED_PROCESS" in guardian_source
+        and "powershell.exe" not in guardian_source.lower()
+    )
     checks["canonical_stop_path_is_scoped"] = (
         stop_path.exists()
         and "runtime_supervisor.py" in stop_source
@@ -428,6 +472,18 @@ def main():
     )
 
     checks["large_file_generator_present"] = hasattr(myles_tools, "write_generated_file")
+    checks["visual_desktop_toolkit_present"] = all(
+        hasattr(myles_tools, name)
+        for name in (
+            "desktop_windows", "desktop_activate_window", "desktop_screenshot",
+            "desktop_click", "desktop_key", "desktop_type",
+        )
+    ) and all(name in worker_source for name in (
+        '"desktop_windows"', '"desktop_screenshot"', '"desktop_click"',
+        '"desktop_key"', '"desktop_type"', "_desktop_image_message",
+    )) and all(marker in tools_source for marker in (
+        "_enable_windows_dpi_awareness", "class MOUSEINPUT", "class HARDWAREINPUT",
+    ))
     checks["deterministic_patch_tool_present"] = hasattr(myles_tools, "apply_text_patch")
 
     # --- Completion verification ---
@@ -573,6 +629,8 @@ def main():
     # --- Self-update completeness / rollback ---
     checks["self_update_copies_full_v9_runtime"] = (
         '"myles_runtime_v9.py"' in tools_source
+        and '"myles_model_runtime.py"' in tools_source
+        and '"myles_windows.py"' in tools_source
         and '"myles_capabilities.py"' in tools_source
         and '"myles_quick.py"' in tools_source
     )

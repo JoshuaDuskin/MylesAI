@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import base64
 import json
 import os
 import re
@@ -19,6 +20,7 @@ from myles_common import (
 )
 import myles_tools as tools
 import myles_capabilities as capabilities
+from myles_windows import launch_fortnite_verified
 from myles_runtime_v9 import (
     PlannerParseError, normalize_action_plan, parse_native_arguments,
     classify_tool_result,
@@ -41,6 +43,13 @@ TOOL_DEFS = [
     {"type":"function","function":{"name":"git_command","description":"Run git in a repository.","parameters":{"type":"object","properties":{"repo_path":{"type":"string"},"args":{"type":"string"},"timeout_seconds":{"type":"integer"}},"required":["repo_path","args"]}}},
     {"type":"function","function":{"name":"install_python_packages","description":"Install Python packages into the Myles Python environment when a task needs them.","parameters":{"type":"object","properties":{"packages":{"type":"array","items":{"type":"string"}}},"required":["packages"]}}},
     {"type":"function","function":{"name":"system_status","description":"Read live tower time, machine, CPU, memory, disk and Ollama status.","parameters":{"type":"object","properties":{}}}},
+    {"type":"function","function":{"name":"launch_fortnite","description":"Launch Fortnite through the installed Epic Games Launcher and return success only after a Fortnite process is verified.","parameters":{"type":"object","properties":{},"additionalProperties":False}}},
+    {"type":"function","function":{"name":"desktop_windows","description":"List the real visible top-level Windows desktop windows with titles, handles, process IDs, and bounds. Use before targeting an existing app.","parameters":{"type":"object","properties":{}}}},
+    {"type":"function","function":{"name":"desktop_activate_window","description":"Restore and focus a visible Windows application by a unique substring of its title.","parameters":{"type":"object","properties":{"title_contains":{"type":"string"}},"required":["title_contains"]}}},
+    {"type":"function","function":{"name":"desktop_screenshot","description":"Capture the real interactive Windows desktop. The PNG is attached to the next local model turn for visual reasoning. Observe before coordinate actions and again afterward to verify the result.","parameters":{"type":"object","properties":{"path":{"type":"string"}}}}},
+    {"type":"function","function":{"name":"desktop_click","description":"Move the real Windows pointer and click an observed screen coordinate. Never guess coordinates; use desktop_screenshot first and verify afterward.","parameters":{"type":"object","properties":{"x":{"type":"integer"},"y":{"type":"integer"},"button":{"type":"string","enum":["left","right","middle"]},"clicks":{"type":"integer","minimum":1,"maximum":3}},"required":["x","y"]}}},
+    {"type":"function","function":{"name":"desktop_key","description":"Send a real Windows key or chord to the focused application, such as ENTER, CTRL+L, ALT+F4, or WIN+D.","parameters":{"type":"object","properties":{"keys":{"type":"string"}},"required":["keys"]}}},
+    {"type":"function","function":{"name":"desktop_type","description":"Type Unicode text into the currently focused Windows control.","parameters":{"type":"object","properties":{"text":{"type":"string"}},"required":["text"]}}},
     {"type":"function","function":{"name":"browser_automation","description":"Automate a website using a persistent Chromium profile. It self-provisions Playwright/Chromium if needed. Do not bypass authentication or MFA; surface an owner gate when manual authentication is required.","parameters":{"type":"object","properties":{"url":{"type":"string"},"actions":{"type":"array","items":{"type":"object"}},"headless":{"type":"boolean"}},"required":["url","actions"]}}},
     {"type":"function","function":{"name":"notify_owner","description":"Send the owner a proactive message through the configured remote Myles channel (Telegram when configured).","parameters":{"type":"object","properties":{"message":{"type":"string"}},"required":["message"]}}},
     {"type":"function","function":{"name":"self_clone_candidate","description":"Create a safe candidate copy of Myles source before changing Myles himself.","parameters":{"type":"object","properties":{"description":{"type":"string"}}}}},
@@ -63,6 +72,9 @@ Avoid irreversible/destructive actions unless the owner explicitly requested the
 PineTree is a permanent protected boundary. Never read, inspect, modify, deploy, authenticate to, publish to, clone, fetch, push, browse, or otherwise touch anything PineTree-related, even if a future prompt asks you to. The tool layer will reject it.
 Conversation and owner controls must not stop background work. Telegram and the optional local console are only interfaces to this same core. The owner should never need command syntax to talk to Myles.
 Use ordinary conversational context. A question, explanation, complaint, or follow-up does not automatically request a new task. When a request is genuinely actionable, choose the smallest appropriate tool path; use web search for current public facts, local tools for tower/project work, and download/install tools only when the requested work actually needs them. Ask the owner only for authentication, MFA, consent, or a risky irreversible choice.
+
+WINDOWS DESKTOP CONTROL:
+You can inspect and operate the owner's real interactive desktop. Use desktop_windows to identify apps, desktop_activate_window to focus one, and desktop_screenshot to see the current screen. For coordinate interaction, always observe first, click/type only from visible evidence, then observe again to verify the result. Prefer direct APIs, process launch, and browser_automation when they are more reliable than mouse coordinates. Never claim an app opened or a UI action succeeded without process/window or screenshot evidence.
 
 SELF-DEVELOPMENT:
 If the owner asks you to improve or extend Myles himself, use self_clone_candidate first. Work only in that candidate, verify it with self_verify_candidate, and promote only a passing candidate with self_promote_candidate. Never live-edit the only running copy as the first step.
@@ -202,6 +214,13 @@ git_command: {"repo_path": string, "args": string, "timeout_seconds": integer op
 github_pages_publish: {"repo_path": string, "repo_name": string optional}
 install_python_packages: {"packages": [string, ...]}
 system_status: {}
+launch_fortnite: {}
+desktop_windows: {}
+desktop_activate_window: {"title_contains": string}
+desktop_screenshot: {"path": string optional}
+desktop_click: {"x": integer, "y": integer, "button": "left"|"right"|"middle" optional, "clicks": integer optional}
+desktop_key: {"keys": string}
+desktop_type: {"text": string}
 browser_automation: {"url": string, "actions": [object, ...], "headless": boolean optional}
 notify_owner: {"message": string}
 self_clone_candidate: {"description": string optional}
@@ -757,21 +776,14 @@ def _owner_repo_policy_refusal(job_id: str, name: str, args: dict) -> str | None
 
 
 def _launch_fortnite_direct() -> str:
-    if os.name != "nt":
-        return "FORTNITE_LAUNCH_UNAVAILABLE: Windows launch is only supported on the tower."
-    uri = "com.epicgames.launcher://apps/Fortnite?action=launch&silent=true"
-    try:
-        subprocess.Popen(["cmd.exe", "/c", "start", "", uri], creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
-        return "FORTNITE_LAUNCH_REQUESTED: Epic Games Launcher was asked to open Fortnite."
-    except Exception as exc:
-        return f"FORTNITE_LAUNCH_ERROR: {type(exc).__name__}: {exc}"
+    return launch_fortnite_verified(timeout_seconds=40)
 
 
 def execute_tool(job_id: str, name: str, args: dict) -> str:
     set_job(job_id, phase=f"tool:{name}", heartbeat_at=now_iso())
     if name == "launch_fortnite":
         result = _launch_fortnite_direct()
-        trace(job_id, "tool.result", result, tool=name, ok=result.startswith("FORTNITE_LAUNCH_REQUESTED"))
+        trace(job_id, "tool.result", result, tool=name, ok=result.startswith("FORTNITE_RUNNING"))
         return result
     policy_refusal = _owner_repo_policy_refusal(job_id, name, args)
     if policy_refusal:
@@ -828,7 +840,43 @@ SAFE_INTERNAL_RETRY_TOOLS = {
     "capability_status",
     "download_file",
     "github_pages_publish",
+    "desktop_windows",
+    "desktop_screenshot",
 }
+
+MUTATING_TOOLS = {
+    "run_powershell", "write_text_file", "write_generated_file", "apply_text_patch",
+    "download_file", "git_command", "github_pages_publish",
+    "configure_runtime_status_feed", "install_python_packages", "browser_automation",
+    "self_clone_candidate", "self_promote_candidate", "desktop_activate_window",
+    "desktop_click", "desktop_key", "desktop_type", "launch_fortnite",
+}
+
+
+def _desktop_image_message(tool_name: str, result: str) -> dict[str, Any] | None:
+    """Turn a trusted local screenshot result into an Ollama vision message."""
+    if tool_name != "desktop_screenshot" or not str(result).startswith("MYLES_DESKTOP_IMAGE "):
+        return None
+    try:
+        meta = json.loads(str(result).split(" ", 1)[1])
+        path = Path(str(meta.get("path") or "")).resolve()
+        if not path.is_file() or path.suffix.lower() != ".png":
+            return None
+        # Refuse an unexpectedly huge capture rather than flooding the local model.
+        if path.stat().st_size > 25 * 1024 * 1024:
+            return None
+        encoded = base64.b64encode(path.read_bytes()).decode("ascii")
+        return {
+            "role": "user",
+            "content": (
+                "This is the current real Windows desktop captured by desktop_screenshot. "
+                "Inspect only what is visibly present. Choose the next smallest reliable action, "
+                "and capture another screenshot after interacting to verify the result."
+            ),
+            "images": [encoded],
+        }
+    except Exception:
+        return None
 
 def execute_with_internal_retry(job_id: str, name: str, args: dict) -> tuple[str, Any]:
     """Execute one tool action and internally retry safe transient failures.
@@ -985,9 +1033,12 @@ def main() -> int:
                     ok = outcome.ok
                     if ok:
                         tool_calls_succeeded += 1
-                        if name in {"run_powershell", "write_text_file", "write_generated_file", "apply_text_patch", "download_file", "git_command", "github_pages_publish", "configure_runtime_status_feed", "install_python_packages", "browser_automation", "self_clone_candidate", "self_promote_candidate"}:
+                        if name in MUTATING_TOOLS:
                             mutating_tool_succeeded += 1
                     messages.append({"role": "tool", "content": result})
+                    image_message = _desktop_image_message(name, result)
+                    if image_message:
+                        messages.append(image_message)
                 continue
 
             if content:
@@ -1047,8 +1098,11 @@ def main() -> int:
                     ok = outcome.ok
                     if ok:
                         tool_calls_succeeded += 1
-                        if name in {"run_powershell", "write_text_file", "write_generated_file", "apply_text_patch", "download_file", "git_command", "github_pages_publish", "configure_runtime_status_feed", "install_python_packages", "browser_automation", "self_clone_candidate", "self_promote_candidate"}:
+                        if name in MUTATING_TOOLS:
                             mutating_tool_succeeded += 1
+                    image_message = _desktop_image_message(name, result)
+                    if image_message:
+                        messages.append(image_message)
                     messages.append({
                         "role": "user",
                         "content": (
