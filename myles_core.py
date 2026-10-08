@@ -587,7 +587,7 @@ def _local_location_request(raw: str) -> bool:
     t = re.sub(r"\s+", " ", str(raw or "").strip().lower())
     location_words = (
         "where did you put", "where is the", "where's the", "where can i find",
-        "which folder", "which file", "what file", "show me where", "locate", "find the",
+        "which folder", "which file", "what file", "show me where", "locate the",
     )
     artifact_words = (
         "report", "backtest", "back test", "result", "output", "file", "folder",
@@ -705,7 +705,7 @@ def _conversation_tool_authorized(name: str, raw: str, args: dict[str, Any]) -> 
     if name == "stop_current_work":
         return explicit_stop_requested(raw)
     if name == "launch_fortnite":
-        return bool(re.search(r"\b(?:open|launch|start)\s+fortnite\b", raw, re.I)) or _fortnite_launch_followup(raw)
+        return _direct_fortnite_request(raw) or _fortnite_launch_followup(raw)
     if name == "set_light_mode":
         forced = deterministic_control(raw, has_active=bool(active_job()), has_recent_cancelled=bool(_latest_cancelled_job()))
         return forced in {"light_on", "light_off"}
@@ -1153,6 +1153,17 @@ def _fortnite_launch_followup(raw: str) -> bool:
     return "fortnite" in context
 
 
+def _direct_fortnite_request(raw: str) -> bool:
+    """Recognize a short owner launch command, not a diagnostic paragraph."""
+    text = re.sub(r"\s+", " ", str(raw or "").strip().lower())
+    return bool(re.fullmatch(
+        r"(?:(?:can|could|would|will) you |please )?"
+        r"(?:open|launch|start) (?:up )?fortnite"
+        r"(?: (?:now|please|for me|on (?:the )?(?:tower|computer|pc)))?[.!?]*",
+        text,
+    ))
+
+
 def _direct_fortnite_launch() -> str:
     result = launch_fortnite_verified(timeout_seconds=40)
     if result.startswith("FORTNITE_RUNNING:"):
@@ -1171,7 +1182,7 @@ def handle_owner_message(text: str, source: str) -> dict[str, Any]:
     if not raw:
         return {"kind": "chat", "reply": ""}
 
-    if re.search(r"\b(?:open|launch|start)\s+fortnite\b", raw, re.I) or _fortnite_launch_followup(raw):
+    if _direct_fortnite_request(raw) or _fortnite_launch_followup(raw):
         add_message(source, "user", raw, None)
         final = _direct_fortnite_launch()
         message_id = add_message(source, "assistant", final, None)

@@ -15,7 +15,7 @@ def main():
     myles_common.init_db()
     cfg = myles_common.load_config()
     checks = {
-        "version": myles_common.APP_VERSION == "10.1.0",
+        "version": myles_common.APP_VERSION == "10.1.1",
         "config_loads": isinstance(cfg, dict),
         "telegram_setting_present": "telegram_enabled" in cfg,
         "root_exists": myles_common.ROOT.exists(),
@@ -168,11 +168,24 @@ def main():
         and rt.deterministic_control(dashboard_prompt, has_active=False, has_recent_cancelled=False) is None
     )
     checks["fortnite_bypasses_model_router"] = (
-        'if re.search(r"\\b(?:open|launch|start)\\s+fortnite\\b", raw, re.I) or _fortnite_launch_followup(raw):' in core_source
-        and core_source.index('if re.search(r"\\b(?:open|launch|start)\\s+fortnite\\b", raw, re.I) or _fortnite_launch_followup(raw):')
+        "if _direct_fortnite_request(raw) or _fortnite_launch_followup(raw):" in core_source
+        and core_source.index("if _direct_fortnite_request(raw) or _fortnite_launch_followup(raw):")
             < core_source.index('CHAT_BUSY.set()')
         and "launch_fortnite_verified" in core_source
         and "FORTNITE_RUNNING" in Path(myles_windows.__file__).read_text(encoding="utf-8")
+    )
+    checks["fortnite_diagnostic_is_not_shortcut"] = (
+        myles_core._direct_fortnite_request("Start Fortnite now.")
+        and myles_core._direct_fortnite_request("Can you open Fortnite on the tower?")
+        and not myles_core._direct_fortnite_request(
+            "Diagnose why launch Fortnite failed, inspect Epic, and report the exact blocker."
+        )
+    )
+    checks["diagnostic_is_not_local_report_lookup"] = (
+        not myles_core._local_location_request(
+            "Find the exact Epic blocker and report the visible failure."
+        )
+        and myles_core._local_location_request("Where did you put the backtest report?")
     )
     checks["single_guarded_conversation_agent_path"] = (
         'route = {"intent": "agent", "task": ""}' in core_source
