@@ -179,9 +179,16 @@ def compact_owner_summary(job_id: str, prompt: str, result: str) -> str:
         with urllib.request.urlopen(req, timeout=min(90, int(cfg["model_timeout_seconds"]))) as response:
             data = json.loads(response.read().decode("utf-8"))
         summary = clean_model_text(str((data.get("message") or {}).get("content") or "")).strip()
-        if summary:
+        if summary and not _looks_like_unfinished_promise(summary):
             trace(job_id, "owner.summary_compacted", summary[:12000])
             return summary[:1600]
+        if summary:
+            trace(
+                job_id,
+                "owner.summary_rejected",
+                "summary introduced unfinished/future work language: " + summary[:10000],
+                ok=False,
+            )
     except Exception as exc:
         trace(job_id, "owner.summary_fallback", f"{type(exc).__name__}: {exc}"[:12000], ok=False)
     cleaned = re.sub(r"(?is)^(based on .*?(?:logs|context).*?:\s*)", "", source).strip()
@@ -246,6 +253,15 @@ def call_execution_bridge(job_id: str, job_prompt: str, workspace: Path, last_te
             recent.append(f"{role.upper()}: {content[:3500]}")
 
     allowed = set(_tool_names())
+    if _prompt_requires_desktop_action(job_prompt):
+        # A visual desktop request must never drift into generating a report/file.
+        # The fallback planner may observe, operate, or use a targeted Windows
+        # command, but artifact-generation tools cannot satisfy the request.
+        allowed &= {
+            "desktop_windows", "desktop_activate_window", "desktop_screenshot",
+            "desktop_click", "desktop_key", "desktop_type", "run_powershell",
+            "launch_fortnite", "system_status",
+        }
     retries = max(2, min(int(cfg.get("planner_retry_count", 3)), 6))
     last_error = ""
 
@@ -614,6 +630,29 @@ def _looks_truncated(text: str) -> bool:
     return any(t.endswith(x) for x in tails)
 
 
+def _prompt_requires_desktop_action(prompt: str) -> bool:
+    t = str(prompt or "").lower()
+    return any(marker in t for marker in (
+        "desktop_windows", "desktop_screenshot", "desktop_activate_window",
+        "observe-act-observe", "mouse control", "use the xbox app",
+        "xboxpcapp.exe", "real desktop", "visible window",
+    ))
+
+
+def _desktop_action_evidence(job_id: str) -> tuple[int, int]:
+    observations = 0
+    actions = 0
+    for row in traces_for_job(job_id, 240):
+        if str(row.get("event") or "") != "tool.result" or int(row.get("ok") or 0) != 1:
+            continue
+        tool = str(row.get("tool") or "")
+        if tool in {"desktop_windows", "desktop_screenshot"}:
+            observations += 1
+        if tool in {"desktop_activate_window", "desktop_click", "desktop_key", "desktop_type"}:
+            actions += 1
+    return observations, actions
+
+
 def completion_gaps(job_id: str, prompt: str, workspace: Path, final_text: str) -> list[str]:
     """Deterministic acceptance checks before a job may become COMPLETED.
 
@@ -630,6 +669,13 @@ def completion_gaps(job_id: str, prompt: str, workspace: Path, final_text: str) 
         gaps.append("final answer still describes future work instead of a completed result")
     if _looks_truncated(text):
         gaps.append("final answer appears truncated/incomplete")
+
+    if _prompt_requires_desktop_action(prompt):
+        observations, actions = _desktop_action_evidence(job_id)
+        if observations < 1:
+            gaps.append("desktop-control task has no successful window/screenshot observation")
+        if actions < 1:
+            gaps.append("desktop-control task has no successful focus/mouse/keyboard action")
 
     artifacts = _workspace_artifacts(workspace)
     if _prompt_requires_artifact(prompt) and not artifacts:

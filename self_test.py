@@ -15,7 +15,7 @@ def main():
     myles_common.init_db()
     cfg = myles_common.load_config()
     checks = {
-        "version": myles_common.APP_VERSION == "10.1.5",
+        "version": myles_common.APP_VERSION == "10.1.6",
         "config_loads": isinstance(cfg, dict),
         "telegram_setting_present": "telegram_enabled" in cfg,
         "root_exists": myles_common.ROOT.exists(),
@@ -544,6 +544,21 @@ def main():
     checks["fortnite_visual_fallback_is_xbox_and_verified"] = all(
         marker in fallback_task
         for marker in ("Xbox", "desktop_screenshot", "observe-act-observe", "Success requires")
+    )
+    checks["desktop_completion_requires_observe_and_act"] = (
+        job_worker._prompt_requires_desktop_action(fallback_task)
+        and "desktop-control task has no successful window/screenshot observation" in
+            job_worker.completion_gaps("SELFTEST_NO_DESKTOP", fallback_task, myles_common.WORKSPACES, "Fortnite is not running because Xbox did not open.")
+        and "desktop-control task has no successful focus/mouse/keyboard action" in
+            job_worker.completion_gaps("SELFTEST_NO_DESKTOP", fallback_task, myles_common.WORKSPACES, "Fortnite is not running because Xbox did not open.")
+    )
+    checks["desktop_bridge_blocks_artifact_drift"] = (
+        'if _prompt_requires_desktop_action(job_prompt):' in worker_source
+        and '"write_generated_file"' not in worker_source.split('if _prompt_requires_desktop_action(job_prompt):', 1)[1].split('retries =', 1)[0]
+    )
+    checks["owner_summary_rejects_future_promises"] = (
+        "owner.summary_rejected" in worker_source
+        and "summary and not _looks_like_unfinished_promise(summary)" in worker_source
     )
     urls = job_worker._extract_http_urls(
         "Live: **https://joshuaduskin.github.io/progress-dashboard/** and "
