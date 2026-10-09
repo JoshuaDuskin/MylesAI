@@ -1201,6 +1201,82 @@ def desktop_windows(job_id: str) -> str:
     return out
 
 
+def desktop_close_app(job_id: str, title_contains: str, force: bool = True) -> str:
+    """Close matching visible windows without spawning a console, then verify."""
+    if os.name != "nt":
+        return "TOOL_ERROR: desktop control is only available on the Windows tower."
+    _enable_windows_dpi_awareness()
+    needle = str(title_contains or "").strip().lower()
+    if len(needle) < 2:
+        return "TOOL_ERROR: title_contains must contain at least two characters."
+
+    user32 = ctypes.windll.user32
+    enum_type = ctypes.WINFUNCTYPE(ctypes.c_bool, ctypes.c_void_p, ctypes.c_void_p)
+
+    def matching_windows() -> list[dict[str, Any]]:
+        rows: list[dict[str, Any]] = []
+
+        @enum_type
+        def collect(hwnd, _lparam):
+            try:
+                if not user32.IsWindowVisible(hwnd):
+                    return True
+                length = int(user32.GetWindowTextLengthW(hwnd))
+                if length <= 0:
+                    return True
+                title = ctypes.create_unicode_buffer(length + 1)
+                user32.GetWindowTextW(hwnd, title, length + 1)
+                if needle not in title.value.lower():
+                    return True
+                pid = ctypes.c_ulong()
+                user32.GetWindowThreadProcessId(hwnd, ctypes.byref(pid))
+                rows.append({"handle": int(hwnd), "pid": int(pid.value), "title": title.value})
+            except Exception:
+                pass
+            return True
+
+        user32.EnumWindows(collect, 0)
+        return rows
+
+    before = matching_windows()
+    for row in before:
+        try:
+            user32.PostMessageW(int(row["handle"]), 0x0010, 0, 0)
+        except Exception:
+            pass
+    if before:
+        time.sleep(2)
+
+    remaining = matching_windows()
+    if remaining and bool(force):
+        creation_flags = int(getattr(subprocess, "CREATE_NO_WINDOW", 0))
+        for pid in sorted({int(row["pid"]) for row in remaining if int(row.get("pid") or 0) > 0}):
+            subprocess.run(
+                ["taskkill.exe", "/PID", str(pid), "/T", "/F"],
+                capture_output=True,
+                text=True,
+                errors="replace",
+                timeout=20,
+                creationflags=creation_flags,
+            )
+        time.sleep(2)
+        remaining = matching_windows()
+
+    payload = {
+        "marker": "DESKTOP_APP_CLOSE_VERIFIED" if not remaining else "DESKTOP_APP_CLOSE_FAILED",
+        "target": str(title_contains).strip(),
+        "state": "already_closed" if not before else ("closed" if not remaining else "still_open"),
+        "matched_before": before,
+        "matched_after": remaining,
+    }
+    out = json.dumps(payload, ensure_ascii=False, indent=2)
+    ok = not remaining
+    trace(job_id, "tool.result", out[:12000], tool="desktop_close_app", ok=ok)
+    if ok:
+        set_job(job_id, material_progress_at=now_iso())
+    return out
+
+
 def desktop_activate_window(job_id: str, title_contains: str) -> str:
     """Restore and focus the first visible window whose title contains text."""
     if os.name != "nt":
