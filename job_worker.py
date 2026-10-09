@@ -651,7 +651,10 @@ def _desktop_action_evidence(job_id: str) -> tuple[int, int]:
         tool = str(row.get("tool") or "")
         if tool in {"desktop_windows", "desktop_screenshot"}:
             observations += 1
-        if tool in {"desktop_activate_window", "desktop_click", "desktop_key", "desktop_type"}:
+        if tool in {
+            "desktop_activate_window", "desktop_click", "desktop_key", "desktop_type",
+            "run_powershell", "launch_fortnite",
+        }:
             actions += 1
     return observations, actions
 
@@ -678,7 +681,7 @@ def completion_gaps(job_id: str, prompt: str, workspace: Path, final_text: str) 
         if observations < 1:
             gaps.append("desktop-control task has no successful window/screenshot observation")
         if actions < 1:
-            gaps.append("desktop-control task has no successful focus/mouse/keyboard action")
+            gaps.append("desktop-control task has no successful UI or targeted Windows action")
 
     artifacts = _workspace_artifacts(workspace)
     if _prompt_requires_artifact(prompt) and not artifacts:

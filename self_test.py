@@ -15,7 +15,7 @@ def main():
     myles_common.init_db()
     cfg = myles_common.load_config()
     checks = {
-        "version": myles_common.APP_VERSION == "10.1.8",
+        "version": myles_common.APP_VERSION == "10.1.9",
         "config_loads": isinstance(cfg, dict),
         "telegram_setting_present": "telegram_enabled" in cfg,
         "root_exists": myles_common.ROOT.exists(),
@@ -582,8 +582,12 @@ def main():
         and job_worker._prompt_requires_desktop_action("Close the Xbox app")
         and "desktop-control task has no successful window/screenshot observation" in
             job_worker.completion_gaps("SELFTEST_NO_DESKTOP", fallback_task, myles_common.WORKSPACES, "Fortnite is not running because Xbox did not open.")
-        and "desktop-control task has no successful focus/mouse/keyboard action" in
+        and "desktop-control task has no successful UI or targeted Windows action" in
             job_worker.completion_gaps("SELFTEST_NO_DESKTOP", fallback_task, myles_common.WORKSPACES, "Fortnite is not running because Xbox did not open.")
+    )
+    checks["desktop_targeted_command_counts_as_action"] = (
+        '"run_powershell", "launch_fortnite"' in worker_source
+        and "desktop-control task has no successful UI or targeted Windows action" in worker_source
     )
     checks["desktop_bridge_blocks_artifact_drift"] = (
         'if _prompt_requires_desktop_action(job_prompt):' in worker_source
