@@ -90,6 +90,7 @@ IMPORTANT BEHAVIOR:
 - A question is not an instruction. "What are you doing?", "Why did that happen?", "Is there anything you need?", and "Can you explain that?" stay conversational unless the owner explicitly asks you to perform an action.
 - Never use a word like "fix", "check", "look", or "report" in a quoted question or complaint as proof that the owner requested work.
 - If the owner asks you to actually do something on the tower or in a project, call start_background_job.
+- Desktop control is available through start_background_job, whose worker has real window listing, screenshots, focus, mouse, keyboard, and PowerShell tools. Never tell the owner those capabilities are unavailable.
 - If the owner asks you to add/install/improve Myles's own tools or capabilities, that is a Myles self-capability task. It must use a fresh task/workspace, never the previous project's workspace. After the tool returns, acknowledge naturally. If the tool says RUNNING, you may say the work has started. If it says QUEUED, say it is queued, not running. Do not dump internal tracking IDs unless they are useful or he asks.
 - If he asks what you are doing or whether something is finished, call get_current_work instead of guessing from memory.
 - If he asks you to stop the current work, call stop_current_work. If he says to stop one thing and do another, you may call stop_current_work and then start_background_job in the same turn.
@@ -1190,6 +1191,42 @@ def _fortnite_launch_followup(raw: str) -> bool:
     return "fortnite" in context
 
 
+def _failed_action_followup_task(raw: str) -> str | None:
+    """Turn a natural failure report into a verified retry of the prior action."""
+    low = re.sub(r"\s+", " ", str(raw or "").strip().lower())
+    failure_phrases = (
+        "still open", "still opened", "still running", "still there",
+        "didn't close", "did not close", "didn't open", "did not open",
+        "didn't work", "did not work", "nothing happened", "i still see it",
+        "it's still open", "it is still open",
+    )
+    if not any(phrase in low for phrase in failure_phrases):
+        return None
+    prior = ""
+    skipped_latest = False
+    for row in reversed(recent_messages(10)):
+        if str(row.get("role") or "") not in {"user", "owner"}:
+            continue
+        content = str(row.get("content") or "").strip()
+        if not skipped_latest and content == str(raw or "").strip():
+            skipped_latest = True
+            continue
+        if strong_action_request(content) or likely_action_request(content):
+            prior = content
+            break
+    if not prior:
+        return None
+    return (
+        "The owner's previous requested computer action did not visibly take effect. "
+        f"Previous request: {prior}\nOwner's failure report: {str(raw or '').strip()}\n"
+        "Retry the same action now with real tools. For a desktop application, use "
+        "desktop_windows and desktop_screenshot to observe it, then focus/mouse/keyboard "
+        "or a targeted Windows command as appropriate, and observe again. Do not merely "
+        "describe manual steps or claim the capability is unavailable. Report success only "
+        "when the requested state is visibly/process verified. PineTree is off-limits."
+    )
+
+
 def _direct_fortnite_request(raw: str) -> bool:
     """Recognize a short owner launch command, not a diagnostic paragraph."""
     text = re.sub(r"\s+", " ", str(raw or "").strip().lower())
@@ -1315,6 +1352,8 @@ def handle_owner_message(text: str, source: str) -> dict[str, Any]:
                 # A request to improve Myles itself is real work, but it is NEVER a
                 # modification of the last dashboard/project workspace.
                 route = {"intent": "start", "task": _self_capability_task(raw)}
+            elif (failed_followup := _failed_action_followup_task(raw)):
+                route = {"intent": "start", "task": failed_followup}
             elif strong_action_request(raw) and not natural_question(raw):
                 parent = _followup_parent(raw)
                 route = {
