@@ -127,6 +127,7 @@ def behavior_feedback_request(text: str) -> bool:
 
 STRONG_ACTION_VERBS = (
     "build", "create", "make", "write", "edit", "modify", "change", "fix",
+    "open", "launch", "start", "run", "use", "press", "click",
     "repair", "install", "download", "set up", "setup", "deploy", "host",
     "publish", "delete", "remove", "move", "rename", "update", "upgrade",
     "configure", "implement", "automate", "send", "grab", "snapshot",
