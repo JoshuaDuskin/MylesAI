@@ -491,10 +491,23 @@ if ($PairCode -match "^[A-Z0-9]{8}$") {
     Log "WARNING: no valid pinned 8-character pairing code was found; existing pairing file was left unchanged"
 }
 
-Set-Content (Join-Path $Data "dashboard_bridge_token.txt") -Value (New-RandomToken) -Encoding ASCII -NoNewline
-Set-Content (Join-Path $Data "dashboard_public_read_token.txt") -Value (New-RandomToken) -Encoding ASCII -NoNewline
+function Preserve-Or-CreateDashboardToken([string]$Path, [string]$Label) {
+    $existing = ""
+    if (Test-Path $Path) {
+        try { $existing = (Get-Content $Path -Raw -ErrorAction Stop).Trim() } catch {}
+    }
+    if ($existing -match "^[A-Za-z0-9_-]{32,128}$") {
+        Log ("PASS: preserved existing " + $Label + " so trusted phones stay paired")
+        return
+    }
+    Set-Content $Path -Value (New-RandomToken) -Encoding ASCII -NoNewline
+    Log ("PASS: created missing/invalid " + $Label)
+}
+
+Preserve-Or-CreateDashboardToken (Join-Path $Data "dashboard_bridge_token.txt") "private dashboard credential"
+Preserve-Or-CreateDashboardToken (Join-Path $Data "dashboard_public_read_token.txt") "public read credential"
 Remove-Item (Join-Path $Data "tunnel_state.json") -Force -ErrorAction SilentlyContinue
-Log "PASS: dashboard bridge credentials rotated locally; pairing code itself was not changed"
+Log "PASS: dashboard trust and pinned pairing code preserved across the update"
 
 $Python = Join-Path $Root ".venv\Scripts\python.exe"
 $PythonW = Join-Path $Root ".venv\Scripts\pythonw.exe"
