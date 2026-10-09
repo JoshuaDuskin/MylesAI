@@ -45,6 +45,7 @@ TOOL_DEFS = [
     {"type":"function","function":{"name":"system_status","description":"Read live tower time, machine, CPU, memory, disk and Ollama status.","parameters":{"type":"object","properties":{}}}},
     {"type":"function","function":{"name":"launch_fortnite","description":"Launch Fortnite through the installed Epic Games Launcher and return success only after a Fortnite process is verified.","parameters":{"type":"object","properties":{},"additionalProperties":False}}},
     {"type":"function","function":{"name":"desktop_windows","description":"List the real visible top-level Windows desktop windows with titles, handles, process IDs, and bounds. Use before targeting an existing app.","parameters":{"type":"object","properties":{}}}},
+    {"type":"function","function":{"name":"desktop_close_app","description":"Close a visible Windows application by window-title text without opening a console, then verify that matching windows are gone. Use for requests such as close Xbox, quit Notepad, or close an app.","parameters":{"type":"object","properties":{"title_contains":{"type":"string","description":"Distinctive text from the application window title, such as Xbox or Notepad."},"force":{"type":"boolean","description":"After a normal close request, terminate only the matched window processes if they remain. Defaults to true."}},"required":["title_contains"]}}},
     {"type":"function","function":{"name":"desktop_activate_window","description":"Restore and focus a visible Windows application by a unique substring of its title.","parameters":{"type":"object","properties":{"title_contains":{"type":"string"}},"required":["title_contains"]}}},
     {"type":"function","function":{"name":"desktop_screenshot","description":"Capture the real interactive Windows desktop. The PNG is attached to the next local model turn for visual reasoning. Observe before coordinate actions and again afterward to verify the result.","parameters":{"type":"object","properties":{"path":{"type":"string"}}}}},
     {"type":"function","function":{"name":"desktop_click","description":"Move the real Windows pointer and click an observed screen coordinate. Never guess coordinates; use desktop_screenshot first and verify afterward.","parameters":{"type":"object","properties":{"x":{"type":"integer"},"y":{"type":"integer"},"button":{"type":"string","enum":["left","right","middle"]},"clicks":{"type":"integer","minimum":1,"maximum":3}},"required":["x","y"]}}},
@@ -646,14 +647,15 @@ def _desktop_action_evidence(job_id: str) -> tuple[int, int]:
     observations = 0
     actions = 0
     for row in traces_for_job(job_id, 240):
-        if str(row.get("event") or "") != "tool.result" or int(row.get("ok") or 0) != 1:
+        event = str(row.get("event") or row.get("kind") or "")
+        if event != "tool.result" or int(row.get("ok") or 0) != 1:
             continue
         tool = str(row.get("tool") or "")
-        if tool in {"desktop_windows", "desktop_screenshot"}:
+        if tool in {"desktop_windows", "desktop_screenshot", "desktop_close_app"}:
             observations += 1
         if tool in {
             "desktop_activate_window", "desktop_click", "desktop_key", "desktop_type",
-            "run_powershell", "launch_fortnite",
+            "desktop_close_app", "run_powershell", "launch_fortnite",
         }:
             actions += 1
     return observations, actions
@@ -905,7 +907,7 @@ MUTATING_TOOLS = {
     "run_powershell", "write_text_file", "write_generated_file", "apply_text_patch",
     "download_file", "git_command", "github_pages_publish",
     "configure_runtime_status_feed", "install_python_packages", "browser_automation",
-    "self_clone_candidate", "self_promote_candidate", "desktop_activate_window",
+    "self_clone_candidate", "self_promote_candidate", "desktop_activate_window", "desktop_close_app",
     "desktop_click", "desktop_key", "desktop_type", "launch_fortnite",
 }
 
@@ -1096,6 +1098,15 @@ def main() -> int:
                     image_message = _desktop_image_message(name, result)
                     if image_message:
                         messages.append(image_message)
+                    if name == "desktop_close_app" and ok and "DESKTOP_APP_CLOSE_VERIFIED" in result:
+                        candidate = _augment_final_with_verified_evidence(job_id, job["prompt"], result)
+                        gaps = completion_gaps(job_id, job["prompt"], workspace, candidate)
+                        if not gaps:
+                            final = candidate
+                            trace(job_id, "completion.accepted", "desktop_close_app returned verified terminal state", ok=True)
+                            break
+                if final:
+                    break
                 continue
 
             if content:
