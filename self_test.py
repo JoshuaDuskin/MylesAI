@@ -15,7 +15,7 @@ def main():
     myles_common.init_db()
     cfg = myles_common.load_config()
     checks = {
-        "version": myles_common.APP_VERSION == "10.2.0",
+        "version": myles_common.APP_VERSION == "10.2.1",
         "config_loads": isinstance(cfg, dict),
         "telegram_setting_present": "telegram_enabled" in cfg,
         "root_exists": myles_common.ROOT.exists(),
@@ -150,6 +150,12 @@ def main():
         )
     finally:
         job_worker.traces_for_job = original_trace_reader
+    checks["plain_app_close_bypasses_model_planner"] = (
+        job_worker._direct_app_close_target("Close the Xbox app.") == "Xbox"
+        and job_worker._direct_app_close_target("please quit Notepad window") == "Notepad"
+        and job_worker._direct_app_close_target("Close it") == ""
+        and "direct verified app-close path completed" in worker_source
+    )
 
     # --- Conversation/control routing ---
     checks["semantic_natural_language_router"] = (
