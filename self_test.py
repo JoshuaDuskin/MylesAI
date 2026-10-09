@@ -15,7 +15,7 @@ def main():
     myles_common.init_db()
     cfg = myles_common.load_config()
     checks = {
-        "version": myles_common.APP_VERSION == "10.1.7",
+        "version": myles_common.APP_VERSION == "10.1.8",
         "config_loads": isinstance(cfg, dict),
         "telegram_setting_present": "telegram_enabled" in cfg,
         "root_exists": myles_common.ROOT.exists(),
@@ -547,7 +547,28 @@ def main():
             "Use the Xbox app to start Fortnite",
             "Open the Xbox app",
             "Click Play and verify the window",
+            "Close the Xbox app",
         )
+    )
+    checks["present_tense_execution_promises_are_blocked"] = (
+        rt.execution_promise_text("I'm closing the Xbox app for you now.")
+        and rt.execution_promise_text("I am opening the desktop app now.")
+    )
+    original_recent_messages = myles_core.recent_messages
+    try:
+        myles_core.recent_messages = lambda _limit: [
+            {"role": "user", "content": "Close the Xbox app"},
+            {"role": "assistant", "content": "I'm closing the Xbox app for you now."},
+            {"role": "user", "content": "I see it's still opened"},
+        ]
+        failed_followup_task = myles_core._failed_action_followup_task("I see it's still opened")
+    finally:
+        myles_core.recent_messages = original_recent_messages
+    checks["failed_desktop_action_followup_retries_real_work"] = (
+        isinstance(failed_followup_task, str)
+        and "Previous request: Close the Xbox app" in failed_followup_task
+        and "desktop_screenshot" in failed_followup_task
+        and "process verified" in failed_followup_task
     )
     fallback_task = myles_core._fortnite_visual_fallback_task(
         "FORTNITE_NOT_VERIFIED: no process appeared"
@@ -558,6 +579,7 @@ def main():
     )
     checks["desktop_completion_requires_observe_and_act"] = (
         job_worker._prompt_requires_desktop_action(fallback_task)
+        and job_worker._prompt_requires_desktop_action("Close the Xbox app")
         and "desktop-control task has no successful window/screenshot observation" in
             job_worker.completion_gaps("SELFTEST_NO_DESKTOP", fallback_task, myles_common.WORKSPACES, "Fortnite is not running because Xbox did not open.")
         and "desktop-control task has no successful focus/mouse/keyboard action" in

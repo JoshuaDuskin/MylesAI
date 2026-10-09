@@ -636,6 +636,9 @@ def _prompt_requires_desktop_action(prompt: str) -> bool:
         "desktop_windows", "desktop_screenshot", "desktop_activate_window",
         "observe-act-observe", "mouse control", "use the xbox app",
         "xboxpcapp.exe", "real desktop", "visible window",
+    )) or bool(re.search(
+        r"\b(?:open|close|launch|start|click|press|type|focus|quit|terminate)\b.{0,80}\b(?:app|application|window|desktop|screen)\b",
+        t,
     ))
 
 

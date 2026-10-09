@@ -37,6 +37,8 @@ STATUS_MARKERS = (
 )
 ACTION_HINTS = (
     "build", "create", "make", "write", "edit", "modify", "change", "fix",
+    "open", "close", "launch", "start", "run", "use", "press", "click",
+    "quit", "terminate", "end", "shut down",
     "repair", "install", "download", "set up", "setup", "deploy", "host",
     "publish", "delete", "remove", "move", "rename", "update", "upgrade",
     "configure", "implement", "test", "inspect", "investigate", "automate",
@@ -127,7 +129,8 @@ def behavior_feedback_request(text: str) -> bool:
 
 STRONG_ACTION_VERBS = (
     "build", "create", "make", "write", "edit", "modify", "change", "fix",
-    "open", "launch", "start", "run", "use", "press", "click",
+    "open", "close", "launch", "start", "run", "use", "press", "click",
+    "quit", "terminate", "end", "shut down",
     "repair", "install", "download", "set up", "setup", "deploy", "host",
     "publish", "delete", "remove", "move", "rename", "update", "upgrade",
     "configure", "implement", "automate", "send", "grab", "snapshot",
@@ -278,6 +281,7 @@ def execution_promise_text(text: str) -> bool:
         r"\bi(?:'ll| will)\s+(?:start|build|fix|change|update|redesign|refresh|work|do|make|edit|modify|handle)\b",
         r"\blet me\s+(?:start|get started|work on|build|fix|change|update|redesign|refresh)\b",
         r"\bi(?:'m| am)\s+going to\s+(?:start|build|fix|change|update|redesign|refresh|work|do|make)\b",
+        r"\bi(?:'m| am)\s+(?:closing|opening|launching|starting|running|clicking|pressing|terminating|ending|shutting down|fixing|changing|updating)\b",
         r"\bget started on that\b",
         r"\bstart that now\b",
         r"\bget to work on\b",
