@@ -10,7 +10,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-APP_VERSION = "10.1.8"
+APP_VERSION = "10.1.9"
 ROOT = Path(__file__).resolve().parent
 DATA = ROOT / "data"
 WORKSPACES = ROOT / "workspaces"
