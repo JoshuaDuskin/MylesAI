@@ -6,8 +6,8 @@ from dataclasses import dataclass
 from typing import Any
 
 STOP_PATTERNS = (
-    r"^\s*(stop|cancel|abort|quit|drop it|stop that|cancel that|stop the task|cancel the task)\s*[.!]?\s*$",
-    r"^\s*(please\s+)?(stop|cancel|abort)\s+(what you(?:'re| are) doing|the current task|this task|that task|it)\s*[.!]?\s*$",
+    r"^\s*(stop|cancel|abort|quit|drop it|stop that|cancel that|stop the task|cancel the task|stop current work|cancel current work)\s*[.!]?\s*$",
+    r"^\s*(please\s+)?(stop|cancel|abort)\s+(what you(?:'re| are) doing|the current task|current work|the current work|this task|that task|it)\s*[.!]?\s*$",
 )
 RESUME_PATTERNS = (
     r"\b(?:don'?t|do not)\s+stop\b",

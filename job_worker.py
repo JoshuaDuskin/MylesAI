@@ -331,6 +331,9 @@ def _looks_like_unfinished_promise(text: str) -> bool:
         "now i need to", "next i need to", "next, i", "i need to create",
         "i need to write", "i need to set up", "i need to setup", "start by ",
         "then i'll ", "then i will ", "working on it", "i'm working on",
+        "please confirm if you would like me to proceed", "please confirm whether you want me to proceed",
+        "would you like me to proceed", "would you like me to continue", "shall i proceed",
+        "let me know if you want me to proceed", "let me know if you'd like me to proceed",
     )
     return any(m in t for m in markers)
 

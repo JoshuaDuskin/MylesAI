@@ -15,7 +15,7 @@ def main():
     myles_common.init_db()
     cfg = myles_common.load_config()
     checks = {
-        "version": myles_common.APP_VERSION == "10.1.3",
+        "version": myles_common.APP_VERSION == "10.1.4",
         "config_loads": isinstance(cfg, dict),
         "telegram_setting_present": "telegram_enabled" in cfg,
         "root_exists": myles_common.ROOT.exists(),
@@ -150,6 +150,8 @@ def main():
     )
     checks["explicit_stop_still_stops"] = (
         rt.deterministic_control("Stop", has_active=True, has_recent_cancelled=False) == "stop"
+        and rt.deterministic_control("Stop current work.", has_active=True, has_recent_cancelled=False) == "stop"
+        and rt.deterministic_control("Stop the current work.", has_active=True, has_recent_cancelled=False) == "stop"
     )
     checks["casual_stop_word_not_destructive"] = (
         rt.explicit_stop_requested("I don't want you to stop working") is False
@@ -515,6 +517,12 @@ def main():
         "def completion_gaps" in worker_source
         and "completion.rejected" in worker_source
         and "completion.accepted" in worker_source
+    )
+    checks["completion_rejects_permission_deferral"] = (
+        job_worker._looks_like_unfinished_promise(
+            "Please confirm if you would like me to proceed with the requested inspection."
+        )
+        and job_worker._looks_like_unfinished_promise("Would you like me to continue?")
     )
     urls = job_worker._extract_http_urls(
         "Live: **https://joshuaduskin.github.io/progress-dashboard/** and "
