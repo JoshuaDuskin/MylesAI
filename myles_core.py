@@ -1214,6 +1214,23 @@ def _direct_fortnite_launch() -> str:
     return result
 
 
+def _fortnite_visual_fallback_task(direct_result: str) -> str:
+    """Create the bounded visual fallback used when the fast Epic URI is insufficient."""
+    return (
+        "Start Fortnite now and verify it truthfully. The direct Epic URI attempt did not produce "
+        f"a verified game process: {direct_result} "
+        "The owner's established setup uses the Xbox app, so prioritize XboxPcApp.exe/the Xbox "
+        "Start-menu app and do not ask which launcher to use. Use desktop_windows and "
+        "desktop_screenshot first, then desktop_activate_window, desktop_click, desktop_key, or "
+        "desktop_type as visible evidence requires. Use an observe-act-observe loop and targeted "
+        "Get-StartApps/Appx checks only; never recursively search drives. Do not merely create a "
+        "report or tell the owner to do it manually. Success requires an unmistakable Fortnite "
+        "game/cloud-play window or verified Fortnite process after the action. Otherwise report "
+        "the exact visible sign-in, update, install, or UI blocker. Do not touch PineTree, wallets, "
+        "or live trading."
+    )
+
+
 def handle_owner_message(text: str, source: str) -> dict[str, Any]:
     raw = str(text or "").strip()
     if not raw:
@@ -1221,9 +1238,27 @@ def handle_owner_message(text: str, source: str) -> dict[str, Any]:
 
     if _direct_fortnite_request(raw) or _fortnite_launch_followup(raw):
         add_message(source, "user", raw, None)
-        final = _direct_fortnite_launch()
-        message_id = add_message(source, "assistant", final, None)
-        return {"kind": "conversation", "reply": final, "message_id": message_id}
+        direct_result = launch_fortnite_verified(timeout_seconds=40)
+        if direct_result.startswith("FORTNITE_RUNNING:"):
+            final = direct_result.split(":", 1)[1].strip()
+            message_id = add_message(source, "assistant", final, None)
+            return {"kind": "conversation", "reply": final, "message_id": message_id}
+
+        task_result = _start_task(_fortnite_visual_fallback_task(direct_result), source)
+        job_id = None
+        if task_result.startswith("task_id="):
+            job_id = task_result.split("task_id=", 1)[1].split(" ", 1)[0]
+        if "state=RUNNING" in task_result:
+            final = "Fortnite was not verified through the direct launcher, so I started the visual Xbox-app fallback and will verify the actual game window."
+        elif "state=QUEUED" in task_result:
+            final = "Fortnite was not verified through the direct launcher. The visual Xbox-app fallback is queued behind the current task."
+        else:
+            final = _direct_fortnite_launch()
+        message_id = add_message(source, "assistant", final, job_id)
+        response = {"kind": "conversation", "reply": final, "message_id": message_id}
+        if job_id:
+            response["job_id"] = job_id
+        return response
 
     # Authentication is the one normal owner gate. When the owner confirms it is done,
     # resume the same blocked job/workspace instead of creating a duplicate task.

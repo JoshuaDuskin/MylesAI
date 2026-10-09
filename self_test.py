@@ -15,7 +15,7 @@ def main():
     myles_common.init_db()
     cfg = myles_common.load_config()
     checks = {
-        "version": myles_common.APP_VERSION == "10.1.4",
+        "version": myles_common.APP_VERSION == "10.1.5",
         "config_loads": isinstance(cfg, dict),
         "telegram_setting_present": "telegram_enabled" in cfg,
         "root_exists": myles_common.ROOT.exists(),
@@ -523,6 +523,27 @@ def main():
             "Please confirm if you would like me to proceed with the requested inspection."
         )
         and job_worker._looks_like_unfinished_promise("Would you like me to continue?")
+        and job_worker._looks_like_unfinished_promise(
+            "I am ready to attempt launch once you confirm which launcher to prioritize."
+        )
+        and job_worker._looks_like_unfinished_promise(
+            "Could you please manually open the Xbox app?"
+        )
+    )
+    checks["desktop_imperatives_are_strong_actions"] = all(
+        rt.strong_action_request(text)
+        for text in (
+            "Use the Xbox app to start Fortnite",
+            "Open the Xbox app",
+            "Click Play and verify the window",
+        )
+    )
+    fallback_task = myles_core._fortnite_visual_fallback_task(
+        "FORTNITE_NOT_VERIFIED: no process appeared"
+    )
+    checks["fortnite_visual_fallback_is_xbox_and_verified"] = all(
+        marker in fallback_task
+        for marker in ("Xbox", "desktop_screenshot", "observe-act-observe", "Success requires")
     )
     urls = job_worker._extract_http_urls(
         "Live: **https://joshuaduskin.github.io/progress-dashboard/** and "
