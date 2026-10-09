@@ -15,7 +15,7 @@ def main():
     myles_common.init_db()
     cfg = myles_common.load_config()
     checks = {
-        "version": myles_common.APP_VERSION == "10.1.6",
+        "version": myles_common.APP_VERSION == "10.1.7",
         "config_loads": isinstance(cfg, dict),
         "telegram_setting_present": "telegram_enabled" in cfg,
         "root_exists": myles_common.ROOT.exists(),
@@ -132,6 +132,8 @@ def main():
     console_source = console_path.read_text(encoding="utf-8") if console_path.exists() else ""
     guardian_path = myles_common.ROOT / "bin" / "ensure_myles_runtime.py"
     guardian_source = guardian_path.read_text(encoding="utf-8") if guardian_path.exists() else ""
+    dashboard_source = (myles_common.ROOT / "index.html").read_text(encoding="utf-8")
+    updater_source = (myles_common.ROOT / "UPDATE_TOWER.ps1").read_text(encoding="utf-8")
 
     # --- Conversation/control routing ---
     checks["semantic_natural_language_router"] = (
@@ -442,6 +444,15 @@ def main():
         and "DETACHED_PROCESS" in guardian_source
         and "powershell.exe" not in guardian_source.lower()
     )
+    checks["dashboard_credentials_survive_updates"] = (
+        "Preserve-Or-CreateDashboardToken" in updater_source
+        and "trusted phones stay paired" in updater_source
+        and "dashboard bridge credentials rotated locally" not in updater_source
+    )
+    checks["phone_saves_and_reuses_pair_code"] = all(marker in dashboard_source for marker in (
+        "myles_bridge_pair_code", "recoveryCode", "Paired permanently on this phone",
+        "const repaired=state.bridge.recoveryCode?await exchangePair(false):false",
+    ))
     checks["canonical_stop_path_is_scoped"] = (
         stop_path.exists()
         and "runtime_supervisor.py" in stop_source
