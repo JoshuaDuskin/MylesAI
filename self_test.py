@@ -15,7 +15,7 @@ def main():
     myles_common.init_db()
     cfg = myles_common.load_config()
     checks = {
-        "version": myles_common.APP_VERSION == "10.1.9",
+        "version": myles_common.APP_VERSION == "10.2.0",
         "config_loads": isinstance(cfg, dict),
         "telegram_setting_present": "telegram_enabled" in cfg,
         "root_exists": myles_common.ROOT.exists(),
@@ -134,6 +134,22 @@ def main():
     guardian_source = guardian_path.read_text(encoding="utf-8") if guardian_path.exists() else ""
     dashboard_source = (myles_common.ROOT / "index.html").read_text(encoding="utf-8")
     updater_source = (myles_common.ROOT / "UPDATE_TOWER.ps1").read_text(encoding="utf-8")
+    checks["verified_app_close_tool"] = (
+        hasattr(myles_tools, "desktop_close_app")
+        and "DESKTOP_APP_CLOSE_VERIFIED" in tools_source
+        and 'name == "desktop_close_app"' in worker_source
+    )
+    original_trace_reader = job_worker.traces_for_job
+    try:
+        job_worker.traces_for_job = lambda _job_id, _limit=240: [
+            {"kind": "tool.result", "tool": "desktop_windows", "ok": 1},
+            {"kind": "tool.result", "tool": "desktop_close_app", "ok": 1},
+        ]
+        checks["desktop_evidence_reads_real_trace_schema"] = (
+            job_worker._desktop_action_evidence("test-job") == (2, 1)
+        )
+    finally:
+        job_worker.traces_for_job = original_trace_reader
 
     # --- Conversation/control routing ---
     checks["semantic_natural_language_router"] = (
