@@ -15,7 +15,7 @@ def main():
     myles_common.init_db()
     cfg = myles_common.load_config()
     checks = {
-        "version": myles_common.APP_VERSION == "10.2.1",
+        "version": myles_common.APP_VERSION == "10.3.0",
         "config_loads": isinstance(cfg, dict),
         "telegram_setting_present": "telegram_enabled" in cfg,
         "root_exists": myles_common.ROOT.exists(),
@@ -155,6 +155,39 @@ def main():
         and job_worker._direct_app_close_target("please quit Notepad window") == "Notepad"
         and job_worker._direct_app_close_target("Close it") == ""
         and "direct verified app-close path completed" in worker_source
+    )
+    original_core_list_jobs = myles_core.list_jobs
+    try:
+        myles_core.list_jobs = lambda _limit=100: [
+            {"id": "continuous", "state": "pending", "source": "continuous", "created_at": "2026-01-01"},
+            {"id": "owner-new", "state": "pending", "source": "owner", "created_at": "2026-01-03"},
+            {"id": "owner-old", "state": "pending", "source": "owner", "created_at": "2026-01-02"},
+        ]
+        checks["game_mode_selects_oldest_owner_job"] = (
+            (myles_core._next_pending_owner_job() or {}).get("id") == "owner-old"
+        )
+    finally:
+        myles_core.list_jobs = original_core_list_jobs
+    checks["owner_commands_run_during_game_mode"] = (
+        "Direct owner commands remain allowed during Game Mode" in core_source
+        and "BELOW_NORMAL_PRIORITY_CLASS" in core_source
+        and 'str(active.get("source") or "") == "continuous"' in core_source
+        and "pending_owner = _next_pending_owner_job()" in core_source
+    )
+    game_watcher_source = (myles_common.ROOT / "bin" / "game_mode_watch.py").read_text(encoding="utf-8")
+    game_watcher_main = game_watcher_source.split("def main() -> int:", 1)[-1]
+    heavy_pattern_block = game_watcher_source.split("HEAVY_MYLES_PATTERNS = (", 1)[-1].split(")", 1)[0]
+    checks["game_mode_preserves_owner_agent_lane"] = (
+        "job_worker" not in heavy_pattern_block
+        and "ollama_llama_server" not in heavy_pattern_block
+        and "unload_ollama_models()" not in game_watcher_main
+        and "owner chat/model/tool lane preserved" in game_watcher_source
+    )
+    checks["conversation_has_live_situational_context"] = (
+        "def _conversation_runtime_context" in core_source
+        and '"content": _conversation_runtime_context()' in core_source
+        and "screenshots/vision" in core_source
+        and "mouse clicks" in core_source
     )
 
     # --- Conversation/control routing ---
