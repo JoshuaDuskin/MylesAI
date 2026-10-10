@@ -106,7 +106,7 @@ try {
 # supervisor. Previous builds used Run/RunOnce, Startup-folder files, and
 # Scheduled Tasks. Keep a recovery record before removing only entries that
 # explicitly point at this MYLES root and a retired launcher/supervisor.
-$AutoLaunchPattern = "(?i)(runtime_supervisor(?:_v074)?\.py|START_MYLESAI\.cmd|launch_myles\.py|myles_console(?:_v074)?\.py)"
+$AutoLaunchPattern = "(?i)(runtime_supervisor(?:_v074)?\.py|START_MYLESAI\.cmd|launch_myles\.py|myles_console(?:_v074)?\.py|cmd(?:\.exe)?|powershell(?:\.exe)?|pwsh(?:\.exe)?|\.(?:cmd|bat|ps1)\b)"
 $RunKeyCandidates = @(
     "HKCU:\Software\Microsoft\Windows\CurrentVersion\Run",
     "HKCU:\Software\Microsoft\Windows\CurrentVersion\RunOnce",
