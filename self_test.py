@@ -15,7 +15,7 @@ def main():
     myles_common.init_db()
     cfg = myles_common.load_config()
     checks = {
-        "version": myles_common.APP_VERSION == "10.3.0",
+        "version": myles_common.APP_VERSION == "10.3.1",
         "config_loads": isinstance(cfg, dict),
         "telegram_setting_present": "telegram_enabled" in cfg,
         "root_exists": myles_common.ROOT.exists(),
@@ -188,6 +188,15 @@ def main():
         and '"content": _conversation_runtime_context()' in core_source
         and "screenshots/vision" in core_source
         and "mouse clicks" in core_source
+    )
+    checks["console_popup_audit_and_suppression"] = (
+        "def console_spawn_monitor" in supervisor_source
+        and "console_spawn_audit.log" in supervisor_source
+        and "_hide_windows_for_pid" in supervisor_source
+        and "myles_owned" in supervisor_source
+        and "time.sleep(0.2)" in supervisor_source
+        and "powershell(?:\\.exe)?" in updater_source
+        and "pwsh(?:\\.exe)?" in updater_source
     )
 
     # --- Conversation/control routing ---

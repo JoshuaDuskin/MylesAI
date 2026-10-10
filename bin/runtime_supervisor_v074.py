@@ -9,6 +9,7 @@ import secrets
 import shutil
 import subprocess
 import sys
+import threading
 import time
 import traceback
 import urllib.request
@@ -30,6 +31,7 @@ PY = VENV / "python.exe"
 PYW = VENV / "pythonw.exe"
 DASHBOARD_REPO = "https://github.com/JoshuaDuskin/MylesAI.git"
 LOG = LOGS / "runtime_supervisor_v074.log"
+CONSOLE_SPAWN_LOG = LOGS / "console_spawn_audit.log"
 SUPERVISOR_PID_FILE = DATA / "runtime_supervisor_v074.pid"
 # A filesystem lock is shared by elevated and non-elevated sessions. The
 # Global/Local Windows mutex pair can split into two owners when the updater
@@ -153,6 +155,88 @@ def log_exception(context: str, exc: BaseException) -> None:
         log(traceback.format_exc().rstrip())
     except Exception:
         pass
+
+
+def _redact_console_command(value: str) -> str:
+    text = str(value or "")[:4000]
+    text = re.sub(
+        r"(?i)(authorization|token|api[_-]?key|secret|password)(\s*[:=]\s*|\s+)([^\s\"']+)",
+        r"\1\2[REDACTED]",
+        text,
+    )
+    return text
+
+
+def _hide_windows_for_pid(pid: int) -> int:
+    if os.name != "nt" or pid <= 0:
+        return 0
+    hidden = 0
+    user32 = ctypes.windll.user32
+    enum_type = ctypes.WINFUNCTYPE(ctypes.c_bool, ctypes.c_void_p, ctypes.c_void_p)
+
+    @enum_type
+    def visit(hwnd, _lparam):
+        nonlocal hidden
+        try:
+            owner_pid = ctypes.c_ulong()
+            user32.GetWindowThreadProcessId(hwnd, ctypes.byref(owner_pid))
+            if int(owner_pid.value) == int(pid) and user32.IsWindowVisible(hwnd):
+                user32.ShowWindow(hwnd, 0)
+                hidden += 1
+        except Exception:
+            pass
+        return True
+
+    user32.EnumWindows(visit, 0)
+    return hidden
+
+
+def console_spawn_monitor() -> None:
+    """Audit console-shell creation and suppress only MYLES-owned flashes."""
+    try:
+        import psutil
+    except Exception as exc:
+        log(f"console spawn monitor unavailable: {type(exc).__name__}: {exc}")
+        return
+    try:
+        seen = {int(process.pid) for process in psutil.process_iter(["pid"])}
+    except Exception:
+        seen = set()
+    shell_names = {"cmd.exe", "powershell.exe", "pwsh.exe", "windowsterminal.exe"}
+    root_text = str(ROOT).lower()
+    while True:
+        try:
+            current: set[int] = set()
+            for process in psutil.process_iter(["pid", "ppid", "name", "cmdline"]):
+                try:
+                    pid = int(process.info.get("pid") or 0)
+                    current.add(pid)
+                    if pid in seen or str(process.info.get("name") or "").lower() not in shell_names:
+                        continue
+                    command = " ".join(process.info.get("cmdline") or [])
+                    parent_name = ""
+                    parent_command = ""
+                    try:
+                        parent = psutil.Process(int(process.info.get("ppid") or 0))
+                        parent_name = parent.name()
+                        parent_command = " ".join(parent.cmdline())
+                    except Exception:
+                        pass
+                    myles_owned = root_text in command.lower() or root_text in parent_command.lower()
+                    hidden = _hide_windows_for_pid(pid) if myles_owned else 0
+                    with CONSOLE_SPAWN_LOG.open("a", encoding="utf-8", errors="replace") as handle:
+                        handle.write(
+                            f"[{dt.datetime.now().isoformat()}] pid={pid} ppid={process.info.get('ppid')} "
+                            f"name={process.info.get('name')} parent={parent_name} myles_owned={myles_owned} "
+                            f"hidden_windows={hidden} command={_redact_console_command(command)!r} "
+                            f"parent_command={_redact_console_command(parent_command)!r}\n"
+                        )
+                except Exception:
+                    continue
+            seen = current
+        except Exception as exc:
+            log(f"console spawn monitor cycle failed: {type(exc).__name__}: {exc}")
+        time.sleep(0.2)
 
 def run(args, cwd: Path | None = None, env: dict | None = None, timeout: int = 90):
     try:
@@ -810,6 +894,7 @@ def lock_repo() -> None:
 
 SUPERVISOR_PID_FILE.write_text(str(os.getpid()), encoding="utf-8")
 log(f"supervisor started pid={os.getpid()}")
+threading.Thread(target=console_spawn_monitor, name="myles-console-spawn-monitor", daemon=True).start()
 try:
     while True:
         if SUPERVISOR_STOP_FILE.exists():
