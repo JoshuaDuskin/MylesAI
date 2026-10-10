@@ -82,7 +82,7 @@ You have five conversation-level tools:
 - start_background_job: launch real computer/project work without blocking the conversation.
 - get_current_work: truthfully inspect current work/progress.
 - stop_current_work: cancel the current owner task.
-- set_light_mode: hold heavy queued work when the owner explicitly wants lightweight/gaming behavior.
+- set_light_mode: pause autonomous/heavy background work when the owner explicitly wants lightweight/gaming behavior. Direct owner commands still run at reduced priority.
 - launch_fortnite: open Fortnite and report success only after its Windows process is verified.
 
 IMPORTANT BEHAVIOR:
@@ -94,7 +94,7 @@ IMPORTANT BEHAVIOR:
 - If the owner asks you to add/install/improve Myles's own tools or capabilities, that is a Myles self-capability task. It must use a fresh task/workspace, never the previous project's workspace. After the tool returns, acknowledge naturally. If the tool says RUNNING, you may say the work has started. If it says QUEUED, say it is queued, not running. Do not dump internal tracking IDs unless they are useful or he asks.
 - If he asks what you are doing or whether something is finished, call get_current_work instead of guessing from memory.
 - If he asks you to stop the current work, call stop_current_work. If he says to stop one thing and do another, you may call stop_current_work and then start_background_job in the same turn.
-- A casual statement like 'I'm playing Fortnite' is context, not a command. Only change light mode if the owner clearly wants work reduced/paused.
+- A casual statement like 'I'm playing Fortnite' is context, not a command. Only change light mode if the owner clearly wants autonomous/heavy work reduced. Even in Game Mode, direct owner commands still execute at reduced process priority.
 - Be conversational, warm, direct, and natural. Routine replies should usually be one or two compact paragraphs. Do not sound like a robotic task manager, dump internal prompts/JSON/job IDs, or narrate routing unless the owner asks.
 - Never claim computer work was completed unless the background worker produced verified evidence.
 """
@@ -243,6 +243,8 @@ def start_job(job: dict[str, Any]) -> None:
     flags = 0
     if os.name == "nt":
         flags = getattr(subprocess, "CREATE_NO_WINDOW", 0) | getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0)
+        if bool(load_config().get("light_mode")) and str(job.get("source") or "") != "continuous":
+            flags |= getattr(subprocess, "BELOW_NORMAL_PRIORITY_CLASS", 0x00004000)
     WORKER_LOG.parent.mkdir(parents=True, exist_ok=True)
     out = open(WORKER_LOG, "a", encoding="utf-8")
     proc = subprocess.Popen(
@@ -356,6 +358,50 @@ def _conversation_call(messages: list[dict[str, Any]]) -> dict[str, Any]:
         messages,
         tools=CONVERSATION_TOOLS,
         temperature=0.35,
+    )
+
+
+def _conversation_runtime_context() -> str:
+    """Give each owner-facing turn compact, truthful awareness of the live tower."""
+    cfg = load_config()
+    active = active_job()
+    jobs = list_jobs(40)
+    queued = [row for row in jobs if str(row.get("state") or "") == "pending"]
+    last_terminal = next(
+        (row for row in jobs if str(row.get("state") or "") in {"completed", "failed", "cancelled"}),
+        None,
+    )
+    game: dict[str, Any] = {}
+    try:
+        raw = json.loads((ROOT / "data" / "game_mode_state.json").read_text(encoding="utf-8-sig"))
+        if isinstance(raw, dict):
+            game = raw
+    except Exception:
+        pass
+    active_text = "none"
+    if active:
+        active_text = (
+            f"{active.get('id')} state={active.get('state')} phase={active.get('phase')} "
+            f"task={_human_task_label(str(active.get('prompt') or ''), 140)}"
+        )
+    terminal_text = "none"
+    if last_terminal:
+        terminal_text = (
+            f"{last_terminal.get('id')} state={last_terminal.get('state')} "
+            f"task={_human_task_label(str(last_terminal.get('prompt') or ''), 120)}"
+        )
+    return (
+        "LIVE TOWER CONTEXT (trusted local state; use naturally and do not dump it unless asked):\n"
+        f"- Myles version: {APP_VERSION}\n"
+        f"- Game/light mode: {bool(cfg.get('light_mode'))}; detected game: {str(game.get('process') or 'none')}\n"
+        f"- Active work: {active_text}\n"
+        f"- Queued jobs: {len(queued)}\n"
+        f"- Last terminal job: {terminal_text}\n"
+        "- Direct owner commands remain allowed during Game Mode at reduced process priority. "
+        "Continuous improvement and nonessential background ticks remain paused.\n"
+        "- Worker capabilities include real window listing, screenshots/vision, focus, mouse clicks, "
+        "keyboard input, Unicode typing, verified app closing, browser automation, files, PowerShell, "
+        "downloads, Git/GitHub, and system/process inspection."
     )
 
 
@@ -509,7 +555,7 @@ def _start_task(prompt: str, source: str, *, reuse_workspace: str | Path | None 
 
     job = create_job(prompt, source, record_user=False, reuse_workspace=reuse_workspace)
     cfg = load_config()
-    if not active_job() and not bool(cfg.get("light_mode")):
+    if not active_job() and (not bool(cfg.get("light_mode")) or str(source or "") != "continuous"):
         start_job(job)
         # Re-read actual state after spawning; never infer it from intent.
         actual = get_job(str(job.get("id"))) or job
@@ -706,7 +752,7 @@ def _conversation_tool(name: str, args: dict[str, Any], source: str) -> str:
         cfg = load_config()
         # Start immediately when the execution lane is free so conversational claims
         # like "I started it" correspond to a real worker, not merely a DB row.
-        if not active_job() and not bool(cfg.get("light_mode")):
+        if not active_job() and (not bool(cfg.get("light_mode")) or str(source or "") != "continuous"):
             start_job(job)
             return f"STARTED task_id={job.get('id')} state=RUNNING task={prompt}"
         return f"STARTED task_id={job.get('id')} state=QUEUED task={prompt}"
@@ -720,7 +766,7 @@ def _conversation_tool(name: str, args: dict[str, Any], source: str) -> str:
         enabled = bool(args.get("enabled"))
         cfg["light_mode"] = enabled
         save_config(cfg)
-        return "Light mode is on; heavy queued work will wait." if enabled else "Light mode is off; normal queued work can run."
+        return "Game Mode is on; autonomous heavy work will wait, but your direct commands still run at reduced priority." if enabled else "Game Mode is off; normal background work can run."
     return f"ERROR: unknown conversation tool {name}"
 
 
@@ -769,7 +815,10 @@ def _conversation_agent_turn(raw: str, source: str) -> tuple[str, str | None]:
     history = history_for_model(18)
     if history and history[-1].get("role") == "user" and str(history[-1].get("content") or "").strip() == raw:
         history = history[:-1]
-    messages: list[dict[str, Any]] = [{"role": "system", "content": CONVERSATION_SYSTEM}]
+    messages: list[dict[str, Any]] = [
+        {"role": "system", "content": CONVERSATION_SYSTEM},
+        {"role": "system", "content": _conversation_runtime_context()},
+    ]
     messages.extend(history)
     messages.append({"role": "user", "content": raw})
     started_job: str | None = None
@@ -901,7 +950,8 @@ def _capability_truth_report() -> str:
         "",
         "• Conversation: natural Telegram/local chat, quick weather and public web lookups, truthful task/status controls.",
         "• Internet: yes for public read-only lookup/fetch, downloads, and browser automation. Authentication or 2FA still needs you when a site requires it.",
-        "• Tower access: files, folders, PowerShell, processes, system status, downloads, Git, and persistent Chromium browser automation.",
+        "• Tower access: files, folders, hidden PowerShell/process control, system status, downloads, Git, and persistent Chromium browser automation.",
+        "• Visual desktop control: real window inventory, screenshots for visual reasoning, focus, mouse clicks, keyboard shortcuts, Unicode typing, and verified app closing.",
         "• Packages/tools: I can install Python packages and self-provision browser dependencies when a task needs them.",
         f"• GitHub: isolated Myles GitHub identity is {github_identity}; GitHub Pages publishing and verified public status feeds are built in.",
         "• Self-development: I can clone a safe candidate of my own runtime, modify it, run compile/regression checks, promote only a passing build, and keep a rollback backup.",
@@ -1496,7 +1546,7 @@ def handle_owner_message(text: str, source: str) -> dict[str, Any]:
             controller = "OWNER_ACTION=resume\n" + result
         elif intent == "light_on":
             cfg = load_config(); cfg["light_mode"] = True; save_config(cfg)
-            controller = "OWNER_ACTION=light_on\nLight mode is on; heavy queued work will wait."
+            controller = "OWNER_ACTION=light_on\nGame Mode is on; autonomous heavy work will wait, but direct owner commands still run at reduced priority."
         elif intent == "light_off":
             cfg = load_config(); cfg["light_mode"] = False; save_config(cfg)
             controller = "OWNER_ACTION=light_off\nLight mode is off; normal queued work can run."
@@ -1558,7 +1608,7 @@ def handle_owner_message(text: str, source: str) -> dict[str, Any]:
             elif intent == "resume":
                 final = result
             elif intent == "light_on":
-                final = "Light mode is on; heavy queued work will wait."
+                final = "Game Mode is on; autonomous heavy work will wait, but your direct commands still run at reduced priority."
             elif intent == "light_off":
                 final = "Light mode is off; normal queued work can run."
             else:
@@ -1694,7 +1744,7 @@ def telegram_loop() -> None:
 
 
 def _pause_active_job_for_light_mode(job: dict[str, Any]) -> None:
-    """Pause heavy owner/continuous work without losing its durable queue entry."""
+    """Pause autonomous continuous work without losing its durable queue entry."""
     job_id = str(job.get("id") or "")
     if not job_id:
         return
@@ -1711,6 +1761,15 @@ def _pause_active_job_for_light_mode(job: dict[str, Any]) -> None:
     trace(job_id, "job.paused_for_game", "Automatic/manual light mode paused background execution.")
 
 
+def _next_pending_owner_job() -> dict[str, Any] | None:
+    rows = [
+        row for row in list_jobs(100)
+        if str(row.get("state") or "") == "pending"
+        and str(row.get("source") or "") != "continuous"
+    ]
+    return min(rows, key=lambda row: str(row.get("created_at") or "")) if rows else None
+
+
 def monitor_loop() -> None:
     while not STOP.wait(3):
         try:
@@ -1719,11 +1778,22 @@ def monitor_loop() -> None:
             active = active_job()
 
             if light:
-                # Gaming/latency mode is intentionally minimal. Do not run
-                # capability ticks, status-feed publishing, continuous improvement,
-                # or any durable job worker while the owner is gaming.
-                if active:
+                # Gaming/latency mode pauses autonomous and nonessential background
+                # work, but an explicit owner command must still work. Owner jobs run
+                # below normal priority so Myles remains useful without competing
+                # aggressively with the game.
+                if active and str(active.get("source") or "") == "continuous":
                     _pause_active_job_for_light_mode(active)
+                    active = None
+                elif active:
+                    truth = job_truth(active)
+                    if truth["truth_state"] == "stalled":
+                        reason = "; ".join(truth["stall_reasons"]) or "execution truth marked it stalled"
+                        recover_job(active["id"], reason=f"Automatic recovery during Game Mode: {reason}")
+                if not active and not CHAT_BUSY.is_set():
+                    pending_owner = _next_pending_owner_job()
+                    if pending_owner:
+                        start_job(pending_owner)
                 if RESTART_REQUEST.exists():
                     log("restart request detected during light mode; supervisor will perform verified restart")
                     STOP.set()
