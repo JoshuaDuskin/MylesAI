@@ -46,3 +46,8 @@ The guardian runs through `pythonw.exe`, not a recurring PowerShell window.
 MYLES durable jobs can inspect the real desktop, focus visible applications,
 capture screenshots for local vision reasoning, and perform verified mouse and
 keyboard actions. Desktop screenshots remain local to the tower.
+
+The runtime also supports process/window-verified generic Windows app launch,
+deterministic cancellation/replacement, and an Ollama capability check for the
+selected model's tool and vision support. See `AGENT_STACK_AUDIT.md` for the
+file-by-file agent architecture, verified capabilities, and provider gaps.
