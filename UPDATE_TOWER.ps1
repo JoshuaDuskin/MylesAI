@@ -173,7 +173,27 @@ try {
     Log ("WARNING: scheduled-task cleanup failed: " + $_.Exception.Message)
 }
 
-$HadGitRepository = Test-Path (Join-Path $Root ".git")
+$GitMetadataPath = Join-Path $Root ".git"
+$HadGitRepository = $false
+if (Test-Path $GitMetadataPath) {
+    # A leftover or partial .git directory is not a usable repository. Probe
+    # Git itself instead of treating the mere path as proof, then archive bad
+    # metadata so the recoverable plain-folder path below can rebuild it.
+    $previousPreference = $ErrorActionPreference
+    $ErrorActionPreference = "Continue"
+    try {
+        $repoProbe = & $GitExe -C $Root rev-parse --is-inside-work-tree 2>&1
+        $repoProbeCode = $LASTEXITCODE
+    } finally {
+        $ErrorActionPreference = $previousPreference
+    }
+    $HadGitRepository = ($repoProbeCode -eq 0 -and (($repoProbe | Out-String).Trim() -eq "true"))
+    if (-not $HadGitRepository) {
+        $BrokenGitBackup = Join-Path $Recovery "broken_git_metadata"
+        Move-Item -LiteralPath $GitMetadataPath -Destination $BrokenGitBackup -Force -ErrorAction Stop
+        Log "WARNING: broken Git metadata archived; preparing a recoverable canonical checkout"
+    }
+}
 if ($HadGitRepository) {
     try {
         (Invoke-RepoGit -GitArgs @("remote", "-v")) | Set-Content (Join-Path $Recovery "git_remotes_before.txt")

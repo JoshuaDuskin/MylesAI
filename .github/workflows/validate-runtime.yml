@@ -49,6 +49,8 @@ jobs:
           grep -q "runtime_supervisor_v074.py" bin/ensure_myles_runtime.py
           grep -q "consecutive_failures" bin/ensure_myles_runtime.py
           grep -q 'Git metadata is missing; preparing a recoverable canonical checkout' UPDATE_TOWER.ps1
+          grep -q 'broken Git metadata archived; preparing a recoverable canonical checkout' UPDATE_TOWER.ps1
+          grep -q 'rev-parse --is-inside-work-tree' UPDATE_TOWER.ps1
           grep -q 'non_git_source_tree' UPDATE_TOWER.ps1
           ! grep -q 'TaskAction = New-ScheduledTaskAction -Execute "powershell.exe"' UPDATE_TOWER.ps1
           ! grep -q -- "-NoExit" UPDATE_TOWER.cmd UPDATE_TOWER.ps1
