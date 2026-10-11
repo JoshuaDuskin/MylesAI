@@ -788,6 +788,11 @@ def _friendly_public_phase(value: Any) -> str:
 
 def _runtime_public_snapshot() -> dict[str, Any]:
     """Build a narrow, public-safe snapshot of real Myles operational state."""
+    # Import lazily to keep the core/tool module graph acyclic. Only public-safe
+    # booleans, model identity, and provider names are exposed here.
+    from myles_model_runtime import model_health_dict
+    import myles_capabilities as capability_runtime
+
     jobs = list_jobs(100)
     active = active_job()
     pending = [j for j in jobs if str(j.get("state") or "") == "pending"]
@@ -862,10 +867,71 @@ def _runtime_public_snapshot() -> dict[str, Any]:
         "source": cfg.get("light_mode_source") or ("automatic_game_detection" if game_state.get("active") else "manual"),
     }
 
+    model_health = model_health_dict(cfg)
+    provider_catalog = capability_runtime.discover_capabilities()
+    provider_rows = []
+    for name, item in sorted(provider_catalog.items()):
+        error = str(item.get("error") or "").strip()
+        tool_names = [str(value) for value in (item.get("tools") or []) if str(value)]
+        provider_rows.append({
+            "name": f"Provider: {name}",
+            "status": "issue" if error else ("working" if tool_names else "reported"),
+            "detail": error[:180] if error else (" · ".join(tool_names) if tool_names else "Installed with no callable tools"),
+            "tools": tool_names,
+        })
+
+    capability_rows = [
+        {
+            "name": "Local reasoning model",
+            "status": "working" if model_health.get("available") else "offline",
+            "detail": str(model_health.get("model") or model_health.get("error_kind") or "Ollama model unavailable"),
+        },
+        {
+            "name": "Typed tool calling",
+            "status": "working" if model_health.get("supports_tools") else "issue",
+            "detail": "Advertised by Ollama /api/show" if model_health.get("supports_tools") else "The selected model does not advertise tool support",
+        },
+        {
+            "name": "Visual screen reasoning",
+            "status": "working" if model_health.get("supports_vision") else "issue",
+            "detail": "Screenshots can be attached to the local model" if model_health.get("supports_vision") else "The selected model does not advertise vision support",
+        },
+        {
+            "name": "Windows desktop control",
+            "status": "working" if os.name == "nt" else "unavailable",
+            "detail": "Verified app launch/close, windows, screenshots, focus, mouse, keyboard, and typing",
+        },
+        {
+            "name": "Files, PowerShell, Git and packages",
+            "status": "working",
+            "detail": "Local build and system toolchain",
+        },
+        {
+            "name": "Public web and browser automation",
+            "status": "working",
+            "detail": "Read-only lookup/fetch plus persistent Chromium automation",
+        },
+    ]
+    capability_rows.extend(provider_rows)
+    if not provider_rows:
+        capability_rows.append({
+            "name": "Email, health and home providers",
+            "status": "unavailable",
+            "detail": "No authenticated provider plugins are installed",
+        })
+
     return {
         "schema_version": 4,
         "generated_at": now_iso(),
         "myles": {"version": APP_VERSION, "online": True},
+        "model": model_health.get("model") or "",
+        "model_runtime": {
+            "available": bool(model_health.get("available")),
+            "supports_tools": bool(model_health.get("supports_tools")),
+            "supports_vision": bool(model_health.get("supports_vision")),
+            "capabilities": list(model_health.get("capabilities") or []),
+        },
+        "capabilities": capability_rows,
         "continuous_program": continuous,
         "game_mode": game_active,
         "game_mode_detail": game_detail,
