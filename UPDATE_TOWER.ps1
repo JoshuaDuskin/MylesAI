@@ -173,20 +173,26 @@ try {
     Log ("WARNING: scheduled-task cleanup failed: " + $_.Exception.Message)
 }
 
-if (-not (Test-Path (Join-Path $Root ".git"))) {
-    Fail "$Root is not a Git repository."
-}
-
-try {
-    (Invoke-RepoGit -GitArgs @("remote", "-v")) | Set-Content (Join-Path $Recovery "git_remotes_before.txt")
-    (Invoke-RepoGit -GitArgs @("status", "--short", "--branch")) | Set-Content (Join-Path $Recovery "git_status_before.txt")
-    (Invoke-RepoGit -GitArgs @("rev-parse", "HEAD")) | Set-Content (Join-Path $Recovery "git_head_before.txt")
-    Invoke-RepoGit -GitArgs @("bundle", "create", (Join-Path $Recovery "MylesAI_before_update.bundle"), "--all") | Out-Null
-    (Invoke-RepoGit -GitArgs @("diff", "--binary")) | Set-Content (Join-Path $Recovery "working_tree_before.patch")
-    (Invoke-RepoGit -GitArgs @("diff", "--cached", "--binary")) | Set-Content (Join-Path $Recovery "staged_before.patch")
-    Log "PASS: Git history and local tracked changes backed up"
-} catch {
-    Fail ("Could not create the Git recovery snapshot: " + $_.Exception.Message)
+$HadGitRepository = Test-Path (Join-Path $Root ".git")
+if ($HadGitRepository) {
+    try {
+        (Invoke-RepoGit -GitArgs @("remote", "-v")) | Set-Content (Join-Path $Recovery "git_remotes_before.txt")
+        (Invoke-RepoGit -GitArgs @("status", "--short", "--branch")) | Set-Content (Join-Path $Recovery "git_status_before.txt")
+        (Invoke-RepoGit -GitArgs @("rev-parse", "HEAD")) | Set-Content (Join-Path $Recovery "git_head_before.txt")
+        Invoke-RepoGit -GitArgs @("bundle", "create", (Join-Path $Recovery "MylesAI_before_update.bundle"), "--all") | Out-Null
+        (Invoke-RepoGit -GitArgs @("diff", "--binary")) | Set-Content (Join-Path $Recovery "working_tree_before.patch")
+        (Invoke-RepoGit -GitArgs @("diff", "--cached", "--binary")) | Set-Content (Join-Path $Recovery "staged_before.patch")
+        Log "PASS: Git history and local tracked changes backed up"
+    } catch {
+        Fail ("Could not create the Git recovery snapshot: " + $_.Exception.Message)
+    }
+} else {
+    # Some installed tower copies were deployed as a plain source folder and
+    # therefore have no .git metadata. That is recoverable: local runtime data
+    # is preserved below, and the remaining source tree is archived before a
+    # clean canonical checkout is created in place.
+    Log "WARNING: Git metadata is missing; preparing a recoverable canonical checkout"
+    Set-Content -Path (Join-Path $Recovery "git_metadata_missing.txt") -Value $Root -Encoding UTF8
 }
 
 $Untracked = @()
@@ -377,7 +383,41 @@ if (Test-Path $LocalOnlyStage) {
 
 try {
     Log "Pointing tower at canonical GitHub repository..."
-    Invoke-RepoGit -GitArgs @("remote", "set-url", "origin", $Canonical) | Out-Null
+    if (-not $HadGitRepository) {
+        $NonGitSourceBackup = Join-Path $Recovery "non_git_source_tree"
+        New-Item -ItemType Directory -Force -Path $NonGitSourceBackup | Out-Null
+
+        # Runtime state, environments, credentials, dependencies, and logs have
+        # already moved to $Preserve. Archive every remaining source item before
+        # replacing it, including the updater currently executing from memory.
+        $RuntimeTopLevel = @(".venv", "data", "logs", "backups", "self_updates", "dashboard_site")
+        Get-ChildItem $Root -Force -ErrorAction Stop | ForEach-Object {
+            if ($_.Name -in $RuntimeTopLevel) { return }
+
+            # If a locked cloudflared binary or node_modules directory could
+            # not be moved earlier, leave that ignored runtime asset in place
+            # while archiving the old tracked source surrounding it.
+            if ($_.PSIsContainer -and $_.Name -in @("bin", "quant")) {
+                $runtimeChild = if ($_.Name -eq "bin") { "cloudflared.exe" } else { "node_modules" }
+                $directoryBackup = Join-Path $NonGitSourceBackup $_.Name
+                New-Item -ItemType Directory -Force -Path $directoryBackup | Out-Null
+                Get-ChildItem $_.FullName -Force -ErrorAction Stop | Where-Object { $_.Name -ne $runtimeChild } | ForEach-Object {
+                    Move-Item -LiteralPath $_.FullName -Destination (Join-Path $directoryBackup $_.Name) -Force -ErrorAction Stop
+                }
+                return
+            }
+
+            $destination = Join-Path $NonGitSourceBackup $_.Name
+            Move-Item -LiteralPath $_.FullName -Destination $destination -Force -ErrorAction Stop
+        }
+        Log "PASS: non-Git source tree archived for recovery"
+
+        & $GitExe -C $Root init 2>&1 | Out-Null
+        if ($LASTEXITCODE -ne 0) { throw "git init failed with exit code $LASTEXITCODE" }
+        Invoke-RepoGit -GitArgs @("remote", "add", "origin", $Canonical) | Out-Null
+    } else {
+        Invoke-RepoGit -GitArgs @("remote", "set-url", "origin", $Canonical) | Out-Null
+    }
     Invoke-RepoGit -GitArgs @("fetch", "origin", "main", "--prune") | Out-Null
     Invoke-RepoGit -GitArgs @("checkout", "-B", "main", "origin/main", "--force") | Out-Null
     Invoke-RepoGit -GitArgs @("reset", "--hard", "origin/main") | Out-Null
