@@ -32,6 +32,9 @@ class ModelHealth:
     recovered: bool = False
     error_kind: str = ""
     detail: str = ""
+    capabilities: tuple[str, ...] = ()
+    supports_tools: bool = False
+    supports_vision: bool = False
 
 
 _LAST_HEALTH = ModelHealth(False, error_kind="not_checked", detail="Model runtime has not been checked.")
@@ -86,6 +89,45 @@ def _installed_models(cfg: dict[str, Any]) -> list[str]:
     ]
 
 
+def _model_capabilities(cfg: dict[str, Any], model: str) -> tuple[str, ...]:
+    """Read Ollama's advertised contract instead of inferring it from a model name."""
+    data = _json_request(
+        _ollama_base(cfg) + "/api/show",
+        {"model": model},
+        timeout=8,
+    )
+    raw = data.get("capabilities") if isinstance(data, dict) else []
+    return tuple(sorted({str(value).strip().lower() for value in (raw or []) if str(value).strip()}))
+
+
+def _healthy_model(cfg: dict[str, Any], selected: str, endpoint: str, *, recovered: bool = False) -> ModelHealth:
+    try:
+        caps = _model_capabilities(cfg, selected)
+    except Exception as exc:
+        return ModelHealth(
+            True,
+            model=selected,
+            endpoint=endpoint,
+            recovered=recovered,
+            error_kind="capability_probe_failed",
+            detail=f"The model is online, but its Ollama capability contract could not be read: {type(exc).__name__}: {exc}",
+        )
+    return ModelHealth(
+        True,
+        model=selected,
+        endpoint=endpoint,
+        recovered=recovered,
+        capabilities=caps,
+        supports_tools="tools" in caps,
+        supports_vision="vision" in caps,
+        detail=(
+            "Model is online with tool and vision support."
+            if {"tools", "vision"}.issubset(caps)
+            else "Model is online but does not advertise every required agent capability."
+        ),
+    )
+
+
 def _model_rank(name: str) -> tuple[int, int, str]:
     low = name.lower()
     if any(term in low for term in ("embed", "nomic", "clip")):
@@ -130,7 +172,7 @@ def ensure_model_runtime(cfg: dict[str, Any], *, force: bool = False) -> ModelHe
         if not selected:
             _LAST_HEALTH = ModelHealth(False, endpoint=endpoint, error_kind="no_chat_model", detail="Ollama is online but no compatible chat model is installed.")
             return _LAST_HEALTH
-        _LAST_HEALTH = ModelHealth(True, model=selected, endpoint=endpoint)
+        _LAST_HEALTH = _healthy_model(cfg, selected, endpoint)
         return _LAST_HEALTH
     except Exception as first_error:
         if os.name != "nt":
@@ -155,7 +197,7 @@ def ensure_model_runtime(cfg: dict[str, Any], *, force: bool = False) -> ModelHe
                 installed = _installed_models(cfg)
                 selected = select_model(cfg, installed)
                 if selected:
-                    _LAST_HEALTH = ModelHealth(True, model=selected, endpoint=endpoint, recovered=True)
+                    _LAST_HEALTH = _healthy_model(cfg, selected, endpoint, recovered=True)
                     return _LAST_HEALTH
             except Exception:
                 time.sleep(0.75)
@@ -232,6 +274,9 @@ def model_health_dict(cfg: dict[str, Any], *, refresh: bool = False) -> dict[str
         "recovered": health.recovered,
         "error_kind": health.error_kind,
         "detail": health.detail[:500],
+        "capabilities": list(health.capabilities),
+        "supports_tools": health.supports_tools,
+        "supports_vision": health.supports_vision,
     }
 
 

@@ -8,6 +8,7 @@ from typing import Any
 STOP_PATTERNS = (
     r"^\s*(stop|cancel|abort|quit|drop it|stop that|cancel that|stop the task|cancel the task|stop current work|cancel current work)\s*[.!]?\s*$",
     r"^\s*(please\s+)?(stop|cancel|abort)\s+(what you(?:'re| are) doing|the current task|current work|the current work|this task|that task|it)\s*[.!]?\s*$",
+    r"^\s*(please\s+)?(?:stop|cancel|abort)\s+(?:the\s+)?(?:current\s+)?[a-z0-9][a-z0-9 _-]{0,60}\s+(?:task|job|work)\s*[.!]?\s*$",
 )
 RESUME_PATTERNS = (
     r"\b(?:don'?t|do not)\s+stop\b",
@@ -433,6 +434,17 @@ def classify_tool_result(result: str) -> ToolOutcome:
         return ToolOutcome("refused", False, refused=True)
     if upper.startswith("TIMEOUT"):
         return ToolOutcome("timeout", False, retryable=True)
+    if upper.startswith((
+        "DESKTOP_APP_LAUNCH_ERROR:",
+        "DESKTOP_APP_LAUNCH_NOT_VERIFIED:",
+        "DESKTOP_APP_LAUNCH_UNAVAILABLE:",
+        "FORTNITE_LAUNCH_ERROR:",
+        "FORTNITE_NOT_VERIFIED:",
+        "FORTNITE_LAUNCH_UNAVAILABLE:",
+    )):
+        return ToolOutcome("not_verified", False)
+    if '"MARKER": "DESKTOP_APP_CLOSE_FAILED"' in upper:
+        return ToolOutcome("not_verified", False)
     if upper.startswith("TOOL_ERROR") or upper.startswith("ERROR:"):
         retry_markers = (
             "temporar", "timeout", "timed out", "connection", "network",

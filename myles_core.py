@@ -1288,6 +1288,26 @@ def _direct_fortnite_request(raw: str) -> bool:
     ))
 
 
+def _direct_app_launch_target(raw: str) -> str:
+    """Extract a specific app from a short launch command handled by the worker."""
+    text = re.sub(r"[.!?]+$", "", str(raw or "").strip(), flags=re.S)
+    match = re.match(
+        r"(?is)^(?:please\s+)?(?:(?:can|could|would|will)\s+you\s+)?"
+        r"(?:open|launch|start|run)\s+(?:up\s+)?(.+?)"
+        r"(?:\s+(?:instead|now|please|for\s+me))?$",
+        text,
+    )
+    if not match:
+        return ""
+    target = re.sub(r"(?i)^the\s+", "", match.group(1).strip())
+    target = re.sub(r"(?i)\s+(?:app|application)$", "", target).strip()
+    if target.casefold() in {"", "app", "application", "program", "it", "this", "that"}:
+        return ""
+    if any(marker in target.casefold() for marker in ("http://", "https://", " website", " file", " folder")):
+        return ""
+    return target if 2 <= len(target) <= 80 else ""
+
+
 def _direct_fortnite_launch() -> str:
     result = launch_fortnite_verified(timeout_seconds=40)
     if result.startswith("FORTNITE_RUNNING:"):
@@ -1323,24 +1343,23 @@ def handle_owner_message(text: str, source: str) -> dict[str, Any]:
     if not raw:
         return {"kind": "chat", "reply": ""}
 
-    if _direct_fortnite_request(raw) or _fortnite_launch_followup(raw):
+    direct_app = _direct_app_launch_target(raw)
+    if direct_app:
         add_message(source, "user", raw, None)
-        direct_result = launch_fortnite_verified(timeout_seconds=40)
-        if direct_result.startswith("FORTNITE_RUNNING:"):
-            final = direct_result.split(":", 1)[1].strip()
-            message_id = add_message(source, "assistant", final, None)
-            return {"kind": "conversation", "reply": final, "message_id": message_id}
-
-        task_result = _start_task(_fortnite_visual_fallback_task(direct_result), source)
+        replaced = bool(re.search(r"(?i)\binstead\b", raw))
+        active = active_job()
+        if replaced and active:
+            cancel_job(str(active["id"]))
+        task_result = _start_task(f"Open {direct_app}", source)
         job_id = None
         if task_result.startswith("task_id="):
             job_id = task_result.split("task_id=", 1)[1].split(" ", 1)[0]
         if "state=RUNNING" in task_result:
-            final = "Fortnite was not verified through the direct launcher, so I started the visual Xbox-app fallback and will verify the actual game window."
+            final = f"Opening {direct_app} now."
         elif "state=QUEUED" in task_result:
-            final = "Fortnite was not verified through the direct launcher. The visual Xbox-app fallback is queued behind the current task."
+            final = f"Queued opening {direct_app} behind the current task."
         else:
-            final = _direct_fortnite_launch()
+            final = f"I couldn't start the verified {direct_app} launch."
         message_id = add_message(source, "assistant", final, job_id)
         response = {"kind": "conversation", "reply": final, "message_id": message_id}
         if job_id:

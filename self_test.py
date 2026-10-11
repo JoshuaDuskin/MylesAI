@@ -15,7 +15,7 @@ def main():
     myles_common.init_db()
     cfg = myles_common.load_config()
     checks = {
-        "version": myles_common.APP_VERSION == "10.3.1",
+        "version": myles_common.APP_VERSION == "10.4.0",
         "config_loads": isinstance(cfg, dict),
         "telegram_setting_present": "telegram_enabled" in cfg,
         "root_exists": myles_common.ROOT.exists(),
@@ -156,6 +156,17 @@ def main():
         and job_worker._direct_app_close_target("Close it") == ""
         and "direct verified app-close path completed" in worker_source
     )
+    checks["generic_app_launch_bypasses_model_planner"] = (
+        job_worker._direct_app_launch_target("Open Xbox app instead") == "Xbox"
+        and job_worker._direct_app_launch_target("Please launch Notepad") == "Notepad"
+        and job_worker._direct_app_launch_target("open https://example.com") == ""
+        and myles_core._direct_app_launch_target("start Fortnite now") == "Fortnite"
+        and "direct verified app-launch path completed" in worker_source
+        and hasattr(myles_windows, "launch_app_verified")
+    )
+    checks["named_current_task_stop_is_explicit"] = (
+        rt.explicit_stop_requested("Stop the current Fortnite task.") is True
+    )
     original_core_list_jobs = myles_core.list_jobs
     try:
         myles_core.list_jobs = lambda _limit=100: [
@@ -236,10 +247,10 @@ def main():
         and rt.deterministic_control(dashboard_prompt, has_active=False, has_recent_cancelled=False) is None
     )
     checks["fortnite_bypasses_model_router"] = (
-        "if _direct_fortnite_request(raw) or _fortnite_launch_followup(raw):" in core_source
-        and core_source.index("if _direct_fortnite_request(raw) or _fortnite_launch_followup(raw):")
+        "direct_app = _direct_app_launch_target(raw)" in core_source
+        and core_source.index("direct_app = _direct_app_launch_target(raw)")
             < core_source.index('CHAT_BUSY.set()')
-        and "launch_fortnite_verified" in core_source
+        and '_start_task(f"Open {direct_app}", source)' in core_source
         and "FORTNITE_RUNNING" in Path(myles_windows.__file__).read_text(encoding="utf-8")
     )
     checks["fortnite_diagnostic_is_not_shortcut"] = (
@@ -650,8 +661,14 @@ def main():
             job_worker.completion_gaps("SELFTEST_NO_DESKTOP", fallback_task, myles_common.WORKSPACES, "Fortnite is not running because Xbox did not open.")
     )
     checks["desktop_targeted_command_counts_as_action"] = (
-        '"run_powershell", "launch_fortnite"' in worker_source
+        '"desktop_close_app", "desktop_launch_app", "launch_fortnite"' in worker_source
         and "desktop-control task has no successful UI or targeted Windows action" in worker_source
+    )
+    model_source = Path(myles_model_runtime.__file__).read_text(encoding="utf-8")
+    checks["model_capabilities_are_probed"] = (
+        '"/api/show"' in model_source
+        and 'supports_tools="tools" in caps' in model_source
+        and 'supports_vision="vision" in caps' in model_source
     )
     checks["desktop_bridge_blocks_artifact_drift"] = (
         'if _prompt_requires_desktop_action(job_prompt):' in worker_source

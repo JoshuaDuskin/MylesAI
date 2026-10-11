@@ -20,7 +20,7 @@ from myles_common import (
 )
 import myles_tools as tools
 import myles_capabilities as capabilities
-from myles_windows import launch_fortnite_verified
+from myles_windows import launch_app_verified, launch_fortnite_verified
 from myles_runtime_v9 import (
     PlannerParseError, normalize_action_plan, parse_native_arguments,
     classify_tool_result,
@@ -44,6 +44,7 @@ TOOL_DEFS = [
     {"type":"function","function":{"name":"install_python_packages","description":"Install Python packages into the Myles Python environment when a task needs them.","parameters":{"type":"object","properties":{"packages":{"type":"array","items":{"type":"string"}}},"required":["packages"]}}},
     {"type":"function","function":{"name":"system_status","description":"Read live tower time, machine, CPU, memory, disk and Ollama status.","parameters":{"type":"object","properties":{}}}},
     {"type":"function","function":{"name":"launch_fortnite","description":"Launch Fortnite through the installed Epic Games Launcher and return success only after a Fortnite process is verified.","parameters":{"type":"object","properties":{},"additionalProperties":False}}},
+    {"type":"function","function":{"name":"desktop_launch_app","description":"Launch a named Windows application through the installed Start-menu registration or a known URI. Returns success only after a matching process or visible window is verified.","parameters":{"type":"object","properties":{"app_name":{"type":"string","description":"The specific application name, such as Xbox, Notepad, or Calculator."},"timeout_seconds":{"type":"integer","minimum":5,"maximum":45}},"required":["app_name"]}}},
     {"type":"function","function":{"name":"desktop_windows","description":"List the real visible top-level Windows desktop windows with titles, handles, process IDs, and bounds. Use before targeting an existing app.","parameters":{"type":"object","properties":{}}}},
     {"type":"function","function":{"name":"desktop_close_app","description":"Close a visible Windows application by window-title text without opening a console, then verify that matching windows are gone. Use for requests such as close Xbox, quit Notepad, or close an app.","parameters":{"type":"object","properties":{"title_contains":{"type":"string","description":"Distinctive text from the application window title, such as Xbox or Notepad."},"force":{"type":"boolean","description":"After a normal close request, terminate only the matched window processes if they remain. Defaults to true."}},"required":["title_contains"]}}},
     {"type":"function","function":{"name":"desktop_activate_window","description":"Restore and focus a visible Windows application by a unique substring of its title.","parameters":{"type":"object","properties":{"title_contains":{"type":"string"}},"required":["title_contains"]}}},
@@ -161,6 +162,14 @@ def _needs_owner_summary(text: str) -> bool:
 def compact_owner_summary(job_id: str, prompt: str, result: str) -> str:
     """Keep internal execution detail out of the owner conversation."""
     source = str(result or "").strip()
+    if source.startswith("DESKTOP_APP_LAUNCH_VERIFIED:"):
+        match = re.search(r"(?i)(?:opened\s+)?(.+?)(?:\s+via\s+|\s+is already\b|;|\.|$)", source.split(":", 1)[1].strip())
+        app = (match.group(1) if match else "The app").strip()
+        return f"{app} is open."
+    if source.startswith("FORTNITE_RUNNING:"):
+        return "Fortnite is open."
+    if source.startswith("DESKTOP_APP_CLOSE_VERIFIED"):
+        return "The app is closed."
     if not source or not _needs_owner_summary(source):
         return source[:1200]
     cfg = load_config()
@@ -223,6 +232,7 @@ github_pages_publish: {"repo_path": string, "repo_name": string optional}
 install_python_packages: {"packages": [string, ...]}
 system_status: {}
 launch_fortnite: {}
+desktop_launch_app: {"app_name": string, "timeout_seconds": integer optional}
 desktop_windows: {}
 desktop_activate_window: {"title_contains": string}
 desktop_screenshot: {"path": string optional}
@@ -261,7 +271,7 @@ def call_execution_bridge(job_id: str, job_prompt: str, workspace: Path, last_te
         allowed &= {
             "desktop_windows", "desktop_activate_window", "desktop_screenshot",
             "desktop_click", "desktop_key", "desktop_type", "run_powershell",
-            "launch_fortnite", "system_status",
+            "desktop_launch_app", "launch_fortnite", "system_status",
         }
     retries = max(2, min(int(cfg.get("planner_retry_count", 3)), 6))
     last_error = ""
@@ -656,6 +666,26 @@ def _direct_app_close_target(prompt: str) -> str:
     return target if len(target) >= 2 else ""
 
 
+def _direct_app_launch_target(prompt: str) -> str:
+    """Extract a specific target only from a short, unambiguous app-launch command."""
+    text = re.sub(r"[.!?]+$", "", str(prompt or "").strip(), flags=re.S)
+    match = re.match(
+        r"(?is)^(?:please\s+)?(?:(?:can|could|would|will)\s+you\s+)?"
+        r"(?:open|launch|start|run)\s+(?:up\s+)?(.+?)"
+        r"(?:\s+(?:instead|now|please|for\s+me))?$",
+        text,
+    )
+    if not match:
+        return ""
+    target = re.sub(r"(?i)^the\s+", "", match.group(1).strip())
+    target = re.sub(r"(?i)\s+(?:app|application)$", "", target).strip()
+    if target.casefold() in {"", "app", "application", "program", "it", "this", "that"}:
+        return ""
+    if any(marker in target.casefold() for marker in ("http://", "https://", " website", " file", " folder")):
+        return ""
+    return target if 2 <= len(target) <= 80 else ""
+
+
 def _desktop_action_evidence(job_id: str) -> tuple[int, int]:
     observations = 0
     actions = 0
@@ -664,14 +694,28 @@ def _desktop_action_evidence(job_id: str) -> tuple[int, int]:
         if event != "tool.result" or int(row.get("ok") or 0) != 1:
             continue
         tool = str(row.get("tool") or "")
-        if tool in {"desktop_windows", "desktop_screenshot", "desktop_close_app"}:
+        if tool in {"desktop_windows", "desktop_screenshot", "desktop_close_app", "desktop_launch_app", "launch_fortnite"}:
             observations += 1
         if tool in {
             "desktop_activate_window", "desktop_click", "desktop_key", "desktop_type",
-            "desktop_close_app", "run_powershell", "launch_fortnite",
+            "desktop_close_app", "desktop_launch_app", "launch_fortnite",
         }:
             actions += 1
     return observations, actions
+
+
+def _verified_app_launch_evidence(job_id: str, target: str) -> bool:
+    wanted = str(target or "").casefold()
+    for row in traces_for_job(job_id, 240):
+        if str(row.get("event") or row.get("kind") or "") != "tool.result" or int(row.get("ok") or 0) != 1:
+            continue
+        tool = str(row.get("tool") or "")
+        detail = str(row.get("detail") or "")
+        if wanted == "fortnite" and tool == "launch_fortnite" and detail.startswith("FORTNITE_RUNNING:"):
+            return True
+        if tool == "desktop_launch_app" and detail.startswith("DESKTOP_APP_LAUNCH_VERIFIED:"):
+            return True
+    return False
 
 
 def completion_gaps(job_id: str, prompt: str, workspace: Path, final_text: str) -> list[str]:
@@ -697,6 +741,10 @@ def completion_gaps(job_id: str, prompt: str, workspace: Path, final_text: str) 
             gaps.append("desktop-control task has no successful window/screenshot observation")
         if actions < 1:
             gaps.append("desktop-control task has no successful UI or targeted Windows action")
+
+    launch_target = _direct_app_launch_target(prompt)
+    if launch_target and not _verified_app_launch_evidence(job_id, launch_target):
+        gaps.append(f"application launch has no verified process/window evidence for {launch_target}")
 
     artifacts = _workspace_artifacts(workspace)
     if _prompt_requires_artifact(prompt) and not artifacts:
@@ -857,6 +905,14 @@ def execute_tool(job_id: str, name: str, args: dict) -> str:
         result = _launch_fortnite_direct()
         trace(job_id, "tool.result", result, tool=name, ok=result.startswith("FORTNITE_RUNNING"))
         return result
+    if name == "desktop_launch_app":
+        result = launch_app_verified(
+            str((args or {}).get("app_name") or ""),
+            int((args or {}).get("timeout_seconds") or 20),
+        )
+        ok = result.startswith("DESKTOP_APP_LAUNCH_VERIFIED:")
+        trace(job_id, "tool.result", result, tool=name, ok=ok)
+        return result
     policy_refusal = _owner_repo_policy_refusal(job_id, name, args)
     if policy_refusal:
         trace(job_id, "tool.refused", policy_refusal, tool=name, ok=False)
@@ -921,7 +977,7 @@ MUTATING_TOOLS = {
     "download_file", "git_command", "github_pages_publish",
     "configure_runtime_status_feed", "install_python_packages", "browser_automation",
     "self_clone_candidate", "self_promote_candidate", "desktop_activate_window", "desktop_close_app",
-    "desktop_click", "desktop_key", "desktop_type", "launch_fortnite",
+    "desktop_click", "desktop_key", "desktop_type", "desktop_launch_app", "launch_fortnite",
 }
 
 
@@ -1057,6 +1113,29 @@ def main() -> int:
         cfg = load_config()
         for step in range(1, int(cfg["max_agent_steps"]) + 1):
             if step == 1:
+                launch_target = _direct_app_launch_target(job["prompt"])
+                if launch_target:
+                    launch_tool = "launch_fortnite" if launch_target.casefold() == "fortnite" else "desktop_launch_app"
+                    launch_args = {} if launch_tool == "launch_fortnite" else {"app_name": launch_target}
+                    result, outcome = execute_with_internal_retry(job_id, launch_tool, launch_args)
+                    tool_calls_made += 1
+                    if outcome.ok:
+                        tool_calls_succeeded += 1
+                        mutating_tool_succeeded += 1
+                    verified_marker = "FORTNITE_RUNNING:" if launch_tool == "launch_fortnite" else "DESKTOP_APP_LAUNCH_VERIFIED:"
+                    if outcome.ok and verified_marker in result:
+                        final = result
+                        gaps = completion_gaps(job_id, job["prompt"], workspace, final)
+                        if not gaps:
+                            trace(job_id, "completion.accepted", "direct verified app-launch path completed", ok=True)
+                            break
+                    messages.append({
+                        "role": "user",
+                        "content": (
+                            f"The direct verified app-launch attempt returned:\n{result}\n"
+                            "If it was not verified, inspect the real desktop and continue with an observe-act-observe loop."
+                        ),
+                    })
                 close_target = _direct_app_close_target(job["prompt"])
                 if close_target:
                     result, outcome = execute_with_internal_retry(
@@ -1136,12 +1215,16 @@ def main() -> int:
                     image_message = _desktop_image_message(name, result)
                     if image_message:
                         messages.append(image_message)
-                    if name == "desktop_close_app" and ok and "DESKTOP_APP_CLOSE_VERIFIED" in result:
+                    if (
+                        (name == "desktop_close_app" and ok and "DESKTOP_APP_CLOSE_VERIFIED" in result)
+                        or (name == "desktop_launch_app" and ok and "DESKTOP_APP_LAUNCH_VERIFIED" in result)
+                        or (name == "launch_fortnite" and ok and "FORTNITE_RUNNING:" in result)
+                    ):
                         candidate = _augment_final_with_verified_evidence(job_id, job["prompt"], result)
                         gaps = completion_gaps(job_id, job["prompt"], workspace, candidate)
                         if not gaps:
                             final = candidate
-                            trace(job_id, "completion.accepted", "desktop_close_app returned verified terminal state", ok=True)
+                            trace(job_id, "completion.accepted", f"{name} returned verified terminal state", ok=True)
                             break
                 if final:
                     break
