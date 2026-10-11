@@ -1,6 +1,6 @@
 # MYLES Agent Stack Audit
 
-Version reviewed: 10.4.0  
+Version reviewed: 10.4.1  
 Canonical repository: `JoshuaDuskin/MylesAI`
 
 ## Bottom line
@@ -17,7 +17,7 @@ MYLES had most of those pieces, but they were disconnected:
 - a plugin loader existed, but no email, health, Ring, or home provider was installed;
 - internal worker/process text could be summarized into owner-facing nonsense.
 
-Version 10.4.0 repairs the controller path for generic Windows app launches, cancellation/replacement, model capability truth, launch-specific evidence, and deterministic owner results. Provider integrations still require a real provider module plus owner authentication; the runtime must never claim otherwise.
+Version 10.4.1 repairs the controller path for generic Windows app launches, cancellation/replacement, model capability truth, launch-specific evidence, deterministic owner results, and public capability observability. Provider integrations still require a real provider module plus owner authentication; the runtime must never claim otherwise.
 
 ## The architecture MYLES needs
 
