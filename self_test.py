@@ -15,7 +15,7 @@ def main():
     myles_common.init_db()
     cfg = myles_common.load_config()
     checks = {
-        "version": myles_common.APP_VERSION == "10.4.0",
+        "version": myles_common.APP_VERSION == "10.4.1",
         "config_loads": isinstance(cfg, dict),
         "telegram_setting_present": "telegram_enabled" in cfg,
         "root_exists": myles_common.ROOT.exists(),
@@ -669,6 +669,12 @@ def main():
         '"/api/show"' in model_source
         and 'supports_tools="tools" in caps' in model_source
         and 'supports_vision="vision" in caps' in model_source
+    )
+    checks["public_status_exposes_capability_truth"] = (
+        '"supports_tools": bool(model_health.get("supports_tools"))' in tools_source
+        and '"supports_vision": bool(model_health.get("supports_vision"))' in tools_source
+        and '"capabilities": capability_rows' in tools_source
+        and "No authenticated provider plugins are installed" in tools_source
     )
     checks["desktop_bridge_blocks_artifact_drift"] = (
         'if _prompt_requires_desktop_action(job_prompt):' in worker_source
