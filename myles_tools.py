@@ -77,6 +77,24 @@ def _expand(path: str) -> Path:
     return Path(os.path.expandvars(os.path.expanduser(path))).resolve()
 
 
+def _hidden_process_options() -> dict[str, Any]:
+    """Return Windows launch options that prevent console-window creation.
+
+    CREATE_NO_WINDOW is the primary control. STARTF_USESHOWWINDOW/SW_HIDE is
+    intentionally included as a second boundary for console hosts and wrappers
+    that otherwise ignore the parent's window state.
+    """
+    if os.name != "nt":
+        return {}
+    startupinfo = subprocess.STARTUPINFO()
+    startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+    startupinfo.wShowWindow = subprocess.SW_HIDE
+    return {
+        "creationflags": getattr(subprocess, "CREATE_NO_WINDOW", 0),
+        "startupinfo": startupinfo,
+    }
+
+
 def run_process(job_id: str, argv: list[str], timeout: int, cwd: str | None = None) -> str:
     set_job(job_id, phase="tool", heartbeat_at=now_iso())
     p = subprocess.Popen(
@@ -86,7 +104,7 @@ def run_process(job_id: str, argv: list[str], timeout: int, cwd: str | None = No
         stderr=subprocess.PIPE,
         text=True,
         errors="replace",
-        creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+        **_hidden_process_options(),
     )
     start = time.time()
     while p.poll() is None:
@@ -127,10 +145,22 @@ def run_powershell(job_id: str, command: str, timeout_seconds: int = 1800) -> st
         )
         trace(job_id, "tool.result", out, tool="run_powershell", ok=False)
         return out
+    # A hidden PowerShell can still create a visible console when a generated
+    # command uses Start-Process. Make hidden windows the default inside that
+    # PowerShell session as well as at Python's CreateProcess boundary.
+    hidden_prelude = (
+        "$ProgressPreference='SilentlyContinue'; "
+        "$PSDefaultParameterValues['Start-Process:WindowStyle']='Hidden'; "
+    )
+    guarded_command = hidden_prelude + command
     trace(job_id, "tool.start", command[:5000], tool="run_powershell")
     out = run_process(
         job_id,
-        ["powershell.exe", "-NoLogo", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", command],
+        [
+            "powershell.exe", "-NoLogo", "-NoProfile", "-NonInteractive",
+            "-WindowStyle", "Hidden", "-ExecutionPolicy", "Bypass",
+            "-Command", guarded_command,
+        ],
         timeout,
     )
     ok = "exit_code=0" in out

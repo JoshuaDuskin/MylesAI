@@ -15,7 +15,7 @@ def main():
     myles_common.init_db()
     cfg = myles_common.load_config()
     checks = {
-        "version": myles_common.APP_VERSION == "10.4.1",
+        "version": myles_common.APP_VERSION == "10.4.2",
         "config_loads": isinstance(cfg, dict),
         "telegram_setting_present": "telegram_enabled" in cfg,
         "root_exists": myles_common.ROOT.exists(),
@@ -205,7 +205,7 @@ def main():
         and "console_spawn_audit.log" in supervisor_source
         and "_hide_windows_for_pid" in supervisor_source
         and "myles_owned" in supervisor_source
-        and "time.sleep(0.2)" in supervisor_source
+        and "time.sleep(0.1)" in supervisor_source
         and "powershell(?:\\.exe)?" in updater_source
         and "pwsh(?:\\.exe)?" in updater_source
     )
@@ -805,6 +805,17 @@ def main():
     checks["powershell5_guard"] = (
         "Windows PowerShell 5.1" in tools_source
         and '"||" in command or "&&" in command' in tools_source
+    )
+    checks["powershell_is_strictly_windowless"] = (
+        "def _hidden_process_options" in tools_source
+        and '"-WindowStyle", "Hidden"' in tools_source
+        and "Start-Process:WindowStyle" in tools_source
+        and "Never open a visible command prompt" in worker_source
+    )
+    checks["console_monitor_tracks_nested_ancestry"] = (
+        "def ownership_chain" in supervisor_source
+        and '"conhost.exe"' in supervisor_source
+        and '"openconsole.exe"' in supervisor_source
     )
     checks["pinetree_tool_refusal"] = myles_tools._contains_pinetree_reference(
         "https://github.com/PineTreePayments/app.pinetree-payments"
