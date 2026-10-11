@@ -202,8 +202,35 @@ def console_spawn_monitor() -> None:
         seen = {int(process.pid) for process in psutil.process_iter(["pid"])}
     except Exception:
         seen = set()
-    shell_names = {"cmd.exe", "powershell.exe", "pwsh.exe", "windowsterminal.exe"}
+    shell_names = {
+        "cmd.exe", "powershell.exe", "pwsh.exe", "windowsterminal.exe",
+        "wt.exe", "conhost.exe", "openconsole.exe",
+    }
     root_text = str(ROOT).lower()
+
+    def ownership_chain(process) -> tuple[bool, str]:
+        """Attribute nested shells to MYLES without touching owner-opened shells."""
+        chain: list[str] = []
+        current = process
+        visited: set[int] = set()
+        for _ in range(8):
+            try:
+                pid = int(current.pid)
+                if pid in visited or pid <= 0:
+                    break
+                visited.add(pid)
+                name = str(current.name() or "")
+                command = " ".join(current.cmdline() or [])
+                chain.append(f"{pid}:{name}:{command}")
+                if root_text in command.lower():
+                    return True, " <- ".join(chain)
+                current = current.parent()
+                if current is None:
+                    break
+            except Exception:
+                break
+        return False, " <- ".join(chain)
+
     while True:
         try:
             current: set[int] = set()
@@ -214,29 +241,21 @@ def console_spawn_monitor() -> None:
                     if pid in seen or str(process.info.get("name") or "").lower() not in shell_names:
                         continue
                     command = " ".join(process.info.get("cmdline") or [])
-                    parent_name = ""
-                    parent_command = ""
-                    try:
-                        parent = psutil.Process(int(process.info.get("ppid") or 0))
-                        parent_name = parent.name()
-                        parent_command = " ".join(parent.cmdline())
-                    except Exception:
-                        pass
-                    myles_owned = root_text in command.lower() or root_text in parent_command.lower()
+                    myles_owned, ancestry = ownership_chain(process)
                     hidden = _hide_windows_for_pid(pid) if myles_owned else 0
                     with CONSOLE_SPAWN_LOG.open("a", encoding="utf-8", errors="replace") as handle:
                         handle.write(
                             f"[{dt.datetime.now().isoformat()}] pid={pid} ppid={process.info.get('ppid')} "
-                            f"name={process.info.get('name')} parent={parent_name} myles_owned={myles_owned} "
+                            f"name={process.info.get('name')} myles_owned={myles_owned} "
                             f"hidden_windows={hidden} command={_redact_console_command(command)!r} "
-                            f"parent_command={_redact_console_command(parent_command)!r}\n"
+                            f"ancestry={_redact_console_command(ancestry)!r}\n"
                         )
                 except Exception:
                     continue
             seen = current
         except Exception as exc:
             log(f"console spawn monitor cycle failed: {type(exc).__name__}: {exc}")
-        time.sleep(0.2)
+        time.sleep(0.1)
 
 def run(args, cwd: Path | None = None, env: dict | None = None, timeout: int = 90):
     try:
