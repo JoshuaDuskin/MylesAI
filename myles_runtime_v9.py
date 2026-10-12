@@ -142,6 +142,31 @@ STRONG_ACTION_VERBS = (
 )
 
 
+def _strip_owner_action_framing(text: str) -> str:
+    """Remove conversational wrappers while preserving the owner's command."""
+    value = re.sub(r"\s+", " ", str(text or "").strip())
+    value = re.sub(r"[.!?]+$", "", value).strip()
+    prefixes = (
+        r"^(?:hey\s+)?myles\s*[,;:]?\s*",
+        r"^please\s+",
+        r"^would\s+you\s+mind\s+(?:please\s+)?",
+        r"^(?:can|could|would|will)\s+you\s+(?:please\s+)?",
+        r"^i\s+(?:want|need)\s+you\s+to\s+",
+        r"^i(?:'d|\s+would)\s+like\s+you\s+to\s+",
+        r"^go\s+ahead\s+and\s+",
+        r"^do\s+me\s+a\s+favor\s+and\s+",
+        r"^(?:let(?:'s|\s+us)|make\s+sure\s+you)\s+",
+        r"^(?:just|actually)\s+",
+    )
+    for _ in range(5):
+        previous = value
+        for pattern in prefixes:
+            value = re.sub(pattern, "", value, count=1, flags=re.I).strip()
+        if value == previous:
+            break
+    return value
+
+
 def app_launch_target(text: str) -> str:
     """Extract an app/surface target from ordinary owner launch language.
 
@@ -149,35 +174,21 @@ def app_launch_target(text: str) -> str:
     name against the live Start-menu registry instead of maintaining a catalog
     of every application the owner might install.
     """
-    value = re.sub(r"\s+", " ", str(text or "").strip())
-    value = re.sub(r"[.!?]+$", "", value).strip()
+    value = _strip_owner_action_framing(text)
     if not value or len(value) > 180:
         return ""
 
-    # Peel conversational framing in small, composable passes so normal speech
-    # such as "Myles, I want you to open the Xbox app" takes the same path as
-    # "open Xbox". This is intent grammar, not an application allow-list.
-    prefixes = (
-        r"^(?:hey\s+)?myles\s*[,;:]?\s*",
-        r"^please\s+",
-        r"^(?:can|could|would|will)\s+you\s+(?:please\s+)?",
-        r"^i\s+(?:want|need)\s+you\s+to\s+",
-        r"^i(?:'d|\s+would)\s+like\s+you\s+to\s+",
-        r"^go\s+ahead\s+and\s+",
+    match = re.match(
+        r"(?is)^(?:open|launch|start|run|load|fir(?:e|ing)\s+up|pull(?:ing)?\s+up|bring(?:ing)?\s+up)\s+(?:up\s+)?(.+)$",
+        value,
     )
-    for _ in range(4):
-        previous = value
-        for pattern in prefixes:
-            value = re.sub(pattern, "", value, count=1, flags=re.I).strip()
-        if value == previous:
-            break
-
-    match = re.match(r"(?is)^(?:open|launch|start|run)\s+(?:up\s+)?(.+)$", value)
+    if not match:
+        match = re.match(r"(?is)^(?:get\s+)?(.+?)\s+(?:open|opened)$", value)
     if not match:
         return ""
     target = match.group(1).strip()
     # Remove conversational tail modifiers without altering names in the middle.
-    tail = r"\s+(?:instead|now|please|for\s+me|on\s+(?:the\s+)?(?:tower|computer|pc))$"
+    tail = r"\s+(?:instead|now|please|for\s+me|real\s+quick|on\s+(?:the\s+)?(?:tower|computer|pc))$"
     for _ in range(4):
         cleaned = re.sub(tail, "", target, count=1, flags=re.I).strip()
         if cleaned == target:
@@ -190,6 +201,63 @@ def app_launch_target(text: str) -> str:
     if any(marker in target.casefold() for marker in ("http://", "https://", " website", " file", " folder")):
         return ""
     return target if 2 <= len(target) <= 80 else ""
+
+
+def desktop_action_request(text: str) -> dict[str, str] | None:
+    """Recognize broad basic desktop actions without an application catalog."""
+    value = _strip_owner_action_framing(text)
+    if re.fullmatch(r"(?is)(?:show|go\s+to|open)\s+(?:the\s+)?desktop", value):
+        return {"kind": "key", "keys": "WIN+D", "label": "Show desktop"}
+    launch = app_launch_target(text)
+    if launch:
+        return {"kind": "launch", "target": launch}
+    if not value or len(value) > 500:
+        return None
+
+    def clean_target(raw: str) -> str:
+        target = re.sub(r"(?i)^the\s+", "", raw.strip())
+        target = re.sub(r"(?i)\s+(?:app|application|window)$", "", target).strip()
+        target = re.sub(r"(?i)\s+(?:now|please|for\s+me)$", "", target).strip()
+        return target if 1 < len(target) <= 100 and target.casefold() not in {"it", "this", "that"} else ""
+
+    match = re.match(r"(?is)^(?:close|quit|exit|terminate|end|dismiss|shut\s+down)\s+(.+)$", value)
+    if match and (target := clean_target(match.group(1))):
+        return {"kind": "close", "target": target}
+    match = re.match(r"(?is)^(?:focus|activate|switch\s+(?:over\s+)?to|bring\s+forward|go\s+to)\s+(.+)$", value)
+    if match and (target := clean_target(match.group(1))):
+        return {"kind": "focus", "target": target}
+    match = re.match(r"(?is)^(?:bring|put)\s+(.+?)\s+(?:(?:to|in)\s+(?:the\s+)?front|forward)$", value)
+    if match and (target := clean_target(match.group(1))):
+        return {"kind": "focus", "target": target}
+    match = re.match(r"(?is)^(?:press|hit|tap)\s+(.+?)(?:\s+key)?$", value)
+    if match:
+        keys = match.group(1).strip().upper()
+        keys = re.sub(r"\s*\+\s*|\s+AND\s+", "+", keys)
+        phrase_aliases = {
+            "THE ENTER": "ENTER", "THE RETURN": "ENTER", "THE ESCAPE": "ESC",
+            "THE ESC": "ESC", "THE SPACE BAR": "SPACE", "SPACE BAR": "SPACE",
+            "THE TAB": "TAB", "WINDOWS KEY": "WIN",
+        }
+        keys = phrase_aliases.get(keys, keys).replace(" KEY", "")
+        component_aliases = {"CONTROL": "CTRL", "WINDOWS": "WIN", "RETURN": "ENTER", "ESCAPE": "ESC"}
+        if "+" not in keys:
+            words = keys.split()
+            known = {"CTRL", "CONTROL", "SHIFT", "ALT", "WIN", "WINDOWS", "ENTER", "RETURN", "TAB", "ESC", "ESCAPE", "DELETE"}
+            if len(words) > 1 and all(word in known or len(word) == 1 for word in words):
+                keys = "+".join(words)
+        keys = "+".join(component_aliases.get(part, part) for part in keys.split("+"))
+        if re.fullmatch(r"[A-Z0-9+]+", keys) and 1 <= len(keys) <= 40:
+            return {"kind": "key", "keys": keys, "label": f"Press {keys}"}
+    match = re.match(r"(?is)^type\s+(.+)$", value)
+    if match:
+        typed = match.group(1).strip()
+        if len(typed) >= 2 and typed[0] == typed[-1] and typed[0] in {'"', "'"}:
+            typed = typed[1:-1]
+        if typed and len(typed) <= 8000:
+            return {"kind": "type", "text": typed, "label": "Type into the focused control"}
+    if re.match(r"(?is)^(?:click|double[- ]click|right[- ]click|select|choose|scroll|drag)\b", value):
+        return {"kind": "visual", "label": value[:160]}
+    return None
 
 INFORMATIONAL_PREFIXES = (
     "how do ", "how can ", "how would ", "what is ", "what are ",

@@ -15,7 +15,7 @@ def main():
     myles_common.init_db()
     cfg = myles_common.load_config()
     checks = {
-        "version": myles_common.APP_VERSION == "10.4.3",
+        "version": myles_common.APP_VERSION == "10.4.4",
         "config_loads": isinstance(cfg, dict),
         "telegram_setting_present": "telegram_enabled" in cfg,
         "root_exists": myles_common.ROOT.exists(),
@@ -170,6 +170,19 @@ def main():
         and "Get-StartApps" in Path(myles_windows.__file__).read_text(encoding="utf-8")
         and "_open_start_menu" in Path(myles_windows.__file__).read_text(encoding="utf-8")
     )
+    checks["broad_basic_desktop_intents"] = (
+        rt.desktop_action_request("I want you to close the Xbox app") == {"kind": "close", "target": "Xbox"}
+        and rt.desktop_action_request("Myles, switch to Google Chrome please") == {"kind": "focus", "target": "Google Chrome"}
+        and rt.desktop_action_request("Please press control and L") == {"kind": "key", "keys": "CTRL+L", "label": "Press CTRL+L"}
+        and rt.desktop_action_request("Go ahead and show the desktop") == {"kind": "key", "keys": "WIN+D", "label": "Show desktop"}
+        and rt.desktop_action_request("Type 'hello world'") == {"kind": "type", "text": "hello world", "label": "Type into the focused control"}
+        and rt.desktop_action_request("click the green Play button").get("kind") == "visual"
+        and rt.desktop_action_request("Would you mind pulling up Spotify real quick?") == {"kind": "launch", "target": "Spotify"}
+        and rt.desktop_action_request("Do me a favor and dismiss Discord") == {"kind": "close", "target": "Discord"}
+        and rt.desktop_action_request("Put Chrome in the front") == {"kind": "focus", "target": "Chrome"}
+        and rt.desktop_action_request("Bring Discord forward") == {"kind": "focus", "target": "Discord"}
+        and "direct verified {kind} action completed" in worker_source
+    )
     checks["named_current_task_stop_is_explicit"] = (
         rt.explicit_stop_requested("Stop the current Fortnite task.") is True
     )
@@ -193,6 +206,12 @@ def main():
     )
     game_watcher_source = (myles_common.ROOT / "bin" / "game_mode_watch.py").read_text(encoding="utf-8")
     game_watcher_main = game_watcher_source.split("def main() -> int:", 1)[-1]
+    checks["game_mode_never_hides_taskbar"] = (
+        '"taskbar_hidden": False' in game_watcher_source
+        and "set_taskbar_visible(False)" not in game_watcher_source
+        and "Owner-controlled Windows auto-hide remains untouched" in game_watcher_source
+        and "set_taskbar_visible(True)" in game_watcher_source
+    )
     heavy_pattern_block = game_watcher_source.split("HEAVY_MYLES_PATTERNS = (", 1)[-1].split(")", 1)[0]
     checks["game_mode_preserves_owner_agent_lane"] = (
         "job_worker" not in heavy_pattern_block
@@ -253,10 +272,11 @@ def main():
         and rt.deterministic_control(dashboard_prompt, has_active=False, has_recent_cancelled=False) is None
     )
     checks["fortnite_bypasses_model_router"] = (
-        "direct_app = _direct_app_launch_target(raw)" in core_source
-        and core_source.index("direct_app = _direct_app_launch_target(raw)")
+        "direct_desktop = desktop_action_request(raw)" in core_source
+        and core_source.index("direct_desktop = desktop_action_request(raw)")
             < core_source.index('CHAT_BUSY.set()')
-        and '_start_task(f"Open {direct_app}", source)' in core_source
+        and "task_result = _start_task(raw, source)" in core_source
+        and rt.desktop_action_request("Open Fortnite") == {"kind": "launch", "target": "Fortnite"}
         and "FORTNITE_RUNNING" in Path(myles_windows.__file__).read_text(encoding="utf-8")
     )
     checks["fortnite_diagnostic_is_not_shortcut"] = (

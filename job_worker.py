@@ -24,7 +24,7 @@ from myles_windows import launch_app_verified, launch_fortnite_verified
 from myles_runtime_v9 import (
     PlannerParseError, normalize_action_plan, parse_native_arguments,
     classify_tool_result,
-    app_launch_target,
+    app_launch_target, desktop_action_request,
 )
 
 TOOL_DEFS = [
@@ -172,6 +172,8 @@ def compact_owner_summary(job_id: str, prompt: str, result: str) -> str:
         return "Fortnite is open."
     if source.startswith("DESKTOP_APP_CLOSE_VERIFIED"):
         return "The app is closed."
+    if source.startswith("DESKTOP_ACTION_VERIFIED:"):
+        return source.split(":", 1)[1].strip()
     if not source or not _needs_owner_summary(source):
         return source[:1200]
     cfg = load_config()
@@ -645,7 +647,7 @@ def _looks_truncated(text: str) -> bool:
 
 def _prompt_requires_desktop_action(prompt: str) -> bool:
     t = str(prompt or "").lower()
-    return any(marker in t for marker in (
+    return bool(desktop_action_request(prompt)) or any(marker in t for marker in (
         "desktop_windows", "desktop_screenshot", "desktop_activate_window",
         "observe-act-observe", "mouse control", "use the xbox app",
         "xboxpcapp.exe", "real desktop", "visible window",
@@ -657,15 +659,8 @@ def _prompt_requires_desktop_action(prompt: str) -> bool:
 
 def _direct_app_close_target(prompt: str) -> str:
     """Extract an explicit app/window target from a simple close imperative."""
-    text = re.sub(r"[.!?]+$", "", str(prompt or "").strip(), flags=re.S)
-    match = re.match(r"(?is)^(?:please\s+)?(?:close|quit|exit|terminate|shut\s+down)\s+(.+)$", text)
-    if not match:
-        return ""
-    target = re.sub(r"(?i)^the\s+", "", match.group(1).strip())
-    target = re.sub(r"(?i)\s+(?:app|application|window)$", "", target).strip()
-    if target.lower() in {"", "app", "application", "window", "program", "this", "it"}:
-        return ""
-    return target if len(target) >= 2 else ""
+    action = desktop_action_request(prompt)
+    return str(action.get("target") or "") if action and action.get("kind") == "close" else ""
 
 
 def _direct_app_launch_target(prompt: str) -> str:
@@ -1100,6 +1095,7 @@ def main() -> int:
         cfg = load_config()
         for step in range(1, int(cfg["max_agent_steps"]) + 1):
             if step == 1:
+                direct_desktop = desktop_action_request(job["prompt"])
                 launch_target = _direct_app_launch_target(job["prompt"])
                 if launch_target:
                     launch_tool = "launch_fortnite" if launch_target.casefold() == "fortnite" else "desktop_launch_app"
@@ -1147,6 +1143,54 @@ def main() -> int:
                             "Continue only if the requested application is still visibly open."
                         ),
                     })
+                if direct_desktop and direct_desktop.get("kind") in {"focus", "key", "type"}:
+                    kind = str(direct_desktop.get("kind"))
+                    tool_name = {
+                        "focus": "desktop_activate_window",
+                        "key": "desktop_key",
+                        "type": "desktop_type",
+                    }[kind]
+                    tool_args = {
+                        "focus": {"title_contains": direct_desktop.get("target")},
+                        "key": {"keys": direct_desktop.get("keys")},
+                        "type": {"text": direct_desktop.get("text")},
+                    }[kind]
+                    # Observe before and after input. A successful SendInput call
+                    # alone is not treated as proof of the resulting screen state.
+                    before_result, before_outcome = execute_with_internal_retry(job_id, "desktop_screenshot", {})
+                    tool_calls_made += 1
+                    if before_outcome.ok:
+                        tool_calls_succeeded += 1
+                        image_message = _desktop_image_message("desktop_screenshot", before_result)
+                        if image_message:
+                            messages.append(image_message)
+                    result, outcome = execute_with_internal_retry(job_id, tool_name, tool_args)
+                    tool_calls_made += 1
+                    if outcome.ok:
+                        tool_calls_succeeded += 1
+                        mutating_tool_succeeded += 1
+                    after_result, after_outcome = execute_with_internal_retry(job_id, "desktop_screenshot", {})
+                    tool_calls_made += 1
+                    if after_outcome.ok:
+                        tool_calls_succeeded += 1
+                        image_message = _desktop_image_message("desktop_screenshot", after_result)
+                        if image_message:
+                            messages.append(image_message)
+                    if outcome.ok and after_outcome.ok:
+                        label = str(direct_desktop.get("label") or direct_desktop.get("target") or kind)
+                        final = f"DESKTOP_ACTION_VERIFIED: {label}."
+                        gaps = completion_gaps(job_id, job["prompt"], workspace, final)
+                        if not gaps:
+                            trace(job_id, "completion.accepted", f"direct verified {kind} action completed", ok=True)
+                            break
+                elif direct_desktop and direct_desktop.get("kind") == "visual":
+                    observed, observed_outcome = execute_with_internal_retry(job_id, "desktop_screenshot", {})
+                    tool_calls_made += 1
+                    if observed_outcome.ok:
+                        tool_calls_succeeded += 1
+                        image_message = _desktop_image_message("desktop_screenshot", observed)
+                        if image_message:
+                            messages.append(image_message)
             set_job(job_id, phase="model", heartbeat_at=now_iso())
             trace(job_id, "agent.step", f"{step}/{cfg['max_agent_steps']}")
             data = call_ollama(job_id, messages)

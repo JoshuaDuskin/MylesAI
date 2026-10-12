@@ -141,12 +141,12 @@ def log(message: object) -> None:
 
 
 def set_taskbar_visible(visible: bool) -> None:
-    """Hide the Windows taskbar during a detected game and restore it afterward."""
+    """Restore a taskbar hidden by an older MYLES build; never hide it."""
     if os.name != "nt":
         return
     try:
         user32 = ctypes.windll.user32
-        command = 5 if visible else 0  # SW_SHOW / SW_HIDE
+        command = 5  # SW_SHOW. Owner-controlled Windows auto-hide remains untouched.
         for class_name in ("Shell_TrayWnd", "Shell_SecondaryTrayWnd"):
             handle = user32.FindWindowW(class_name, None)
             if handle:
@@ -348,7 +348,7 @@ def state_payload(
         "entered_at": entered_at,
         "last_checked_at": dt.datetime.now(dt.timezone.utc).astimezone().isoformat(timespec="seconds"),
         "watcher_pid": os.getpid(),
-        "taskbar_hidden": bool(active),
+        "taskbar_hidden": False,
     }
 
 
@@ -362,6 +362,10 @@ def main() -> int:
     last_game = None
 
     log("automatic game-mode watcher started")
+    # One-time migration from older builds that hid the taskbar during games.
+    # After this restore, MYLES never changes taskbar visibility again.
+    set_taskbar_visible(True)
+    log("taskbar visibility restored once; future visibility is owner-controlled")
 
     while True:
         try:
@@ -378,7 +382,6 @@ def main() -> int:
                 pre_game_light = config_light_mode()
                 entered_at = dt.datetime.now(dt.timezone.utc).astimezone().isoformat(timespec="seconds")
                 set_config_light_mode(True, "automatic_game_detection")
-                set_taskbar_visible(False)
                 stopped = stop_heavy_myles_processes()
                 log(
                     f"game detected: {game.get('name')} pid={game.get('pid')}; "
@@ -396,7 +399,6 @@ def main() -> int:
                 # supervisor copy from bringing a heavy worker back during a match.
                 if not config_light_mode():
                     set_config_light_mode(True, "automatic_game_detection")
-                set_taskbar_visible(False)
                 stopped = stop_heavy_myles_processes()
                 if stopped:
                     log(f"gaming mode enforcement stopped heavy pids={stopped}")
@@ -410,7 +412,6 @@ def main() -> int:
             elif was_active:
                 # Restore the owner's pre-game manual light-mode preference.
                 set_config_light_mode(pre_game_light, "manual" if pre_game_light else "")
-                set_taskbar_visible(True)
                 log(f"game exited; gaming mode OFF; restored pre-game light_mode={pre_game_light}")
                 entered_at = None
                 write_json_atomic(
