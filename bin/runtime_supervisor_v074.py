@@ -328,6 +328,33 @@ def process_rows():
         return []
 
 
+def terminate_process_tree(pid: int, *, timeout: float = 3.0) -> None:
+    """Terminate a runtime-owned process tree entirely in-process."""
+    if pid <= 0 or pid == os.getpid():
+        return
+    try:
+        import psutil
+        parent = psutil.Process(pid)
+        descendants = parent.children(recursive=True)
+        for process in reversed(descendants):
+            try:
+                process.terminate()
+            except Exception:
+                pass
+        try:
+            parent.terminate()
+        except Exception:
+            pass
+        _gone, alive = psutil.wait_procs([*descendants, parent], timeout=timeout)
+        for process in alive:
+            try:
+                process.kill()
+            except Exception:
+                pass
+    except Exception:
+        pass
+
+
 def matching_process_rows(pattern: str):
     rx = re.compile(pattern, re.I)
     return [(pid, command) for pid, command in process_rows() if rx.search(command or "")]
@@ -347,16 +374,7 @@ def keep_one_process(pattern: str, label: str) -> bool:
         if pid <= 0 or pid == os.getpid():
             continue
         try:
-            if os.name == "nt":
-                subprocess.run(
-                    ["taskkill", "/PID", str(pid), "/T", "/F"],
-                    stdout=subprocess.DEVNULL,
-                    stderr=subprocess.DEVNULL,
-                    timeout=8,
-                    creationflags=CREATE_NO_WINDOW,
-                )
-            else:
-                os.kill(pid, 15)
+            terminate_process_tree(pid)
             log(f"retired duplicate {label} pid={pid}; kept pid={keep_pid}")
         except Exception as exc:
             log(f"duplicate {label} cleanup failed pid={pid}: {exc}")
@@ -383,16 +401,7 @@ def start_game_watcher() -> None:
         if pid <= 0 or pid == os.getpid() or not legacy_rx.search(command or ""):
             continue
         try:
-            if os.name == "nt":
-                subprocess.run(
-                    ["taskkill", "/PID", str(pid), "/T", "/F"],
-                    stdout=subprocess.DEVNULL,
-                    stderr=subprocess.DEVNULL,
-                    timeout=8,
-                    creationflags=CREATE_NO_WINDOW,
-                )
-            else:
-                os.kill(pid, 15)
+            terminate_process_tree(pid)
             log(f"retired legacy game-mode watcher pid={pid}")
         except Exception:
             pass
@@ -416,7 +425,6 @@ def stop_heavy_background() -> None:
         re.compile(r"gmx_live\.mjs", re.I),
         re.compile(r"copy_trader_service\.mjs", re.I),
         re.compile(r"simulate_first_batch\.py", re.I),
-        re.compile(r"job_worker\.py", re.I),
     )
     for pid, command in process_rows():
         if pid <= 0 or pid == os.getpid():
@@ -424,16 +432,7 @@ def stop_heavy_background() -> None:
         if not any(rx.search(command or "") for rx in patterns):
             continue
         try:
-            if os.name == "nt":
-                subprocess.run(
-                    ["taskkill", "/PID", str(pid), "/T", "/F"],
-                    stdout=subprocess.DEVNULL,
-                    stderr=subprocess.DEVNULL,
-                    timeout=12,
-                    creationflags=CREATE_NO_WINDOW,
-                )
-            else:
-                os.kill(pid, 15)
+            terminate_process_tree(pid)
             log(f"gaming/light mode stopped heavy pid={pid}")
         except Exception:
             pass
@@ -455,16 +454,7 @@ def stop_runtime_children() -> None:
         if pid <= 0 or pid == os.getpid() or not any(rx.search(command or "") for rx in patterns):
             continue
         try:
-            if os.name == "nt":
-                subprocess.run(
-                    ["taskkill", "/PID", str(pid), "/T", "/F"],
-                    stdout=subprocess.DEVNULL,
-                    stderr=subprocess.DEVNULL,
-                    timeout=12,
-                    creationflags=CREATE_NO_WINDOW,
-                )
-            else:
-                os.kill(pid, 15)
+            terminate_process_tree(pid)
             log(f"stopped Myles runtime child pid={pid}")
         except Exception as exc:
             log(f"could not stop Myles runtime child pid={pid}: {exc}")
@@ -475,19 +465,7 @@ def _stop_core_only() -> None:
     for pid, command in process_rows():
         if pid <= 0 or pid == os.getpid() or not rx.search(command or ""):
             continue
-        try:
-            if os.name == "nt":
-                subprocess.run(
-                    ["taskkill", "/PID", str(pid), "/T", "/F"],
-                    stdout=subprocess.DEVNULL,
-                    stderr=subprocess.DEVNULL,
-                    timeout=12,
-                    creationflags=CREATE_NO_WINDOW,
-                )
-            else:
-                os.kill(pid, 15)
-        except Exception:
-            pass
+        terminate_process_tree(pid)
 
 
 def _wait_for_core_offline(timeout: float = 20.0) -> bool:

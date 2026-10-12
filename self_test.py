@@ -15,7 +15,7 @@ def main():
     myles_common.init_db()
     cfg = myles_common.load_config()
     checks = {
-        "version": myles_common.APP_VERSION == "10.4.4",
+        "version": myles_common.APP_VERSION == "10.4.5",
         "config_loads": isinstance(cfg, dict),
         "telegram_setting_present": "telegram_enabled" in cfg,
         "root_exists": myles_common.ROOT.exists(),
@@ -167,8 +167,49 @@ def main():
         and myles_core._direct_app_launch_target("start Fortnite now") == "Fortnite"
         and "direct verified app-launch path completed" in worker_source
         and hasattr(myles_windows, "launch_app_verified")
-        and "Get-StartApps" in Path(myles_windows.__file__).read_text(encoding="utf-8")
+        and "SendInput" in Path(myles_windows.__file__).read_text(encoding="utf-8")
         and "_open_start_menu" in Path(myles_windows.__file__).read_text(encoding="utf-8")
+    )
+    windows_source = Path(myles_windows.__file__).read_text(encoding="utf-8")
+    game_watcher_source = (myles_common.ROOT / "bin" / "game_mode_watch.py").read_text(encoding="utf-8")
+    checks["desktop_runtime_is_native_and_windowless"] = (
+        "EnumWindows" in windows_source
+        and "CreateToolhelp32Snapshot" in windows_source
+        and "capture_desktop_png" in windows_source
+        and "BitBlt" in windows_source
+        and "tasklist" not in windows_source.lower()
+        and "powershell.exe" not in windows_source.lower()
+        and "Get-StartApps" not in windows_source
+        and "APP_ALIASES" not in windows_source
+    )
+    checks["fortnite_completion_requires_visible_game"] = (
+        "_fortnite_visible" in windows_source
+        and "Launcher/helper processes are progress, not success" in windows_source
+        and '"fortnitelauncher.exe",\n        "fortniteclient' not in windows_source
+    )
+    original_visible_windows = myles_windows.visible_windows
+    try:
+        myles_windows.visible_windows = lambda: [
+            {"Id": 1, "ProcessName": "chrome.exe", "MainWindowTitle": "Fortnite | Xbox"},
+            {"Id": 2, "ProcessName": "GamingApp.exe", "MainWindowTitle": "Xbox"},
+        ]
+        checks["visible_verifier_rejects_browser_tabs_and_launcher_helpers"] = (
+            myles_windows._fortnite_visible() is None
+            and not myles_windows._matching_visible_windows("Fortnite")
+            and bool(myles_windows._matching_visible_windows("Xbox"))
+        )
+    finally:
+        myles_windows.visible_windows = original_visible_windows
+    checks["game_watcher_never_polls_console_tools"] = (
+        '"tasklist"' not in game_watcher_source.lower()
+        and '["taskkill"' not in game_watcher_source.lower()
+    )
+    supervisor_source_now = (myles_common.ROOT / "bin" / "runtime_supervisor_v074.py").read_text(encoding="utf-8")
+    heavy_block = supervisor_source_now.split("def stop_heavy_background", 1)[1].split("def stop_runtime_children", 1)[0]
+    checks["game_mode_keeps_owner_agent_and_avoids_console_kills"] = (
+        "job_worker" not in heavy_block
+        and "taskkill" not in supervisor_source_now.lower()
+        and "terminate_process_tree" in supervisor_source_now
     )
     checks["broad_basic_desktop_intents"] = (
         rt.desktop_action_request("I want you to close the Xbox app") == {"kind": "close", "target": "Xbox"}

@@ -221,18 +221,26 @@ def create_job(
 def _terminate_pid(pid: int | None) -> None:
     if not pid:
         return
-    if os.name == "nt":
+    try:
+        import psutil  # type: ignore
+        parent = psutil.Process(int(pid))
+        descendants = parent.children(recursive=True)
+        for process in reversed(descendants):
+            try:
+                process.terminate()
+            except Exception:
+                pass
         try:
-            subprocess.run(
-                ["taskkill", "/PID", str(pid), "/T", "/F"],
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-                timeout=20,
-                creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
-            )
+            parent.terminate()
         except Exception:
             pass
-    else:
+        _gone, alive = psutil.wait_procs([*descendants, parent], timeout=3)
+        for process in alive:
+            try:
+                process.kill()
+            except Exception:
+                pass
+    except Exception:
         try:
             os.kill(int(pid), 9)
         except Exception:
