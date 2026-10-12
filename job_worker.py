@@ -24,6 +24,7 @@ from myles_windows import launch_app_verified, launch_fortnite_verified
 from myles_runtime_v9 import (
     PlannerParseError, normalize_action_plan, parse_native_arguments,
     classify_tool_result,
+    app_launch_target,
 )
 
 TOOL_DEFS = [
@@ -668,23 +669,8 @@ def _direct_app_close_target(prompt: str) -> str:
 
 
 def _direct_app_launch_target(prompt: str) -> str:
-    """Extract a specific target only from a short, unambiguous app-launch command."""
-    text = re.sub(r"[.!?]+$", "", str(prompt or "").strip(), flags=re.S)
-    match = re.match(
-        r"(?is)^(?:please\s+)?(?:(?:can|could|would|will)\s+you\s+)?"
-        r"(?:open|launch|start|run)\s+(?:up\s+)?(.+?)"
-        r"(?:\s+(?:instead|now|please|for\s+me))?$",
-        text,
-    )
-    if not match:
-        return ""
-    target = re.sub(r"(?i)^the\s+", "", match.group(1).strip())
-    target = re.sub(r"(?i)\s+(?:app|application)$", "", target).strip()
-    if target.casefold() in {"", "app", "application", "program", "it", "this", "that"}:
-        return ""
-    if any(marker in target.casefold() for marker in ("http://", "https://", " website", " file", " folder")):
-        return ""
-    return target if 2 <= len(target) <= 80 else ""
+    """Use the same app-agnostic launch intent as the conversation router."""
+    return app_launch_target(prompt)
 
 
 def _desktop_action_evidence(job_id: str) -> tuple[int, int]:

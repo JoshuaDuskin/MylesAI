@@ -136,6 +136,31 @@ def _normalized_app_name(value: str) -> str:
     return name
 
 
+def _open_start_menu() -> str:
+    """Open Start without a shell or application-specific lookup."""
+    if os.name != "nt":
+        return "DESKTOP_APP_LAUNCH_UNAVAILABLE: Windows launch is only supported on the tower."
+    user32 = ctypes.windll.user32
+    before = int(user32.GetForegroundWindow() or 0)
+    user32.keybd_event(0x5B, 0, 0, 0)       # VK_LWIN down
+    user32.keybd_event(0x5B, 0, 0x0002, 0)  # VK_LWIN up
+    time.sleep(0.8)
+    after = int(user32.GetForegroundWindow() or 0)
+    title = ctypes.create_unicode_buffer(512)
+    window_class = ctypes.create_unicode_buffer(256)
+    if after:
+        user32.GetWindowTextW(after, title, len(title))
+        user32.GetClassNameW(after, window_class, len(window_class))
+    surface_text = f"{title.value} {window_class.value}".casefold()
+    if after and (after != before or "start" in surface_text):
+        return (
+            "DESKTOP_APP_LAUNCH_VERIFIED: Opened Start menu via the Windows key; "
+            f"foreground_handle_before={before} foreground_handle_after={after} "
+            f"foreground_title={title.value!r} foreground_class={window_class.value!r}."
+        )
+    return "DESKTOP_APP_LAUNCH_NOT_VERIFIED: Windows key was sent, but no foreground desktop surface could be verified."
+
+
 def _start_apps() -> list[dict[str, str]]:
     if os.name != "nt":
         return []
@@ -177,6 +202,9 @@ def launch_app_verified(app_name: str, timeout_seconds: int = 20) -> str:
     requested = _normalized_app_name(app_name)
     if not requested or requested.casefold() in {"app", "application", "program", "it", "this"}:
         return "DESKTOP_APP_LAUNCH_ERROR: A specific application name is required."
+
+    if requested.casefold() in {"start", "start menu", "windows start menu"}:
+        return _open_start_menu()
 
     key = requested.casefold()
     alias = APP_ALIASES.get(key, {})
