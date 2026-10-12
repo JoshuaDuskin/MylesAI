@@ -33,7 +33,7 @@ from myles_runtime_v9 import (
     natural_question,
     followup_action_request, refers_to_previous_result, execution_promise_text,
     behavior_feedback_request, self_capability_request, compact_task_signature,
-    app_launch_target,
+    app_launch_target, desktop_action_request,
 )
 from myles_model_runtime import (
     fallback_conversation, model_chat, model_health_dict, verify_with_jev,
@@ -1329,23 +1329,33 @@ def handle_owner_message(text: str, source: str) -> dict[str, Any]:
     if not raw:
         return {"kind": "chat", "reply": ""}
 
-    direct_app = _direct_app_launch_target(raw)
-    if direct_app:
+    direct_desktop = desktop_action_request(raw)
+    if direct_desktop:
         add_message(source, "user", raw, None)
         replaced = bool(re.search(r"(?i)\binstead\b", raw))
         active = active_job()
         if replaced and active:
             cancel_job(str(active["id"]))
-        task_result = _start_task(f"Open {direct_app}", source)
+        task_result = _start_task(raw, source)
         job_id = None
         if task_result.startswith("task_id="):
             job_id = task_result.split("task_id=", 1)[1].split(" ", 1)[0]
+        kind = direct_desktop.get("kind")
+        target = direct_desktop.get("target") or direct_desktop.get("keys") or "the desktop"
+        running_labels = {
+            "launch": f"Opening {target} now.",
+            "close": f"Closing {target} now.",
+            "focus": f"Bringing {target} forward now.",
+            "key": f"Sending {target} now.",
+            "type": "Typing into the focused control now.",
+            "visual": "Looking at the desktop and performing that action now.",
+        }
         if "state=RUNNING" in task_result:
-            final = f"Opening {direct_app} now."
+            final = running_labels.get(kind, "Performing that desktop action now.")
         elif "state=QUEUED" in task_result:
-            final = f"Queued opening {direct_app} behind the current task."
+            final = f"Queued the desktop action behind the current task: {target}."
         else:
-            final = f"I couldn't start the verified {direct_app} launch."
+            final = f"I couldn't start the verified desktop action for {target}."
         message_id = add_message(source, "assistant", final, job_id)
         response = {"kind": "conversation", "reply": final, "message_id": message_id}
         if job_id:
