@@ -171,59 +171,25 @@ def write_json_atomic(path: Path, value: dict[str, Any]) -> None:
 
 
 def process_rows() -> list[dict[str, Any]]:
-    """Read processes with a tasklist fallback when psutil cannot see game paths."""
+    """Read processes in-process so the watcher never flashes a console."""
     rows: list[dict[str, Any]] = []
     try:
         import psutil  # type: ignore
-
         for process in psutil.process_iter(["pid", "name", "exe", "cmdline", "memory_info"]):
             try:
                 info = process.info
                 rss = int(getattr(info.get("memory_info"), "rss", 0) or 0)
-                rows.append(
-                    {
-                        "pid": int(info.get("pid") or 0),
-                        "name": str(info.get("name") or ""),
-                        "exe": str(info.get("exe") or ""),
-                        "cmdline": " ".join(info.get("cmdline") or []),
-                        "rss": rss,
-                    }
-                )
+                rows.append({
+                    "pid": int(info.get("pid") or 0),
+                    "name": str(info.get("name") or ""),
+                    "exe": str(info.get("exe") or ""),
+                    "cmdline": " ".join(info.get("cmdline") or []),
+                    "rss": rss,
+                })
             except Exception:
                 pass
     except Exception:
-        rows = []
-
-    # Windows can hide executable paths from a non-elevated psutil process. Add
-    # exact process names from tasklist so Fortnite is still detected through
-    # the Xbox app / Gaming Services launch path.
-    known_seen = {str(row.get("name") or "").lower() for row in rows}
-    if not any(name in known_seen for name in KNOWN_GAME_NAMES) and not any(name.startswith("fortniteclient-win64-shipping") and name.endswith(".exe") for name in known_seen):
-        try:
-            result = subprocess.run(
-                ["tasklist", "/FO", "CSV", "/NH"],
-                text=True,
-                capture_output=True,
-                timeout=10,
-                creationflags=CREATE_NO_WINDOW,
-            )
-            for raw in (result.stdout or "").splitlines():
-                line = raw.strip().strip('"')
-                if not line:
-                    continue
-                parts = [p.strip('"') for p in line.split('","')]
-                if not parts:
-                    continue
-                try:
-                    pid = int(parts[1]) if len(parts) > 1 else 0
-                except Exception:
-                    pid = 0
-                name = parts[0]
-                if str(name).lower() in known_seen:
-                    continue
-                rows.append({"pid": pid, "name": name, "exe": "", "cmdline": "", "rss": 0})
-        except Exception:
-            pass
+        pass
     return rows
 
 
@@ -272,13 +238,24 @@ def kill_tree(pid: int) -> None:
     if pid <= 0 or pid == os.getpid():
         return
     try:
-        subprocess.run(
-            ["taskkill", "/PID", str(pid), "/T", "/F"],
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-            timeout=12,
-            creationflags=CREATE_NO_WINDOW,
-        )
+        import psutil  # type: ignore
+        parent = psutil.Process(pid)
+        descendants = parent.children(recursive=True)
+        for process in reversed(descendants):
+            try:
+                process.terminate()
+            except Exception:
+                pass
+        try:
+            parent.terminate()
+        except Exception:
+            pass
+        _gone, alive = psutil.wait_procs([*descendants, parent], timeout=3)
+        for process in alive:
+            try:
+                process.kill()
+            except Exception:
+                pass
     except Exception:
         pass
 

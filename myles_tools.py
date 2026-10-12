@@ -25,6 +25,7 @@ from myles_common import (
     load_config, now_iso, set_job, trace, add_message, clean_model_text,
     list_jobs, active_job, job_truth, get_setting, set_setting
 )
+from myles_windows import capture_desktop_png
 
 
 PINETREE_BLOCK_TERMS = (
@@ -1345,16 +1346,15 @@ def desktop_close_app(job_id: str, title_contains: str, force: bool = True) -> s
 
     remaining = matching_windows()
     if remaining and bool(force):
-        creation_flags = int(getattr(subprocess, "CREATE_NO_WINDOW", 0))
+        kernel32 = ctypes.windll.kernel32
+        kernel32.OpenProcess.restype = wintypes.HANDLE
         for pid in sorted({int(row["pid"]) for row in remaining if int(row.get("pid") or 0) > 0}):
-            subprocess.run(
-                ["taskkill.exe", "/PID", str(pid), "/T", "/F"],
-                capture_output=True,
-                text=True,
-                errors="replace",
-                timeout=20,
-                creationflags=creation_flags,
-            )
+            handle = kernel32.OpenProcess(0x0001, False, pid)
+            if handle:
+                try:
+                    kernel32.TerminateProcess(handle, 1)
+                finally:
+                    kernel32.CloseHandle(handle)
         time.sleep(2)
         remaining = matching_windows()
 
@@ -1434,42 +1434,12 @@ def desktop_screenshot(job_id: str, path: str = "") -> str:
     destination = _expand(path) if str(path or "").strip() else (
         WORKSPACES / job_id / f"desktop_{datetime.now().strftime('%Y%m%d_%H%M%S_%f')}.png"
     )
-    destination.parent.mkdir(parents=True, exist_ok=True)
-    safe_path = str(destination).replace("'", "''")
-    command = rf"""
-$ErrorActionPreference='Stop'
-Add-Type -TypeDefinition 'using System.Runtime.InteropServices; public static class MylesNative {{ [DllImport("user32.dll")] public static extern bool SetProcessDPIAware(); }}'
-[MylesNative]::SetProcessDPIAware() | Out-Null
-Add-Type -AssemblyName System.Windows.Forms
-Add-Type -AssemblyName System.Drawing
-$b=[System.Windows.Forms.SystemInformation]::VirtualScreen
-$bmp=New-Object System.Drawing.Bitmap $b.Width,$b.Height
-$g=[System.Drawing.Graphics]::FromImage($bmp)
-try {{
-  $g.CopyFromScreen($b.Left,$b.Top,0,0,$bmp.Size)
-  $bmp.Save('{safe_path}',[System.Drawing.Imaging.ImageFormat]::Png)
-  [ordered]@{{left=$b.Left;top=$b.Top;width=$b.Width;height=$b.Height;path='{safe_path}'}} | ConvertTo-Json -Compress
-}} finally {{
-  $g.Dispose()
-  $bmp.Dispose()
-}}
-"""
-    completed = subprocess.run(
-        ["powershell.exe", "-NoLogo", "-NoProfile", "-NonInteractive", "-Command", command],
-        capture_output=True,
-        text=True,
-        errors="replace",
-        timeout=30,
-        creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
-    )
-    if completed.returncode != 0 or not destination.is_file():
-        result = "TOOL_ERROR: desktop screenshot failed: " + str(completed.stderr or completed.stdout or "unknown error")[-2000:]
+    try:
+        meta = capture_desktop_png(destination)
+    except Exception as exc:
+        result = f"TOOL_ERROR: desktop screenshot failed: {type(exc).__name__}: {exc}"
         trace(job_id, "tool.result", result, tool="desktop_screenshot", ok=False)
         return result
-    try:
-        meta = json.loads(str(completed.stdout or "{}").strip().splitlines()[-1])
-    except Exception:
-        meta = {"path": str(destination)}
     meta.update({"kind": "desktop_screenshot", "path": str(destination)})
     result = "MYLES_DESKTOP_IMAGE " + json.dumps(meta, ensure_ascii=False)
     trace(job_id, "tool.result", result, tool="desktop_screenshot", ok=True)

@@ -140,13 +140,24 @@ def stop_tree(pid: int) -> None:
     if pid <= 0:
         return
     try:
-        subprocess.run(
-            ["taskkill.exe", "/PID", str(pid), "/T", "/F"],
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-            timeout=20,
-            creationflags=CREATE_NO_WINDOW,
-        )
+        import psutil
+        parent = psutil.Process(pid)
+        descendants = parent.children(recursive=True)
+        for process in reversed(descendants):
+            try:
+                process.terminate()
+            except Exception:
+                pass
+        try:
+            parent.terminate()
+        except Exception:
+            pass
+        _gone, alive = psutil.wait_procs([*descendants, parent], timeout=3)
+        for process in alive:
+            try:
+                process.kill()
+            except Exception:
+                pass
         log(f"Drained unhealthy supervisor tree PID {pid}")
     except Exception as exc:
         log(f"Could not drain unhealthy supervisor tree PID {pid}: {type(exc).__name__}: {exc}")
