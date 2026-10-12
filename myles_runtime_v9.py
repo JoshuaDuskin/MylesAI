@@ -141,6 +141,56 @@ STRONG_ACTION_VERBS = (
     "look through", "go through", "look at",
 )
 
+
+def app_launch_target(text: str) -> str:
+    """Extract an app/surface target from ordinary owner launch language.
+
+    This is deliberately app-agnostic. The Windows layer resolves the returned
+    name against the live Start-menu registry instead of maintaining a catalog
+    of every application the owner might install.
+    """
+    value = re.sub(r"\s+", " ", str(text or "").strip())
+    value = re.sub(r"[.!?]+$", "", value).strip()
+    if not value or len(value) > 180:
+        return ""
+
+    # Peel conversational framing in small, composable passes so normal speech
+    # such as "Myles, I want you to open the Xbox app" takes the same path as
+    # "open Xbox". This is intent grammar, not an application allow-list.
+    prefixes = (
+        r"^(?:hey\s+)?myles\s*[,;:]?\s*",
+        r"^please\s+",
+        r"^(?:can|could|would|will)\s+you\s+(?:please\s+)?",
+        r"^i\s+(?:want|need)\s+you\s+to\s+",
+        r"^i(?:'d|\s+would)\s+like\s+you\s+to\s+",
+        r"^go\s+ahead\s+and\s+",
+    )
+    for _ in range(4):
+        previous = value
+        for pattern in prefixes:
+            value = re.sub(pattern, "", value, count=1, flags=re.I).strip()
+        if value == previous:
+            break
+
+    match = re.match(r"(?is)^(?:open|launch|start|run)\s+(?:up\s+)?(.+)$", value)
+    if not match:
+        return ""
+    target = match.group(1).strip()
+    # Remove conversational tail modifiers without altering names in the middle.
+    tail = r"\s+(?:instead|now|please|for\s+me|on\s+(?:the\s+)?(?:tower|computer|pc))$"
+    for _ in range(4):
+        cleaned = re.sub(tail, "", target, count=1, flags=re.I).strip()
+        if cleaned == target:
+            break
+        target = cleaned
+    target = re.sub(r"(?i)^the\s+", "", target).strip()
+    target = re.sub(r"(?i)\s+(?:app|application)$", "", target).strip()
+    if target.casefold() in {"", "app", "application", "program", "it", "this", "that"}:
+        return ""
+    if any(marker in target.casefold() for marker in ("http://", "https://", " website", " file", " folder")):
+        return ""
+    return target if 2 <= len(target) <= 80 else ""
+
 INFORMATIONAL_PREFIXES = (
     "how do ", "how can ", "how would ", "what is ", "what are ",
     "why ", "where ", "when ", "who ", "is ", "are ", "do ", "does ",

@@ -33,6 +33,7 @@ from myles_runtime_v9 import (
     natural_question,
     followup_action_request, refers_to_previous_result, execution_promise_text,
     behavior_feedback_request, self_capability_request, compact_task_signature,
+    app_launch_target,
 )
 from myles_model_runtime import (
     fallback_conversation, model_chat, model_health_dict, verify_with_jev,
@@ -1289,23 +1290,8 @@ def _direct_fortnite_request(raw: str) -> bool:
 
 
 def _direct_app_launch_target(raw: str) -> str:
-    """Extract a specific app from a short launch command handled by the worker."""
-    text = re.sub(r"[.!?]+$", "", str(raw or "").strip(), flags=re.S)
-    match = re.match(
-        r"(?is)^(?:please\s+)?(?:(?:can|could|would|will)\s+you\s+)?"
-        r"(?:open|launch|start|run)\s+(?:up\s+)?(.+?)"
-        r"(?:\s+(?:instead|now|please|for\s+me))?$",
-        text,
-    )
-    if not match:
-        return ""
-    target = re.sub(r"(?i)^the\s+", "", match.group(1).strip())
-    target = re.sub(r"(?i)\s+(?:app|application)$", "", target).strip()
-    if target.casefold() in {"", "app", "application", "program", "it", "this", "that"}:
-        return ""
-    if any(marker in target.casefold() for marker in ("http://", "https://", " website", " file", " folder")):
-        return ""
-    return target if 2 <= len(target) <= 80 else ""
+    """Shared app-agnostic launch intent used by chat and the worker."""
+    return app_launch_target(raw)
 
 
 def _direct_fortnite_launch() -> str:

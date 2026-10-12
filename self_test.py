@@ -15,7 +15,7 @@ def main():
     myles_common.init_db()
     cfg = myles_common.load_config()
     checks = {
-        "version": myles_common.APP_VERSION == "10.4.2",
+        "version": myles_common.APP_VERSION == "10.4.3",
         "config_loads": isinstance(cfg, dict),
         "telegram_setting_present": "telegram_enabled" in cfg,
         "root_exists": myles_common.ROOT.exists(),
@@ -159,10 +159,16 @@ def main():
     checks["generic_app_launch_bypasses_model_planner"] = (
         job_worker._direct_app_launch_target("Open Xbox app instead") == "Xbox"
         and job_worker._direct_app_launch_target("Please launch Notepad") == "Notepad"
+        and job_worker._direct_app_launch_target("I want you to open the Xbox app") == "Xbox"
+        and job_worker._direct_app_launch_target("Myles, could you please open Google Chrome for me?") == "Google Chrome"
+        and job_worker._direct_app_launch_target("Go ahead and open the Start menu") == "Start menu"
+        and myles_core._direct_app_launch_target("I need you to launch Discord now") == "Discord"
         and job_worker._direct_app_launch_target("open https://example.com") == ""
         and myles_core._direct_app_launch_target("start Fortnite now") == "Fortnite"
         and "direct verified app-launch path completed" in worker_source
         and hasattr(myles_windows, "launch_app_verified")
+        and "Get-StartApps" in Path(myles_windows.__file__).read_text(encoding="utf-8")
+        and "_open_start_menu" in Path(myles_windows.__file__).read_text(encoding="utf-8")
     )
     checks["named_current_task_stop_is_explicit"] = (
         rt.explicit_stop_requested("Stop the current Fortnite task.") is True
