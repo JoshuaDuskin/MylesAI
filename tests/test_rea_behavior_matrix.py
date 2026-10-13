@@ -133,6 +133,17 @@ class IntentReplay(unittest.TestCase):
 
 
 class ForegroundReplay(unittest.TestCase):
+    def test_direct_key_avoids_background_queue_and_keeps_truth(self):
+        with patch.object(core, "add_message", return_value=123), \
+             patch.object(core, "_start_task") as task, \
+             patch.object(core.assisted, "execute", return_value='EVIDENCE_ID=1\nKEY_EVENTS_SENT={"keys":"ESC","effect_verified":false}') as send:
+            answer = core.handle_owner_message("Press escape", "test")
+            self.assertIn("sent", answer["reply"])
+            self.assertIn("not the resulting screen change", answer["reply"])
+            self.assertEqual(answer["kind"], "conversation")
+            task.assert_not_called()
+            send.assert_called_once()
+
     def test_key_sent_only_to_observed_foreground(self):
         windows = [{"MainWindowTitle": "Notes - Notepad",
                     "ProcessName": "notepad.exe", "Handle": 27}]
@@ -204,6 +215,19 @@ class ConversationLoopReplay(unittest.TestCase):
             _, jid = core._conversation_agent_turn("Turn game mode on", "test")
             self.assertIsNone(jid)
             self.assertEqual(execute.call_count, 1)
+
+    def test_failed_worker_launch_does_not_become_started_job(self):
+        replies = [
+            {"message": {"content": "", "tool_calls": [
+                call("start_background_job", {"prompt": "Build fixture"})]}},
+            {"message": {"content": "Worker startup failed."}},
+        ]
+        with self._mock(replies), patch.object(core, "_conversation_tool",
+              return_value="ERROR: task was created but worker could not launch: OSError. task_id=unstarted") as execute:
+            answer, jid = core._conversation_agent_turn("Build fixture", "test")
+            self.assertIsNone(jid)
+            self.assertEqual(execute.call_count, 1)
+            self.assertIn("failed", answer)
 
     def test_refused_or_malformed_calls_do_not_execute(self):
         replies = [

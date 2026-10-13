@@ -948,7 +948,7 @@ def _conversation_agent_turn(raw: str, source: str) -> tuple[str, str | None]:
                     observed_calls.add(name + json.dumps(args, sort_keys=True, default=str))
                     assisted_call_count += 1
                 result = _conversation_tool(name, args, source, turn_id=turn_id, request=raw)
-                if "task_id=" in result:
+                if name == "start_background_job" and result.startswith("STARTED task_id="):
                     started_job = result.split("task_id=", 1)[1].split(" ", 1)[0]
             messages.append({"role": "tool", "content": result})
             if name == "inspect_desktop_screen" and "VISUAL_EVIDENCE=" in result:
