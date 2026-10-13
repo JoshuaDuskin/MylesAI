@@ -91,3 +91,39 @@ both queued/active owner background jobs. Quick status/cancel commands remain
 available without loading Qwen. Work resumes after the game exits. The
 CI-approved updater already defers during gameplay. This is a targeted Myles
 resource fix; network ping, graphics driver or GPU bottlenecks can also cause lag.
+
+
+## v10.14 — same-repository tower health, NO second repository
+
+The existing signed-in owner's five-minute auto-deployment poll also runs
+`bin/tower_health_issue.py` after checking for CI-approved updates. It uses
+the **same** `JoshuaDuskin/MylesAI` repository, editing only the body of
+[Issue #49](https://github.com/JoshuaDuskin/MylesAI/issues/49).
+Editing an issue **does not create a Git commit**, trigger deployment, or
+change source code.
+
+Because `MylesAI` is a **public** GitHub repository, the issue only
+receives an extremely limited, explicitly allowlisted **public** report:
+installed commit SHA, observed core version and health, two local service
+ports, recent verified Quant-feed flag, non-sensitive worker counts (or
+null if inaccessible), and whether the private, locally stored deployment
+receipt matches the installed commit. It never uploads raw receipts, log
+contents, private tasks, trading balances, wallets, game activity, IPs,
+pairing codes, tokens, credentials, file paths or host/user names.
+
+Reporting is independent from CI/update decisions, skips active gaming,
+and is rate-limited to at most one attempt every nine minutes. Reports
+are stale 20 minutes after their timestamp and must never be treated as
+a verified live tower status after that point. The reporter requires the
+*already configured* dedicated GitHub CLI profile from
+`data/github_identity.json` authenticated as `JoshuaDuskin`, plus
+permission to edit Issue #49. It NEVER falls back to Windows' default
+GitHub token or uses another project's credentials. If dedicated GH auth
+or issue-edit permissions are missing, it records a local failure but does
+not publish anything or weaken authentication. No new repo or scheduled
+task is created. This is **sanitized reporting**, not private remote-shell
+access; a successful report is not a benchmark of game FPS or hardware.
+
+To verify from ChatGPT, fetch GitHub Issue #49 and check that its marker,
+`reported_at` freshness, `installed_commit`, and locally observed health
+are all consistent with the latest approved GitHub main release.
