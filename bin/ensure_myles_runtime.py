@@ -14,7 +14,6 @@ from pathlib import Path
 
 
 CREATE_NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)
-DETACHED_PROCESS = getattr(subprocess, "DETACHED_PROCESS", 0)
 ROOT = Path(os.environ.get("LOCALAPPDATA") or (Path.home() / "AppData" / "Local")) / "MylesAI"
 DATA = ROOT / "data"
 LOGS = ROOT / "logs"
@@ -123,13 +122,19 @@ def start_supervisor() -> int:
         log(f"Cannot start supervisor; source={SUPERVISOR.is_file()} pythonw={PYTHONW.is_file()}")
         return 0
     clear_stale_markers()
+    startupinfo = None
+    if os.name == "nt":
+        startupinfo = subprocess.STARTUPINFO()
+        startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+        startupinfo.wShowWindow = subprocess.SW_HIDE
     process = subprocess.Popen(
         [str(PYTHONW), str(SUPERVISOR)],
         cwd=str(ROOT),
         stdin=subprocess.DEVNULL,
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
-        creationflags=(CREATE_NO_WINDOW | DETACHED_PROCESS) if os.name == "nt" else 0,
+        creationflags=CREATE_NO_WINDOW if os.name == "nt" else 0,
+        startupinfo=startupinfo,
         close_fds=True,
     )
     log(f"Supervisor was absent; started launcher PID {process.pid}")
