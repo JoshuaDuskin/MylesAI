@@ -154,10 +154,11 @@ def execute(name: str, args: dict[str, Any], turn_id: str, request: str) -> str:
     try:
         eid = record_tool_evidence(EvidenceRecord(
             job_id=turn_id, tool=name, attempt=1, ok=ok,
-            outcome="observed" if ok else "not_verified",
+            outcome=("input_sent" if ok and name == "send_navigation_key" else
+                     "observed" if ok else "not_verified"),
             arguments=args, result=result,
             provenance=Provenance(source=name, authority="runtime-observation" if name in interactive.NAMES or name == "inspect_open_windows" else "local-observation", untrusted_content=True),
-            limitations=("No shell/click/typing is authorized by the assisted lane; ephemeral screenshot bytes are not saved to the evidence ledger.",),
+            limitations=("No shell/click/typing is authorized by the assisted lane; allowed key events do not establish UI state; ephemeral screenshot bytes are not saved to the evidence ledger.",),
         ))
         if not ok:
             record_unknown(turn_id, f"Inspection by {name} was not verified.", eid)
@@ -165,7 +166,9 @@ def execute(name: str, args: dict[str, Any], turn_id: str, request: str) -> str:
         ok, result = False, "TOOL_ERROR: unable to retain observation evidence."
     finally:
         try:
-            finish_tool_call(handle, ok=ok, outcome="observed" if ok else "not_verified",
+            finish_tool_call(handle, ok=ok,
+                             outcome=("input_sent" if ok and name == "send_navigation_key" else
+                                      "observed" if ok else "not_verified"),
                              result=result, evidence_id=eid)
         except Exception:
             ok, result = False, "TOOL_ERROR: lifecycle finalization failed."

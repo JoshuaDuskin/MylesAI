@@ -1,7 +1,7 @@
 """Owner-authorized, ephemeral screen observation and verified window focus.
 
-No general desktop click, keyboard injection, shell execution, or persistent
-screenshot capability is granted to the conversation model by this module.
+No general click, text typing, unrestricted keyboard injection, shell execution,
+or persistent screenshot capability is granted to the conversation model here.
 """
 from __future__ import annotations
 
@@ -33,11 +33,19 @@ BLOCK_ACTION = re.compile(
     r"\b(click|type|edit|send|share|delete|remove|press|execute|run|install|"
     r"change|fix|repair|publish|deploy|open|launch|close|stop|restart)\b", re.I
 )
+NAVIGATION_KEYS = frozenset({
+    "ESC", "TAB", "SHIFT+TAB", "CTRL+F", "CTRL+L", "WIN+D",
+    "UP", "DOWN", "LEFT", "RIGHT", "HOME", "END", "PAGEUP", "PAGEDOWN",
+})
 INTERACTIVE_TOOLS = [
     {"type":"function","function":{
         "name":"inspect_desktop_screen",
         "description":"Capture one temporary local screenshot when owner explicitly asks what is on the screen. Requires Ollama vision; protected PineTree windows block capture.",
         "parameters":{"type":"object","properties":{},"additionalProperties":False}}},
+    {"type":"function","function":{
+        "name":"send_navigation_key",
+        "description":"Send one owner-requested, allowlisted navigation key to the currently verified foreground window. No typing, arbitrary shortcuts or hidden background jobs; input delivery does not prove UI effect.",
+        "parameters":{"type":"object","properties":{"keys":{"type":"string"}},"required":["keys"]}}},
     {"type":"function","function":{
         "name":"focus_existing_window",
         "description":"Focus exactly one visible window specifically named by owner. Verify Windows foreground handle; do not launch apps, click or type.",
@@ -81,6 +89,12 @@ def authorized(name: str, request: str, args: dict[str, Any]) -> bool:
     if name == "inspect_desktop_screen":
         return not args and screen_request(request)
     target = desktop_action_request(request)
+    if name == "send_navigation_key":
+        key = str(args.get("keys") or "").upper()
+        return bool(target and target.get("kind") == "key"
+                    and key in NAVIGATION_KEYS
+                    and key == str(target.get("keys") or "").upper()
+                    and len(args) == 1)
     title = str(args.get("title") or "").strip()
     return bool(target and target.get("kind") == "focus" and title
                 and 2 <= len(title) <= 100
@@ -114,6 +128,36 @@ def focus_window(title: str, turn_id: str) -> tuple[str, bool]:
         return "TOOL_ERROR: requested window was not verified in foreground.", False
     return "WINDOW_FOCUS_VERIFIED " + json.dumps(
         {"title": str(window["MainWindowTitle"]), "handle": hwnd}, ensure_ascii=False), True
+
+
+def send_navigation_key(keys: str, turn_id: str) -> tuple[str, bool]:
+    """Deliver a limited navigation chord, not an unverified UI outcome."""
+    if not _on_windows():
+        return "TOOL_ERROR: interactive Windows desktop unavailable.", False
+    if keys.upper() not in NAVIGATION_KEYS:
+        return "TOOL_REFUSED: unsupported or unsafe shortcut.", False
+    if active_job():
+        return "TOOL_REFUSED: a running task may own the desktop.", False
+    windows = visible_windows()
+    if _protected(windows):
+        return "TOOL_REFUSED: protected PineTree window visible.", False
+    foreground = _foreground()
+    matching = [w for w in windows if int(w.get("Handle") or 0) == foreground]
+    if foreground <= 0 or len(matching) != 1:
+        return "TOOL_ERROR: no verified foreground application.", False
+    from myles_tools import desktop_key
+    try:
+        result = json.loads(desktop_key(turn_id, keys))
+    except (ValueError, TypeError):
+        return "TOOL_ERROR: Windows key delivery not verified.", False
+    if result.get("sent") is not True:
+        return "TOOL_ERROR: Windows rejected navigation key events.", False
+    # Some navigation shortcuts legitimately change foreground; only the
+    # preceding window and Windows input acknowledgement are established here.
+    return "KEY_EVENTS_SENT=" + json.dumps({
+        "keys": keys.upper(), "window": str(matching[0].get("MainWindowTitle") or ""),
+        "effect_verified": False,
+    }, ensure_ascii=False), True
 
 
 def capture_screen() -> tuple[str, bool]:
@@ -156,6 +200,8 @@ def capture_screen() -> tuple[str, bool]:
 def observe(name: str, args: dict[str, Any], turn_id: str) -> tuple[str, bool]:
     if name == "inspect_desktop_screen":
         return capture_screen()
+    if name == "send_navigation_key":
+        return send_navigation_key(str(args.get("keys") or ""), turn_id)
     if name == "focus_existing_window":
         return focus_window(str(args.get("title") or ""), turn_id)
     return "TOOL_REFUSED: unsupported assisted action.", False
