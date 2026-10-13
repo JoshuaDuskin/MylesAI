@@ -66,6 +66,13 @@ including provenance, outcome class, limitations, and a digest. Unverified
 requested effects are recorded separately as unknowns. Model prose is not
 evidence and cannot override either ledger.
 
+Each durable job also has one agent session, an optional bounded plan, and
+durable tool-call records. The model receives a compact authoritative snapshot
+of the session, plan, recent calls, evidence IDs, and open unknowns on each
+worker slice. Context compaction preserves the system contract and newest
+working turns within a fixed budget rather than allowing old chatter or tool
+logs to crowd out the current task.
+
 ## Continuous learning boundary
 
 MYLES may improve reusable tools, recovery logic, prompts, and candidate
