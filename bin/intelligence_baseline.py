@@ -64,6 +64,10 @@ def now() -> dt.datetime:
     return dt.datetime.now(dt.timezone.utc)
 
 
+def is_windows() -> bool:
+    return os.name == "nt"
+
+
 def json_file(path: Path) -> dict:
     try:
         if path.stat().st_size>150_000:
@@ -103,9 +107,11 @@ def game_active() -> bool:
 
 
 def safe_to_run() -> bool:
-    if os.name!="nt" or game_active():
+    if not is_windows() or game_active():
         return False
     if json_file(ENABLED).get("auto_update") is not True:
+        return False
+    if json_file(DATA/"remote_deploy_state.json").get("status") == "launched":
         return False
     # Reuse the owner's existing no-game, no-owner-job idle gate.
     try:
@@ -215,6 +221,13 @@ def run() -> int:
         write_json(STATE,{"installed_commit":sha,"status":"deferred_for_owner_or_game",
                           "checked_at":now().isoformat()})
         return 0
+    # A background benchmark is lower priority than user applications.
+    if is_windows():
+        try:
+            import psutil
+            psutil.Process(os.getpid()).nice(psutil.BELOW_NORMAL_PRIORITY_CLASS)
+        except Exception:
+            pass
     outcome={"schema":1,"installed_commit":sha,"checked_at":now().isoformat(),
              "status":"running","evaluation_type":"actual_installed_model_not_mock",
              "model":{"present":False,"tools_capable":False,"vision_capable":False,
@@ -274,7 +287,7 @@ def launch_if_due() -> str:
             # Never create duplicate tests. A crashed worker remains unverified
             # and is not silently represented as a completed benchmark.
             return "already_launched"
-    if os.name!="nt" or not PYTHONW.is_file():
+    if not is_windows() or not PYTHONW.is_file():
         return "missing_python_runtime"
     stamp=now().isoformat()
     write_json(STATE,{"installed_commit":sha,"status":"running","checked_at":stamp})
