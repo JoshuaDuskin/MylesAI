@@ -8,12 +8,17 @@ Interactive desktop work must not flash console windows.
 
 import ctypes
 from ctypes import wintypes
+import json
 import os
 import re
 import struct
+import subprocess
 import time
 import zlib
 from pathlib import Path
+
+
+_START_APPS_CACHE: tuple[float, list[dict[str, str]]] = (0.0, [])
 
 
 def _normalized_app_name(value: str) -> str:
@@ -165,28 +170,124 @@ def _tap_key(vk: int) -> None:
     user32.keybd_event(vk, 0, 0x0002, 0)
 
 
-def _type_unicode(text: str) -> None:
-    """Type arbitrary Unicode through SendInput without a shell or clipboard."""
+def _type_unicode(text: str) -> tuple[bool, str]:
+    """Type Unicode with the native, correctly-sized Windows INPUT union.
+
+    On 64-bit Windows SendInput rejects an INPUT structure whose union omits
+    MOUSEINPUT (the largest union arm).  Returning the accepted event count
+    prevents a failed type operation from being mistaken for a launch.
+    """
     user32 = ctypes.windll.user32
 
+    ULONG_PTR = ctypes.c_size_t
+
     class KEYBDINPUT(ctypes.Structure):
-        _fields_ = [("wVk", wintypes.WORD), ("wScan", wintypes.WORD), ("dwFlags", wintypes.DWORD), ("time", wintypes.DWORD), ("dwExtraInfo", wintypes.WPARAM)]
+        _fields_ = [("wVk", wintypes.WORD), ("wScan", wintypes.WORD), ("dwFlags", wintypes.DWORD), ("time", wintypes.DWORD), ("dwExtraInfo", ULONG_PTR)]
+
+    class MOUSEINPUT(ctypes.Structure):
+        _fields_ = [
+            ("dx", ctypes.c_long), ("dy", ctypes.c_long),
+            ("mouseData", wintypes.DWORD), ("dwFlags", wintypes.DWORD),
+            ("time", wintypes.DWORD), ("dwExtraInfo", ULONG_PTR),
+        ]
+
+    class HARDWAREINPUT(ctypes.Structure):
+        _fields_ = [("uMsg", wintypes.DWORD), ("wParamL", wintypes.WORD), ("wParamH", wintypes.WORD)]
 
     class INPUT_UNION(ctypes.Union):
-        _fields_ = [("ki", KEYBDINPUT)]
+        _fields_ = [("mi", MOUSEINPUT), ("ki", KEYBDINPUT), ("hi", HARDWAREINPUT)]
 
     class INPUT(ctypes.Structure):
         _anonymous_ = ("u",)
         _fields_ = [("type", wintypes.DWORD), ("u", INPUT_UNION)]
 
     raw = str(text).encode("utf-16-le", errors="surrogatepass")
+    inputs: list[INPUT] = []
     for index in range(0, len(raw), 2):
         code_unit = int.from_bytes(raw[index:index + 2], "little")
-        events = (INPUT * 2)(
-            INPUT(type=1, ki=KEYBDINPUT(0, code_unit, 0x0004, 0, 0)),
-            INPUT(type=1, ki=KEYBDINPUT(0, code_unit, 0x0004 | 0x0002, 0, 0)),
+        inputs.append(INPUT(type=1, ki=KEYBDINPUT(0, code_unit, 0x0004, 0, 0)))
+        inputs.append(INPUT(type=1, ki=KEYBDINPUT(0, code_unit, 0x0004 | 0x0002, 0, 0)))
+    if not inputs:
+        return True, "no characters requested"
+    events = (INPUT * len(inputs))(*inputs)
+    sent = int(user32.SendInput(len(inputs), events, ctypes.sizeof(INPUT)))
+    return sent == len(inputs), f"Windows accepted {sent}/{len(inputs)} keyboard events"
+
+
+def _hidden_process_options() -> dict[str, object]:
+    if os.name != "nt":
+        return {}
+    startupinfo = subprocess.STARTUPINFO()
+    startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+    startupinfo.wShowWindow = subprocess.SW_HIDE
+    return {
+        "creationflags": getattr(subprocess, "CREATE_NO_WINDOW", 0),
+        "startupinfo": startupinfo,
+    }
+
+
+def _installed_start_apps() -> list[dict[str, str]]:
+    """Read Windows' app catalog without showing Start, cmd, or PowerShell."""
+    global _START_APPS_CACHE
+    cached_at, cached = _START_APPS_CACHE
+    if cached and time.time() - cached_at < 300:
+        return cached
+    script = (
+        "$ErrorActionPreference='Stop'; "
+        "@(Get-StartApps | ForEach-Object { [pscustomobject]@{Name=$_.Name;AppID=$_.AppID} }) "
+        "| ConvertTo-Json -Compress"
+    )
+    try:
+        proc = subprocess.run(
+            ["powershell.exe", "-NoLogo", "-NoProfile", "-NonInteractive", "-Command", script],
+            capture_output=True, text=True, errors="replace", timeout=12,
+            **_hidden_process_options(),
         )
-        user32.SendInput(2, ctypes.byref(events), ctypes.sizeof(INPUT))
+        if proc.returncode != 0:
+            return cached
+        payload = json.loads(proc.stdout or "[]")
+        if isinstance(payload, dict):
+            payload = [payload]
+        rows = [
+            {"name": str(row.get("Name") or "").strip(), "app_id": str(row.get("AppID") or "").strip()}
+            for row in payload if isinstance(row, dict) and row.get("Name") and row.get("AppID")
+        ]
+        if rows:
+            _START_APPS_CACHE = (time.time(), rows)
+            return rows
+    except Exception:
+        pass
+    return cached
+
+
+def _best_start_app(requested: str) -> dict[str, str] | None:
+    wanted = _normalized_app_name(requested).casefold()
+    tokens = _meaningful_tokens(wanted)
+    ranked: list[tuple[int, int, dict[str, str]]] = []
+    for row in _installed_start_apps():
+        name = _normalized_app_name(row.get("name", "")).casefold()
+        if not name:
+            continue
+        if name == wanted:
+            score = 100
+        elif name.startswith(wanted + " ") or wanted.startswith(name + " "):
+            score = 80
+        elif tokens and all(token in name for token in tokens):
+            score = 60
+        else:
+            continue
+        ranked.append((score, -len(name), row))
+    return max(ranked, default=(0, 0, None), key=lambda item: (item[0], item[1]))[2]
+
+
+def _activate_window(row: dict[str, object]) -> None:
+    hwnd = int(row.get("Handle") or 0)
+    if not hwnd:
+        return
+    user32 = ctypes.windll.user32
+    user32.ShowWindow(hwnd, 9)
+    user32.BringWindowToTop(hwnd)
+    user32.SetForegroundWindow(hwnd)
 
 
 def _open_start_menu() -> str:
@@ -202,7 +303,12 @@ def _open_start_menu() -> str:
 
 
 def launch_app_verified(app_name: str, timeout_seconds: int = 20) -> str:
-    """Launch any installed app through Windows Search and verify a visible window."""
+    """Launch any installed app and verify a matching visible window.
+
+    Windows' installed-app catalog is the primary generic mechanism.  Search
+    keyboard automation is only a fallback, and it is always dismissed if the
+    launch cannot be verified.
+    """
     if os.name != "nt":
         return "DESKTOP_APP_LAUNCH_UNAVAILABLE: Windows launch is only supported on the tower."
     requested = _normalized_app_name(app_name)
@@ -212,22 +318,38 @@ def launch_app_verified(app_name: str, timeout_seconds: int = 20) -> str:
         return _open_start_menu()
     existing = _matching_visible_windows(requested)
     if existing:
+        _activate_window(existing[0])
         return f"DESKTOP_APP_LAUNCH_VERIFIED: {requested} is already visibly open; window={existing[0].get('MainWindowTitle')}."
 
     before_pids = {int(row.get("Id") or 0) for row in visible_windows()}
-    _tap_key(0x5B)
-    time.sleep(0.7)
-    _type_unicode(requested)
-    time.sleep(1.0)
-    _tap_key(0x0D)
     deadline = time.time() + max(5, min(int(timeout_seconds), 45))
+    catalog_match = _best_start_app(requested)
+    launch_evidence = ""
+    if catalog_match:
+        launched, launch_evidence = _shell_open("shell:AppsFolder\\" + catalog_match["app_id"])
+        launch_evidence = f"StartApps={catalog_match['name']!r}; {launch_evidence}"
+        if not launched:
+            catalog_match = None
+    if not catalog_match:
+        _tap_key(0x5B)
+        time.sleep(0.7)
+        typed, type_evidence = _type_unicode(requested)
+        if not typed:
+            _tap_key(0x1B)
+            return f"DESKTOP_APP_LAUNCH_ERROR: Windows Search typing failed ({type_evidence})."
+        time.sleep(0.8)
+        _tap_key(0x0D)
+        launch_evidence = f"Windows Search; {type_evidence}"
     while time.time() < deadline:
         matches = _matching_visible_windows(requested)
         if matches:
             row = next((item for item in matches if int(item.get("Id") or 0) not in before_pids), matches[0])
-            return f"DESKTOP_APP_LAUNCH_VERIFIED: Opened {requested} through Windows Search; visible window={row.get('MainWindowTitle')}; process={row.get('ProcessName')}."
+            _activate_window(row)
+            return f"DESKTOP_APP_LAUNCH_VERIFIED: Opened {requested}; visible window={row.get('MainWindowTitle')}; process={row.get('ProcessName')}; method={launch_evidence}."
         time.sleep(0.75)
-    return f"DESKTOP_APP_LAUNCH_NOT_VERIFIED: Windows Search received {requested!r}, but no matching visible application window appeared. MYLES must inspect the screen or report the blocker; it must not claim success."
+    if not catalog_match:
+        _tap_key(0x1B)
+    return f"DESKTOP_APP_LAUNCH_NOT_VERIFIED: Windows received the launch request for {requested!r} ({launch_evidence}), but no matching visible application window appeared. MYLES must inspect the screen or report the blocker; it must not claim success."
 
 
 def _fortnite_visible() -> dict[str, object] | None:
