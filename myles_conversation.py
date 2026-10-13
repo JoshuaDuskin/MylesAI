@@ -41,14 +41,19 @@ def select_history(rows: list[dict[str, Any]], current: str,
     budget = max(4000, min(65000, int(max_chars)))
     newest = items[-recent:]
     older = items[:-recent]
-    relevance = keywords(current)
+    question_terms = keywords(current)
+    recent_terms: set[str] = set()
     for row in newest[-6:]:
         if row.get("role") == "user":
-            relevance.update(keywords(str(row.get("content") or "")))
+            recent_terms.update(keywords(str(row.get("content") or "")))
     ranked: list[tuple[int, int]] = []
     for index, row in enumerate(older):
         content = str(row.get("content") or "")
-        score = len(keywords(content[:3000]) & relevance)
+        tokens = keywords(content[:3000])
+        # The owner's current question outweighs frequent topics repeated in
+        # nearby history; otherwise dozens of generic turns crowd out the one
+        # old fact the owner explicitly asked to recall.
+        score = 4 * len(tokens & question_terms) + len(tokens & recent_terms)
         if score:
             ranked.append((score, index))
     ranked.sort(key=lambda pair: (-pair[0], -pair[1]))
@@ -110,5 +115,5 @@ TEMPORARY_ERRORS = ("temporar", "timeout", "timed out", "busy", "locked",
 def should_retry_observation(name: str, result: str) -> bool:
     """Exactly one retry is permitted only for transient read-only observations."""
     value = str(result or "").casefold()
-    return bool(name in READ_RETRY_TOOLS and value.startswith("TOOL_ERROR:")
+    return bool(name in READ_RETRY_TOOLS and value.startswith("tool_error:")
                 and any(term in value for term in TEMPORARY_ERRORS))
