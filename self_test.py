@@ -15,7 +15,7 @@ def main():
     myles_common.init_db()
     cfg = myles_common.load_config()
     checks = {
-        "version": myles_common.APP_VERSION == "10.7.0",
+        "version": myles_common.APP_VERSION == "10.8.0",
         "config_loads": isinstance(cfg, dict),
         "telegram_setting_present": "telegram_enabled" in cfg,
         "root_exists": myles_common.ROOT.exists(),
@@ -1012,6 +1012,12 @@ def main():
             and "also-secret" not in observed
             and refused.startswith("TOOL_REFUSED:")
         )
+    checks["visual_tools_never_queue_simple_focus"] = (
+        'if kind == "focus":' in core_source
+        and 'assisted.execute("focus_existing_window"' in core_source
+        and "interactive.consume_screen_image(result)" in core_source
+        and '"inspect_desktop_screen"' in Path(myles_common.ROOT / "myles_interactive.py").read_text(encoding="utf-8")
+    )
     checks["assisted_tool_wired_to_conversation"] = (
         "CONVERSATION_TOOLS.extend(assisted.ASSISTED_TOOLS)" in core_source
         and "assisted.execute(name, args" in core_source

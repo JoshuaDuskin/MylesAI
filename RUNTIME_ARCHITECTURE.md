@@ -137,3 +137,7 @@ restores the recorded backup if the promoted candidate cannot come back healthy.
 ## 10.7 assisted mode (source only until next owner tower update)
 
 Explicit read-only requests to inspect a text file, list a directory, or inspect open application windows can run inside the conversational agent turn. Tool authorization checks the current owner request, target, path grounding, secret paths, and PineTree isolation. Each observation has a session, tool-call lifecycle, bounded output, and retained evidence ID. Repeated calls are blocked and the per-turn budget is bounded. All mutations, shell commands, installs, desktop interactions and autonomy remain on the existing durable-job lane. This change does not install itself or change PineTree, the dashboard, or live trading.
+
+## 10.8 assisted visual inspection and verified focus
+
+Owner-requested screen inspection requires Ollama-advertised vision and an interactive Windows desktop. A PNG is captured into a private temporary file, validated by digest/size, attached to the same local model conversation, and removed immediately. Evidence stores only metadata, never image bytes. Protected PineTree windows block capture. A request to focus an already-open window now executes immediately only for one uniquely matching window and with actual foreground verification. Click, type, installs and broad automation remain durable jobs. No tower deployment occurs when this repository source is changed.
