@@ -203,7 +203,8 @@ def app_launch_target(text: str) -> str:
         target = cleaned
     target = re.sub(r"(?i)^the\s+", "", target).strip()
     target = re.sub(r"(?i)\s+(?:app|application)$", "", target).strip()
-    if target.casefold() in {"", "app", "application", "program", "it", "this", "that"}:
+    if target.casefold() in {"", "app", "application", "program", "it", "this", "that",
+                              "windows", "open windows", "running apps", "running applications"}:
         return ""
     if any(marker in target.casefold() for marker in ("http://", "https://", " website", " file", " folder")):
         return ""

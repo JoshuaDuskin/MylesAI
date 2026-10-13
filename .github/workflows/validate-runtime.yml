@@ -68,6 +68,9 @@ jobs:
       - name: Test remote deployment safety gates
         run: python -m unittest discover -s tests -p test_remote_deploy.py -v
 
+      - name: Run REA-derived conversation regression matrix
+        run: python -m unittest discover -s tests -p test_rea_behavior_matrix.py -v
+
       - name: Verify BOM-safe pairing JSON
         run: python -c "import json,tempfile,pathlib;p=pathlib.Path(tempfile.gettempdir())/'myles_pair_bom.json';p.write_bytes(b'\\xef\\xbb\\xbf{\"code\":\"TEST1234\",\"pinned\":true,\"expires_epoch\":9999999999}');d=json.loads(p.read_text(encoding='utf-8-sig'));assert d['code']=='TEST1234' and d['pinned'] is True;print('BOM pairing JSON OK')"
 

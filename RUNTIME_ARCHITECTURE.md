@@ -145,3 +145,16 @@ Owner-requested screen inspection requires Ollama-advertised vision and an inter
 ## 10.9 pull-only deployment
 
 Opt-in scheduled Windows owner task polls verified canonical GitHub main requests. Explicit, fresh, exact-parent, single-file requests can invoke only the built-in backup-and-recovery updater. Gaming and owner-work gates defer deployments. No inbound service, generic command runner, dashboard modification, PineTree change, wallet signing or live-trading activity is introduced. Logs/receipts remain local.
+
+## 10.10 REA-derived behavioral verification
+
+The behavior replay suite encodes owner-intent scenarios (ordinary speech, questions,
+read-only inspection, direct window focus, navigation and adverse tool repetition)
+using observable input/output contracts instead of guessing hosted agent internals.
+Pure, fast desktop navigation keys are now sent in the foreground conversation
+with an allowlist and verified app focus; this proves OS input-event delivery,
+not the resulting UI state. Generic typing and clicks remain tracked background
+jobs with observation and verification. The conversation tool loop permits at
+most one background job per turn and refuses repeated side-effect tools; worker
+launch failures can no longer be described as RUNNING. No PineTree/dashboard
+or live-trading changes.

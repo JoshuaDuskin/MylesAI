@@ -46,3 +46,15 @@ The run stopped with a provider-unavailable condition because the Linux process-
 ## Boundary
 
 REA can inspect shipped artifacts and observable runtime evidence. It cannot reveal Codex's private service implementation, hidden prompts, routing policies, model weights, or internal tools. MYLES therefore targets the observable contract—session continuity, tool use, visual observe-act-observe, evidence, cancellation, recovery, and truthful results—not an invented claim of one-to-one source equivalence.
+
+## 10.10 follow-up: behavioral replay, not private-model extraction
+
+The existing REA 6.4.0 artifact inspection established stable evidence,
+provenance, uncertainty and explicit limitations (see earlier sections). This
+pass translates those patterns into deterministic owner-message replay tests:
+intent must be grounded in the latest request, side effects must be bounded,
+foreground key events require actual Windows observation, and a failed worker
+launch must not be reported as running. These are REA-informed controller
+regressions; GitHub CI cannot execute the tower's installed REA binary,
+local Qwen model, or hosted Muse/Grok instances, so no such live benchmark
+result is claimed.
