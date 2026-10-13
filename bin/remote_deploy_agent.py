@@ -6,6 +6,10 @@ import os
 import re
 import subprocess
 import urllib.request
+try:
+    from bin.verified_release import verify_ci, candidate_allowed
+except ImportError:
+    from verified_release import verify_ci, candidate_allowed
 from pathlib import Path
 
 ROOT = Path(os.environ.get("LOCALAPPDATA") or (Path.home() / "AppData" / "Local")) / "MylesAI"
@@ -145,6 +149,20 @@ def idle_gate() -> str:
     if read_json(DATA / "game_mode_state.json").get("active") is True:
         return "game running"
     try:
+        import sys
+        if str(ROOT) not in sys.path:
+            sys.path.insert(0, str(ROOT))
+        from myles_common import list_jobs
+        if any(
+            str(j.get("state") or "").lower() in
+            {"running", "starting", "pending", "paused_for_game", "blocked_auth"}
+            and str(j.get("source") or "") != "continuous"
+            for j in list_jobs(100)
+        ):
+            return "owner tasks running or queued"
+    except Exception:
+        pass
+    try:
         with urllib.request.urlopen("http://127.0.0.1:8766/api/jobs", timeout=3) as res:
             jobs = json.load(res).get("jobs", [])
         if any(str(j.get("state", "")).lower() in
@@ -155,6 +173,61 @@ def idle_gate() -> str:
         # A deployment can repair an unhealthy old core.
         pass
     return ""
+
+
+def try_approved_release(head: str, state: dict) -> int:
+    """Apply only a CI-green, newer canonical GitHub main source SHA."""
+    if not SHA_RE.fullmatch(head):
+        return 1
+    installed = git("rev-parse", "HEAD").lower()
+    if installed == head:
+        return 0
+    try:
+        fast_forward = git("merge-base", installed, head) == installed
+        green = bool(verify_ci(head)) if fast_forward else False
+    except Exception as exc:
+        log(f"auto-update verification unavailable: {type(exc).__name__}")
+        return 1
+    allowed, reason = candidate_allowed(head, installed, state, green, fast_forward)
+    if not allowed:
+        if state.get("auto_candidate_sha") != head or state.get("auto_candidate_reason") != reason:
+            write_json(STATE, {**state, "auto_candidate_sha": head,
+                               "auto_candidate_reason": reason, "checked_at": now()})
+            log("auto-update withheld: " + reason)
+        return 0
+    blocker = idle_gate()
+    if blocker:
+        if state.get("deferred_id") != "ci_" + head:
+            write_json(STATE, {**state, "deferred_id": "ci_" + head,
+                               "deferred_reason": blocker, "deferred_at": now()})
+            log("auto-update deferred: " + blocker)
+        return 0
+    if os.name != "nt" or not APPLY.is_file():
+        log("auto-update wrapper unavailable on this Windows tower")
+        return 1
+    rid = "ci_" + head
+    entry = {"request_id": rid, "status": "launched", "target_sha": head,
+             "marker_sha": head, "source": "ci_approved_main", "started_at": now()}
+    write_json(STATE, entry)
+    si = subprocess.STARTUPINFO()
+    si.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+    si.wShowWindow = subprocess.SW_HIDE
+    try:
+        proc = subprocess.Popen(
+            ["powershell.exe", "-NoProfile", "-ExecutionPolicy", "Bypass",
+             "-WindowStyle", "Hidden", "-File", str(APPLY),
+             "-RequestId", rid, "-ExpectedHead", head],
+            cwd=str(ROOT), stdin=subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+            startupinfo=si, creationflags=NO_WINDOW, close_fds=True)
+    except OSError as exc:
+        write_json(STATE, {**entry, "status": "failed",
+                           "reason": "wrapper launch failed", "failed_at": now()})
+        log(f"CI-approved updater could not launch: {type(exc).__name__}")
+        return 1
+    write_json(STATE, {**entry, "wrapper_pid": int(proc.pid)})
+    log(f"started CI-approved update {head[:12]} wrapper pid={proc.pid}")
+    return 0
 
 
 def poll() -> int:
@@ -190,6 +263,9 @@ def poll() -> int:
             return 0
         git("fetch", "--no-tags", CANONICAL, "refs/heads/main")
         head = git("rev-parse", "FETCH_HEAD").lower()
+        if read_json(ENABLED).get("auto_update") is True:
+            return try_approved_release(head, state)
+        # Legacy explicit request path remains for older opt-ins only.
         req = json.loads(git("show", "FETCH_HEAD:" + REQUEST_PATH))
         if not isinstance(req, dict) or req.get("action") == "idle":
             return 0

@@ -15,7 +15,7 @@ $ExitCode = 99
 $Healthy = $false
 try {
     $Updater = Join-Path $Root "UPDATE_TOWER.ps1"
-    & powershell.exe -NoProfile -ExecutionPolicy Bypass -NonInteractive -File $Updater -RemoteQuiet *> $RunLog
+    & powershell.exe -NoProfile -ExecutionPolicy Bypass -NonInteractive -File $Updater -RemoteQuiet -ExpectedHead $ExpectedHead *> $RunLog
     $ExitCode = [int]$LASTEXITCODE
     $HeadOutput = & git.exe -C $Root rev-parse HEAD 2>$null
     if ($LASTEXITCODE -eq 0) {
