@@ -270,6 +270,8 @@ def main():
         and "unload_ollama_models()" in game_watcher_main
         and "HEAVY_RECHECK_SECONDS" in game_watcher_source
         and "OLLAMA_RECHECK_SECONDS" in game_watcher_source
+        and "native_process_rows" in game_watcher_source
+        and "if not gaming:" in supervisor_source_now
     )
     checks["conversation_has_live_situational_context"] = (
         "def _conversation_runtime_context" in core_source

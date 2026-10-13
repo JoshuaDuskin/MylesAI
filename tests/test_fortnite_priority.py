@@ -46,6 +46,15 @@ class GameDetectionTests(unittest.TestCase):
         self.assertEqual(stopped,[12,13])
         self.assertEqual([x.args[0] for x in kill.call_args_list],[12,13])
 
+    def test_windows_native_fallback_handles_missing_psutil(self):
+        import sys
+        native = [{"pid":21,"name":"FortniteClient-Win64-Shipping.exe",
+                   "exe":"","cmdline":"","rss":0}]
+        with patch.dict(sys.modules, {"psutil": None}), \
+             patch.object(watcher,"native_process_rows",return_value=native):
+            rows=watcher.process_rows()
+        self.assertEqual(rows,native)
+
     def test_recheck_rate_is_bounded(self):
         self.assertGreaterEqual(watcher.CHECK_SECONDS,2)
         self.assertGreaterEqual(watcher.HEAVY_RECHECK_SECONDS,10)

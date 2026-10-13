@@ -173,6 +173,25 @@ def write_json_atomic(path: Path, value: dict[str, Any]) -> None:
     os.replace(tmp, path)
 
 
+def native_process_rows() -> list[dict[str, Any]]:
+    """Fall back to Win32 Toolhelp for Fortnite detection if psutil is absent.
+
+    This enumerates only process names. It never launches tasklist/PowerShell or
+    claims to have inspected command lines or terminated arbitrary processes.
+    """
+    if os.name != "nt":
+        return []
+    try:
+        import sys
+        if str(ROOT) not in sys.path:
+            sys.path.insert(0, str(ROOT))
+        from myles_windows import _native_process_rows
+        return [{"pid": pid, "name": name, "exe": "", "cmdline": "", "rss": 0}
+                for pid, name in _native_process_rows()]
+    except Exception:
+        return []
+
+
 def process_rows() -> list[dict[str, Any]]:
     """Read processes in-process so the watcher never flashes a console."""
     rows: list[dict[str, Any]] = []
@@ -192,7 +211,7 @@ def process_rows() -> list[dict[str, Any]]:
             except Exception:
                 pass
     except Exception:
-        pass
+        return native_process_rows()
     return rows
 
 
@@ -280,7 +299,12 @@ def stop_heavy_myles_processes() -> list[int]:
 
 
 def unload_ollama_models() -> list[str]:
-    ollama = shutil.which("ollama.exe") or shutil.which("ollama")
+    candidates = [
+        shutil.which("ollama.exe"), shutil.which("ollama"),
+        str(Path(os.environ.get("LOCALAPPDATA", "")) / "Programs" / "Ollama" / "ollama.exe"),
+        str(Path(os.environ.get("ProgramFiles", "")) / "Ollama" / "ollama.exe"),
+    ]
+    ollama = next((str(item) for item in candidates if item and Path(item).is_file()), None)
     if not ollama:
         return []
     try:
