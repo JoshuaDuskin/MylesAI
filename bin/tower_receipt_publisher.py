@@ -185,7 +185,13 @@ def _gh() -> tuple[str,dict[str,str]] | None:
     if not gh:
         return None
     env=os.environ.copy()
+    if ROOT.resolve() not in config_path.resolve().parents:
+        # Do not consume the owner's default GitHub account or another
+        # project's credential directory.
+        return None
     env["GH_CONFIG_DIR"]=str(config_path)
+    env["GH_HOST"]="github.com"
+    env.pop("GH_ENTERPRISE_TOKEN",None)
     # Prevent an inherited token from overriding the dedicated GH config.
     env.pop("GH_TOKEN",None)
     env.pop("GITHUB_TOKEN",None)
@@ -210,25 +216,30 @@ def _private_repo(gh: str, env: dict[str,str]) -> bool:
     repo_path=f"repos/{DEST}"
     code,info=_gh_json(gh,env,[repo_path])
     if code:
-        # Never create a duplicate on 403/429/connectivity failure.
-        # Repo creation requires the exact isolated owner GitHub identity.
-        if code != 1:
+        # Only create a private repo after a confirmed HTTP 404 response,
+        # never after an ambiguous 401/403/429, unavailable auth, or timeout.
+        status, raw=_run([gh,"api","--include",repo_path],env=env,timeout=12)
+        if status==0 or not re.search(r"(?m)^HTTP/\S+\s+404\b",raw):
             return False
         code,info=_gh_json(gh,env,["-X","POST","user/repos","--input","-"],
             data={"name":"MylesTowerReceipts","private":True,"auto_init":True,
                   "description":"Private, sanitized Myles tower health receipts only."})
         if code:
             return False
-    return bool(info.get("full_name")==DEST and info.get("private") is True)
-
+    return bool(info.get("full_name")==DEST and info.get("private") is True
+                and info.get("default_branch")=="main")
 
 def publish(report: dict, gh: str, env: dict[str,str]) -> bool:
     if not _private_repo(gh,env):
         return False
     path=f"repos/{DEST}/contents/{REMOTE_FILE}"
     code,existing=_gh_json(gh,env,[path])
-    if code and code!=1:
-        return False
+    if code:
+        # A missing health.json is permitted on the first publication, but
+        # auth failures must never be treated as a missing file.
+        status, raw=_run([gh,"api","--include",path],env=env,timeout=12)
+        if status==0 or not re.search(r"(?m)^HTTP/\S+\s+404\b",raw):
+            return False
     existing_sha=str(existing.get("sha") or "")
     if existing_sha and not re.fullmatch(r"[0-9a-f]{40}",existing_sha):
         return False
