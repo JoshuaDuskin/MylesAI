@@ -1,5 +1,5 @@
 [CmdletBinding()]
-param()
+param([switch]$RemoteQuiet)
 
 $ErrorActionPreference = "Stop"
 $ProgressPreference = "SilentlyContinue"
@@ -37,7 +37,7 @@ function Fail([string]$Message) {
     Write-Host "MYLES UPDATE STOPPED" -ForegroundColor Red
     Write-Host $Message -ForegroundColor Red
     Write-Host "Recovery data: $Recovery"
-    pause
+    if (-not $RemoteQuiet) { pause }
     exit 1
 }
 

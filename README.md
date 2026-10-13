@@ -51,3 +51,7 @@ The runtime also supports process/window-verified generic Windows app launch,
 deterministic cancellation/replacement, and an Ollama capability check for the
 selected model's tool and vision support. See `AGENT_STACK_AUDIT.md` for the
 file-by-file agent architecture, verified capabilities, and provider gaps.
+
+## Owner-enabled remote deployment
+
+One-time bootstrap on the Windows tower installs the current source, then run `ENABLE_REMOTE_DEPLOY.ps1`. This creates a hidden five-minute scheduled task using the existing signed-in owner account. The agent polls the canonical GitHub `main` branch and recognizes only a fresh update request committed directly on top of the target source commit. The request commit must change only `.myles-deploy/request.json`; request IDs cannot replay. There is **no inbound port or remote shell**. It defers while gaming or owner work is active and starts the existing backed-up `UPDATE_TOWER.ps1` via a fixed, noninteractive wrapper. State and logs stay on the tower. `DISABLE_REMOTE_DEPLOY.ps1` turns it off. It does not deploy merely because source code was pushed to GitHub.
