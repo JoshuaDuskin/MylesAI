@@ -234,6 +234,17 @@ def try_approved_release(head: str, state: dict) -> int:
     return 0
 
 
+def report_tower_health() -> None:
+    """Issue-only status update, never a release input or remote command."""
+    try:
+        from tower_health_issue import tick
+        outcome = tick()
+        if outcome not in {"published", "throttled", "deferred_during_game", "disabled"}:
+            log("tower health issue reporter: " + str(outcome)[:80])
+    except Exception as exc:
+        log("tower health issue reporter failure: " + type(exc).__name__)
+
+
 def poll() -> int:
     if read_json(ENABLED).get("enabled") is not True:
         return 0
@@ -329,6 +340,9 @@ def poll() -> int:
         return 1
     finally:
         held.close()
+        # This is deliberately AFTER the fetch/update decision and cannot
+        # alter the CI approval path, deployed SHA, or any repository files.
+        report_tower_health()
 
 
 if __name__ == "__main__":
