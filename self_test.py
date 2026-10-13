@@ -15,7 +15,7 @@ def main():
     myles_common.init_db()
     cfg = myles_common.load_config()
     checks = {
-        "version": myles_common.APP_VERSION == "10.4.6",
+        "version": myles_common.APP_VERSION == "10.4.7",
         "config_loads": isinstance(cfg, dict),
         "telegram_setting_present": "telegram_enabled" in cfg,
         "root_exists": myles_common.ROOT.exists(),
@@ -168,7 +168,13 @@ def main():
         and "direct verified app-launch path completed" in worker_source
         and hasattr(myles_windows, "launch_app_verified")
         and "SendInput" in Path(myles_windows.__file__).read_text(encoding="utf-8")
+        and "MOUSEINPUT" in Path(myles_windows.__file__).read_text(encoding="utf-8")
+        and "sent == len(inputs)" in Path(myles_windows.__file__).read_text(encoding="utf-8")
+        and "Get-StartApps" in Path(myles_windows.__file__).read_text(encoding="utf-8")
+        and "shell:AppsFolder" in Path(myles_windows.__file__).read_text(encoding="utf-8")
         and "_open_start_menu" in Path(myles_windows.__file__).read_text(encoding="utf-8")
+        and "result = launch_app_verified(str(target)" in core_source
+        and "I am not going to claim it opened" in core_source
     )
     windows_source = Path(myles_windows.__file__).read_text(encoding="utf-8")
     game_watcher_source = (myles_common.ROOT / "bin" / "game_mode_watch.py").read_text(encoding="utf-8")
@@ -178,8 +184,9 @@ def main():
         and "capture_desktop_png" in windows_source
         and "BitBlt" in windows_source
         and "tasklist" not in windows_source.lower()
-        and "powershell.exe" not in windows_source.lower()
-        and "Get-StartApps" not in windows_source
+        and "CREATE_NO_WINDOW" in windows_source
+        and "STARTF_USESHOWWINDOW" in windows_source
+        and "Get-StartApps" in windows_source
         and "APP_ALIASES" not in windows_source
     )
     checks["fortnite_completion_requires_visible_game"] = (
