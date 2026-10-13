@@ -15,7 +15,7 @@ def main():
     myles_common.init_db()
     cfg = myles_common.load_config()
     checks = {
-        "version": myles_common.APP_VERSION == "10.10.0",
+        "version": myles_common.APP_VERSION == "10.11.0",
         "config_loads": isinstance(cfg, dict),
         "telegram_setting_present": "telegram_enabled" in cfg,
         "root_exists": myles_common.ROOT.exists(),
@@ -233,7 +233,7 @@ def main():
         and rt.desktop_action_request("Do me a favor and dismiss Discord") == {"kind": "close", "target": "Discord"}
         and rt.desktop_action_request("Put Chrome in the front") == {"kind": "focus", "target": "Chrome"}
         and rt.desktop_action_request("Bring Discord forward") == {"kind": "focus", "target": "Discord"}
-        and "direct verified {kind} action completed" in worker_source
+        and "visually verified {kind} action completed" in worker_source
     )
     checks["named_current_task_stop_is_explicit"] = (
         rt.explicit_stop_requested("Stop the current Fortnite task.") is True
@@ -1030,6 +1030,8 @@ def main():
         '"myles_assisted.py"' in tools_source
         and '"myles_agent_contracts.py"' in tools_source
         and '"myles_evidence.py"' in tools_source
+        and '"myles_conversation.py"' in tools_source
+        and '"myles_visual_verify.py"' in tools_source
     )
 
     # --- Self-update completeness / rollback ---

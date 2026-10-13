@@ -29,6 +29,8 @@ import myles_tools as tools
 import myles_quick as quick
 import myles_assisted as assisted
 import myles_interactive as interactive
+from myles_conversation import select_history, safe_tool_reply, should_retry_observation
+from myles_agent_contracts import compact_messages
 from myles_windows import launch_app_verified, launch_fortnite_verified
 from myles_runtime_v9 import (
     deterministic_control, explicit_stop_requested, explicit_resume_requested,
@@ -427,9 +429,10 @@ def recover_job(job_id: str, reason: str = "Owner requested recovery") -> str:
 
 def _conversation_call(messages: list[dict[str, Any]]) -> dict[str, Any]:
     """One resilient local-model call with installed-model discovery and recovery."""
+    cfg = load_config()
     return model_chat(
-        load_config(),
-        messages,
+        cfg,
+        compact_messages(messages, int(cfg.get("max_context_chars", 70000))),
         tools=CONVERSATION_TOOLS,
         temperature=0.35,
     )
@@ -895,9 +898,12 @@ def _conversation_agent_turn(raw: str, source: str) -> tuple[str, str | None]:
     Tool follow-up calls remain in the same agent turn, and code-level intent
     gates prevent the local model from turning casual conversation into work.
     """
-    history = history_for_model(18)
-    if history and history[-1].get("role") == "user" and str(history[-1].get("content") or "").strip() == raw:
-        history = history[:-1]
+    # Model context retains recent conversation plus relevant older turns.
+    # Historical messages are context, never permission to execute actions.
+    history = select_history(
+        recent_messages(120), raw,
+        max_chars=int(load_config().get("conversation_history_chars", 28000))
+    )
     messages: list[dict[str, Any]] = [
         {"role": "system", "content": CONVERSATION_SYSTEM},
         {"role": "system", "content": _conversation_runtime_context()},
@@ -909,8 +915,9 @@ def _conversation_agent_turn(raw: str, source: str) -> tuple[str, str | None]:
     observed_calls: set[str] = set()
     assisted_call_count = 0
     effect_calls: set[str] = set()
+    tool_failed = False
 
-    for _step in range(3):
+    for _step in range(4):
         data = _conversation_call(messages)
         message = data.get("message") or {}
         content = clean_model_text(str(message.get("content") or ""))
@@ -921,7 +928,8 @@ def _conversation_agent_turn(raw: str, source: str) -> tuple[str, str | None]:
         messages.append(assistant_message)
 
         if not calls:
-            return (content or "I'm here."), started_job
+            return safe_tool_reply(content, any_failure=tool_failed,
+                                   started_job=bool(started_job)), started_job
 
         for call in calls[:3]:
             function = call.get("function") or {}
@@ -947,10 +955,24 @@ def _conversation_agent_turn(raw: str, source: str) -> tuple[str, str | None]:
                 if name in assisted.TOOL_NAMES:
                     observed_calls.add(name + json.dumps(args, sort_keys=True, default=str))
                     assisted_call_count += 1
-                result = _conversation_tool(name, args, source, turn_id=turn_id, request=raw)
+                try:
+                    result = _conversation_tool(name, args, source, turn_id=turn_id, request=raw)
+                except Exception as exc:
+                    result = f"TOOL_ERROR: {name} failed safely: {type(exc).__name__}"
+                if should_retry_observation(name, result):
+                    # Re-evaluate authorization for the same owner request
+                    # and target. Mutations are never blindly replayed.
+                    if _conversation_tool_authorized(name, raw, args):
+                        try:
+                            result = _conversation_tool(name, args, source,
+                                                        turn_id=turn_id, request=raw)
+                        except Exception as exc:
+                            result = f"TOOL_ERROR: read-only retry failed: {type(exc).__name__}"
                 if name == "start_background_job" and result.startswith("STARTED task_id="):
                     started_job = result.split("task_id=", 1)[1].split(" ", 1)[0]
-            messages.append({"role": "tool", "content": result})
+            if result.startswith(("TOOL_ERROR:", "TOOL_REFUSED:", "ERROR:", "REFUSED")):
+                tool_failed = True
+            messages.append({"role": "tool", "content": result[:12000]})
             if name == "inspect_desktop_screen" and "VISUAL_EVIDENCE=" in result:
                 image_message = interactive.consume_screen_image(result)
                 if image_message:
