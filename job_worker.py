@@ -40,7 +40,6 @@ TOOL_DEFS = [
     {"type":"function","function":{"name":"web_search","description":"Search the public web and return bounded source evidence. Use this for research/current public information inside a durable job before heavier browser automation.","parameters":{"type":"object","properties":{"query":{"type":"string"},"max_results":{"type":"integer","minimum":1,"maximum":8}},"required":["query"]}}},
     {"type":"function","function":{"name":"tool_inventory","description":"Return Myles's actual installed core and capability tool inventory. Use this instead of guessing what Myles can or cannot do.","parameters":{"type":"object","properties":{}}}},
     {"type":"function","function":{"name":"github_pages_publish","description":"Publish a static web workspace to GitHub Pages using the GitHub identity that is actually authenticated on this tower. Never invents a GitHub username. Creates/retargets the repository, pushes main, configures Pages, and returns the public URL. Missing GitHub authentication is surfaced as an owner auth gate.","parameters":{"type":"object","properties":{"repo_path":{"type":"string"},"repo_name":{"type":"string"}},"required":["repo_path"]}}},
-    {"type":"function","function":{"name":"configure_runtime_status_feed","description":"Configure a real sanitized public Myles runtime status feed for a dashboard repository. Use this when the owner asks a public dashboard to show live/real Myles task state. It writes status.json, publishes it under the dedicated JoshuaDuskin GitHub identity, and registers background push-on-change updates. Call this only after the dashboard files exist.","parameters":{"type":"object","properties":{"repo_path":{"type":"string"},"repo_name":{"type":"string"},"min_update_seconds":{"type":"integer","minimum":15,"maximum":300}},"required":["repo_path"]}}},
     {"type":"function","function":{"name":"git_command","description":"Run git in a repository.","parameters":{"type":"object","properties":{"repo_path":{"type":"string"},"args":{"type":"string"},"timeout_seconds":{"type":"integer"}},"required":["repo_path","args"]}}},
     {"type":"function","function":{"name":"install_python_packages","description":"Install Python packages into the Myles Python environment when a task needs them.","parameters":{"type":"object","properties":{"packages":{"type":"array","items":{"type":"string"}}},"required":["packages"]}}},
     {"type":"function","function":{"name":"system_status","description":"Read live tower time, machine, CPU, memory, disk and Ollama status.","parameters":{"type":"object","properties":{}}}},
@@ -88,7 +87,7 @@ RUNNING means the worker really exists and is producing fresh heartbeats. Comple
 For every background action job, you MUST use at least one real execution tool before giving a final answer. A text-only promise such as "I will build it", "let me start", or "I am working on it" is not work and must never be treated as completion.
 
 LIVE/PUBLIC DASHBOARD TRUTH:
-If the owner asks a public dashboard to show real/live Myles runtime or job state, static mock JavaScript is forbidden. Never use Math.random(), mock runtime objects, demo/sample/simulated task data, or comments claiming a fake structure represents live data. Build the page against a real sanitized data source and use configure_runtime_status_feed after the dashboard files exist. The public page should fetch the returned RAW_STATUS_URL (with cache-busting) rather than trying to call localhost from the owner's phone.
+If the owner asks a public dashboard to show real/live Myles runtime or job state, static mock JavaScript is forbidden. Never use Math.random(), mock runtime objects, demo/sample/simulated task data, or comments claiming a fake structure represents live data. MYLES live state comes from the authenticated tower gateway; never create a Git-backed polling/status publisher.
 
 CONTINUOUS GITHUB POLICY: remote GitHub mutation is technically blocked for continuous jobs. Build/test locally; never create or publish dashboard/status repositories.\n\nThe current job workspace and recovery context are supplied below.
 
@@ -957,7 +956,7 @@ SAFE_INTERNAL_RETRY_TOOLS = {
 MUTATING_TOOLS = {
     "run_powershell", "write_text_file", "write_generated_file", "apply_text_patch",
     "download_file", "git_command", "github_pages_publish",
-    "configure_runtime_status_feed", "install_python_packages", "browser_automation",
+    "install_python_packages", "browser_automation",
     "self_clone_candidate", "self_promote_candidate", "desktop_activate_window", "desktop_close_app",
     "desktop_click", "desktop_key", "desktop_type", "desktop_launch_app", "launch_fortnite",
 }

@@ -25,11 +25,9 @@ BIN = ROOT / "bin"
 LOGS = ROOT / "logs"
 QUANT = ROOT / "quant"
 BRIDGE = ROOT / "dashboard_bridge"
-REPO = ROOT / "dashboard_site"
 VENV = ROOT / ".venv" / "Scripts"
 PY = VENV / "python.exe"
 PYW = VENV / "pythonw.exe"
-DASHBOARD_REPO = "https://github.com/JoshuaDuskin/MylesAI.git"
 LOG = LOGS / "runtime_supervisor_v074.log"
 CONSOLE_SPAWN_LOG = LOGS / "console_spawn_audit.log"
 SUPERVISOR_PID_FILE = DATA / "runtime_supervisor_v074.pid"
@@ -734,40 +732,10 @@ def ensure_tailscale_funnel(read: str) -> str:
     return url
 
 
-def ensure_dashboard_checkout() -> bool:
-    """Keep the dashboard deployment checkout on the canonical MylesAI repo."""
-    git = shutil.which("git.exe") or shutil.which("git")
-    if not git:
-        return False
-    try:
-        if (REPO / ".git").exists():
-            origin = run([git, "-C", REPO, "remote", "get-url", "origin"], timeout=30)
-            current = ((origin.stdout if origin else "") or "").strip()
-            if "JoshuaDuskin/MylesAI.git" not in current:
-                stamp = dt.datetime.now().strftime("%Y%m%d_%H%M%S")
-                legacy = ROOT / f"dashboard_site_legacy_{stamp}"
-                REPO.replace(legacy)
-                log(f"retired legacy dashboard checkout to {legacy}")
-        if not (REPO / ".git").exists():
-            clone = run([git, "clone", "--depth", "1", "--filter=blob:none", DASHBOARD_REPO, REPO], cwd=ROOT, timeout=180)
-            if not clone or clone.returncode != 0:
-                return False
-        for args in (("remote", "set-url", "origin", DASHBOARD_REPO), ("fetch", "origin", "main"), ("checkout", "main"), ("pull", "--ff-only", "origin", "main")):
-            result = run([git, "-C", REPO, *args], timeout=120)
-            if not result or result.returncode != 0:
-                return False
-        return True
-    except Exception as exc:
-        log(f"dashboard checkout repair failed: {exc}")
-        return False
-
-
 def bridge_manifest_matches(url: str, read: str) -> bool:
-    """Return True only when the deployment manifest matches live tower state."""
-    if not ensure_dashboard_checkout():
-        return False
+    """Compare live state with the canonical checkout without invoking Git."""
     try:
-        value = json.loads((REPO / "bridge.json").read_text(encoding="utf-8", errors="replace"))
+        value = json.loads((ROOT / "bridge.json").read_text(encoding="utf-8", errors="replace"))
         manifest_url = str(value.get("url") or value.get("bridge_url") or "").rstrip("/")
         manifest_read = str(value.get("read_token") or "").strip()
         return manifest_url == str(url or "").rstrip("/") and manifest_read == str(read or "").strip()
@@ -776,45 +744,20 @@ def bridge_manifest_matches(url: str, read: str) -> bool:
 
 
 def publish_bridge(url: str, read: str) -> bool:
-    if not ensure_dashboard_checkout():
-        return False
-    git = shutil.which("git.exe") or shutil.which("git")
-    if not git:
-        return False
+    """Record a changed endpoint without running live Git from the supervisor.
+
+    The canonical updater publishes bridge.json. The normal Tailscale URL is
+    stable, so a healthy runtime never needs repository traffic. If a provider
+    genuinely changes the URL, persist an explicit pending record for the next
+    controlled update instead of flashing Git console hosts every 30 seconds.
+    """
     try:
-        status = run([git, "-C", REPO, "status", "--porcelain"])
-        dirty = status.stdout.splitlines() if status else []
-        if any(not re.search(r"(?:bridge\.json|index\.html)\s*$", row) for row in dirty):
-            return False
-        if not dirty:
-            for args in (("fetch", "origin", "main"), ("checkout", "main"), ("pull", "--ff-only", "origin", "main")):
-                result = run([git, "-C", REPO, *args], timeout=120)
-                if not result or result.returncode != 0:
-                    return False
         payload = {"url": url, "bridge_url": url, "read_token": read, "updated_at": dt.datetime.now(dt.timezone.utc).isoformat()}
-        (REPO / "bridge.json").write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
-        if not run([git, "-C", REPO, "add", "--", "bridge.json"]):
-            return False
-        diff = run([git, "-C", REPO, "diff", "--cached", "--quiet"])
-        # Unlock only this dedicated deployment checkout for the bridge publish.
-        unlock = run([git, "-C", REPO, "remote", "set-url", "--push", "origin", DASHBOARD_REPO], timeout=30)
-        if not unlock or unlock.returncode != 0:
-            return False
-        env = os.environ.copy()
-        env["MYLES_DASHBOARD_OWNER_UNLOCK"] = "1"
-        if diff and diff.returncode == 1:
-            commit = run([git, "-C", REPO, "commit", "-m", "Refresh live Myles bridge"], env=env)
-            if not commit or commit.returncode != 0:
-                return False
-            push = run([git, "-C", REPO, "push", "origin", "main"], env=env, timeout=120)
-            if not push or push.returncode != 0:
-                return False
-        return True
+        (DATA / "bridge_publish_pending.json").write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+        return bridge_manifest_matches(url, read)
     except Exception as exc:
-        log(f"bridge publish failed: {exc}")
+        log(f"bridge endpoint record failed: {exc}")
         return False
-    finally:
-        run([git, "-C", REPO, "remote", "set-url", "--push", "origin", "owner-locked://MylesAI"], timeout=30)
 
 
 def ensure_tunnel(read: str) -> str:
@@ -883,12 +826,6 @@ def ensure_tunnel(read: str) -> str:
     return url
 
 
-def lock_repo() -> None:
-    git = shutil.which("git.exe") or shutil.which("git")
-    if git and ensure_dashboard_checkout():
-        run([git, "-C", REPO, "remote", "set-url", "--push", "origin", "owner-locked://MylesAI"], timeout=30)
-
-
 SUPERVISOR_PID_FILE.write_text(str(os.getpid()), encoding="utf-8")
 log(f"supervisor started pid={os.getpid()}")
 threading.Thread(target=console_spawn_monitor, name="myles-console-spawn-monitor", daemon=True).start()
@@ -913,8 +850,6 @@ try:
             start_services(owner, read)
             if http_ok("http://127.0.0.1:8791/dashboard/health", {"X-Myles-Read": read}):
                 ensure_tunnel(read)
-            if not gaming:
-                lock_repo()
         except Exception as exc:
             log_exception("supervisor service cycle failed", exc)
         for _ in range(30):

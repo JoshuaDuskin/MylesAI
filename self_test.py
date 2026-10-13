@@ -15,7 +15,7 @@ def main():
     myles_common.init_db()
     cfg = myles_common.load_config()
     checks = {
-        "version": myles_common.APP_VERSION == "10.4.5",
+        "version": myles_common.APP_VERSION == "10.4.6",
         "config_loads": isinstance(cfg, dict),
         "telegram_setting_present": "telegram_enabled" in cfg,
         "root_exists": myles_common.ROOT.exists(),
@@ -510,13 +510,19 @@ def main():
         and isinstance(snap2.get("queued_tasks"), list)
         and "queue_count" in snap2
     )
-    checks["status_feed_nonblocking_async_present"] = (
+    checks["legacy_git_status_feed_is_retired"] = (
         hasattr(myles_tools, "runtime_status_feed_tick_async")
         and "runtime_status_feed_tick_async()" in core_source
+        and "Apply the no-Git migration" in tools_source
+        and "configure_runtime_status_feed" not in worker_source.split("TOOL_DEFS = [", 1)[1].split("]", 1)[0]
     )
-    checks["status_feed_forced_freshness_present"] = (
-        "force_refresh_seconds" in tools_source
-        and "force_due" in tools_source
+    supervisor_live_section = supervisor_source.split("def bridge_manifest_matches", 1)[1].split("def ensure_tunnel", 1)[0]
+    checks["supervisor_never_runs_live_dashboard_git"] = (
+        "dashboard_site" not in supervisor_source
+        and "fetch" not in supervisor_live_section
+        and "pull" not in supervisor_live_section
+        and "push" not in supervisor_live_section
+        and "bridge_publish_pending.json" in supervisor_source
     )
 
 
@@ -826,12 +832,13 @@ def main():
         and "workspace" not in serialized_snapshot
         and "runner_pid" not in serialized_snapshot
     )
-    checks["status_feed_background_publisher_present"] = (
+    checks["status_feed_background_publisher_retired"] = (
         hasattr(myles_tools, "configure_runtime_status_feed")
         and hasattr(myles_tools, "runtime_status_feed_tick")
         and hasattr(myles_tools, "runtime_status_feed_tick_async")
         and "runtime_status_feed_tick_async()" in core_source
-        and "configure_runtime_status_feed" in worker_source
+        and "runtime Git publishing is disabled" in tools_source
+        and '"name":"configure_runtime_status_feed"' not in worker_source
     )
     shutil.rmtree(test_ws, ignore_errors=True)
 
