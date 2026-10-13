@@ -1012,6 +1012,12 @@ def main():
             and "also-secret" not in observed
             and refused.startswith("TOOL_REFUSED:")
         )
+    checks["visual_tools_never_queue_simple_focus"] = (
+        'if kind == "focus":' in core_source
+        and 'assisted.execute("focus_existing_window"' in core_source
+        and "interactive.consume_screen_image(result)" in core_source
+        and '"inspect_desktop_screen"' in Path(myles_common.ROOT / "myles_interactive.py").read_text(encoding="utf-8")
+    )
     checks["assisted_tool_wired_to_conversation"] = (
         "CONVERSATION_TOOLS.extend(assisted.ASSISTED_TOOLS)" in core_source
         and "assisted.execute(name, args" in core_source

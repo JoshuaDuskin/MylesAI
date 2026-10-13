@@ -11,6 +11,7 @@ import hashlib
 import json
 import os
 import re
+import time
 import uuid
 from ctypes import wintypes
 from pathlib import Path
@@ -83,7 +84,7 @@ def authorized(name: str, request: str, args: dict[str, Any]) -> bool:
     title = str(args.get("title") or "").strip()
     return bool(target and target.get("kind") == "focus" and title
                 and 2 <= len(title) <= 100
-                and title.casefold() in str(target.get("target") or "").casefold()
+                and title.casefold() == str(target.get("target") or "").casefold()
                 and "pinetree" not in title.casefold())
 
 
@@ -125,6 +126,14 @@ def capture_screen() -> tuple[str, bool]:
     if _protected(visible_windows()):
         return "TOOL_REFUSED: a PineTree window is visible; capture skipped.", False
     CAPTURE_DIR.mkdir(parents=True, exist_ok=True)
+    # Remove abandoned captures from crashed/aborted conversations. Never touch
+    # any file outside this dedicated folder or without our generated prefix.
+    for stale in CAPTURE_DIR.glob("visual_*.png"):
+        try:
+            if time.time() - stale.stat().st_mtime > 300:
+                stale.unlink(missing_ok=True)
+        except OSError:
+            pass
     path = CAPTURE_DIR / ("visual_" + uuid.uuid4().hex + ".png")
     keep = False
     try:
