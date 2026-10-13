@@ -19,7 +19,9 @@ LOGS = ROOT / "logs"
 CONFIG_FILE = DATA / "config.json"
 STATE_FILE = DATA / "game_mode_state.json"
 LOG_FILE = LOGS / "game_mode_watch.log"
-CHECK_SECONDS = 1.0
+CHECK_SECONDS = 2.0
+HEAVY_RECHECK_SECONDS = 12.0
+OLLAMA_RECHECK_SECONDS = 45.0
 STATE_HEARTBEAT_SECONDS = 5.0
 EXIT_GRACE_SECONDS = 20.0
 
@@ -129,6 +131,7 @@ HEAVY_MYLES_PATTERNS = (
     re.compile(r"gmx_live\.mjs", re.I),
     re.compile(r"copy_trader_service\.mjs", re.I),
     re.compile(r"simulate_first_batch\.py", re.I),
+    re.compile(r"job_worker\.py", re.I),
 )
 
 
@@ -267,6 +270,9 @@ def stop_heavy_myles_processes() -> list[int]:
         command = " ".join([str(row.get("exe") or ""), str(row.get("cmdline") or "")])
         if pid <= 0 or pid == os.getpid():
             continue
+        # Never terminate similarly named jobs outside this Myles installation.
+        if str(ROOT).casefold() not in command.casefold():
+            continue
         if any(rx.search(command) for rx in HEAVY_MYLES_PATTERNS):
             kill_tree(pid)
             stopped.append(pid)
@@ -337,6 +343,8 @@ def main() -> int:
     last_state_write = 0.0
     last_game_seen = time.monotonic() if was_active else 0.0
     last_game = None
+    last_heavy_enforce = 0.0
+    last_model_unload = 0.0
 
     log("automatic game-mode watcher started")
     # One-time migration from older builds that hid the taskbar during games.
@@ -360,10 +368,13 @@ def main() -> int:
                 entered_at = dt.datetime.now(dt.timezone.utc).astimezone().isoformat(timespec="seconds")
                 set_config_light_mode(True, "automatic_game_detection")
                 stopped = stop_heavy_myles_processes()
+                last_heavy_enforce = now
+                unloaded = unload_ollama_models()
+                last_model_unload = now
                 log(
                     f"game detected: {game.get('name')} pid={game.get('pid')}; "
-                    f"gaming mode ON; stopped autonomous Quant/research pids={stopped}; "
-                    "owner chat/model/tool lane preserved"
+                    f"gaming mode ON; stopped Myles workers={stopped}; "
+                    f"unloaded local models={unloaded}; owner status/cancel available"
                 )
                 write_json_atomic(
                     STATE_FILE,
@@ -376,9 +387,16 @@ def main() -> int:
                 # supervisor copy from bringing a heavy worker back during a match.
                 if not config_light_mode():
                     set_config_light_mode(True, "automatic_game_detection")
-                stopped = stop_heavy_myles_processes()
-                if stopped:
-                    log(f"gaming mode enforcement stopped heavy pids={stopped}")
+                if now - last_heavy_enforce >= HEAVY_RECHECK_SECONDS:
+                    stopped = stop_heavy_myles_processes()
+                    last_heavy_enforce = now
+                    if stopped:
+                        log(f"gaming mode enforcement stopped heavy pids={stopped}")
+                if now - last_model_unload >= OLLAMA_RECHECK_SECONDS:
+                    unloaded = unload_ollama_models()
+                    last_model_unload = now
+                    if unloaded:
+                        log(f"gaming mode re-unloaded local models={unloaded}")
                 if now - last_state_write >= STATE_HEARTBEAT_SECONDS:
                     write_json_atomic(
                         STATE_FILE,
