@@ -701,6 +701,16 @@ def _desktop_action_evidence(job_id: str) -> tuple[int, int]:
     return observations, actions
 
 
+def _verified_visual_change(job_id: str, tool: str) -> bool:
+    """Look for direct visual success, not screenshots or sent input alone."""
+    return any(
+        str(row.get("event") or row.get("kind") or "") == "desktop.effect_verified"
+        and str(row.get("tool") or "") == tool
+        and int(row.get("ok") or 0) == 1
+        for row in traces_for_job(job_id, 240)
+    )
+
+
 def _verified_app_launch_evidence(job_id: str, target: str) -> bool:
     wanted = str(target or "").casefold()
     for row in traces_for_job(job_id, 240):
@@ -738,6 +748,10 @@ def completion_gaps(job_id: str, prompt: str, workspace: Path, final_text: str) 
             gaps.append("desktop-control task has no successful window/screenshot observation")
         if actions < 1:
             gaps.append("desktop-control task has no successful UI or targeted Windows action")
+
+    desktop_intent = desktop_action_request(prompt)
+    if desktop_intent and desktop_intent.get("kind") == "visual" and not _verified_visual_change(job_id, "desktop_click"):
+        gaps.append("visual click/select task has no verified before-and-after UI effect")
 
     launch_target = _direct_app_launch_target(prompt)
     if launch_target and not _verified_app_launch_evidence(job_id, launch_target):
@@ -1321,7 +1335,43 @@ def main() -> int:
                         })
                         continue
                     trace(job_id, "tool.request", json.dumps({"name": name, "args": args})[:10000], tool=name)
+                    click_before = ""
+                    click_before_ok = False
+                    if name == "desktop_click":
+                        # Do not click blindly. This model must have a real
+                        # current screenshot and vision capability to pick XY.
+                        if not bool(model_health_dict(load_config()).get("supports_vision")):
+                            messages.append({"role": "tool", "content":
+                                "TOOL_REFUSED: coordinate click needs local vision support."})
+                            continue
+                        pre_result, pre_outcome = execute_with_internal_retry(job_id, "desktop_screenshot", {})
+                        tool_calls_made += 1
+                        click_before_ok = pre_outcome.ok and bool(_desktop_image_message(
+                            "desktop_screenshot", pre_result))
+                        if not click_before_ok:
+                            messages.append({"role": "tool", "content":
+                                "TOOL_REFUSED: no valid before-action screenshot; coordinate click skipped."})
+                            continue
+                        click_before = pre_result
                     result, outcome = execute_with_internal_retry(job_id, name, args)
+                    if name == "desktop_click":
+                        after, after_outcome = execute_with_internal_retry(job_id, "desktop_screenshot", {})
+                        tool_calls_made += 1
+                        visual_ok, visual_detail = False, "After-click screenshot unavailable."
+                        if click_before_ok and outcome.ok and after_outcome.ok:
+                            visual_ok, visual_detail = verify_desktop_effect(
+                                job_id, str(job.get("prompt") or ""), click_before, after
+                            )
+                        trace(job_id, "desktop.effect_verified", visual_detail[:800],
+                              tool="desktop_click", ok=visual_ok)
+                        if after_outcome.ok:
+                            latest_image = _desktop_image_message("desktop_screenshot", after)
+                            if latest_image:
+                                messages.append(latest_image)
+                        if not visual_ok:
+                            messages.append({"role": "user", "content":
+                                "Coordinate click delivery did not verify the requested visible effect: "
+                                + visual_detail[:350] + ". Do not claim completion."})
                     if outcome.owner_gate:
                         message = str(result).split("OWNER_AUTH_REQUIRED:", 1)[1].strip()
                         if not set_job_if_owned(job_id, pid, state="blocked_auth", phase="awaiting_owner_auth", runner_pid=None, heartbeat_at=now_iso(), error=None, result=None):

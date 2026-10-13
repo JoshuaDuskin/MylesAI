@@ -216,7 +216,16 @@ def compact_messages(messages: list[dict[str, Any]], max_chars: int = 70000) -> 
         item = dict(raw)
         if isinstance(item.get("content"), str) and len(item["content"]) > 12000:
             item["content"] = item["content"][:12000] + "\n[older content bounded]"
-        size = len(json.dumps(item, ensure_ascii=False, default=str))
+        # Local screenshots are bounded separately by the vision image-byte
+        # budget; counting base64 characters as text would drop the entire
+        # user request and recent agent context before sending Ollama images.
+        # Keep the exact encoded image unchanged while using a fixed estimate
+        # for text-context compaction accounting.
+        meter = dict(item)
+        if "images" in meter:
+            images = meter.pop("images")
+            meter["_image_count"] = len(images) if isinstance(images, list) else 0
+        size = len(json.dumps(meter, ensure_ascii=False, default=str)) + 1200 * int(meter.get("_image_count", 0))
         if selected and used + size > budget:
             break
         selected.append(item)

@@ -233,7 +233,7 @@ def main():
         and rt.desktop_action_request("Do me a favor and dismiss Discord") == {"kind": "close", "target": "Discord"}
         and rt.desktop_action_request("Put Chrome in the front") == {"kind": "focus", "target": "Chrome"}
         and rt.desktop_action_request("Bring Discord forward") == {"kind": "focus", "target": "Discord"}
-        and "direct verified {kind} action completed" in worker_source
+        and "visually verified {kind} action completed" in worker_source
     )
     checks["named_current_task_stop_is_explicit"] = (
         rt.explicit_stop_requested("Stop the current Fortnite task.") is True

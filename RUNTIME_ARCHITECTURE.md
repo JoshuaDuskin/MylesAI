@@ -170,4 +170,7 @@ proof the owner's requested desktop state changed. A local vision comparison
 must report a specific, high-confidence visible effect; failures stay unknown.
 Full-desktop screenshots are refused when a protected PineTree window is visible.
 Windows acceptance diagnostics are read-only by default; live model calls are
-explicit opt-in. No dashboard or trading changes.
+explicit opt-in. Generic model-selected coordinate clicks now require a valid
+before-action screenshot and use a local before/after vision comparison. A click
+or screenshot alone never satisfies visual-effect completion. No dashboard or
+trading changes.
