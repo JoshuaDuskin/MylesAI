@@ -245,6 +245,21 @@ def report_tower_health() -> None:
         log("tower health issue reporter failure: " + type(exc).__name__)
 
 
+def start_intelligence_baseline() -> None:
+    """Schedule one local, non-mutating real-model/REA baseline after release.
+
+    Never gates, alters or authorizes any deployment. The benchmark worker has
+    its own idle/game checks and stops if the owner resumes active work.
+    """
+    try:
+        from intelligence_baseline import launch_if_due
+        result = launch_if_due()
+        if result not in {"started", "already_completed", "already_launched", "deferred"}:
+            log("intelligence baseline: " + str(result)[:75])
+    except Exception as exc:
+        log("intelligence baseline launch failed: " + type(exc).__name__)
+
+
 def poll() -> int:
     if read_json(ENABLED).get("enabled") is not True:
         return 0
@@ -343,6 +358,7 @@ def poll() -> int:
         # This is deliberately AFTER the fetch/update decision and cannot
         # alter the CI approval path, deployed SHA, or any repository files.
         report_tower_health()
+        start_intelligence_baseline()
 
 
 if __name__ == "__main__":

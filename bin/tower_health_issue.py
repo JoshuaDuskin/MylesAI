@@ -125,6 +125,18 @@ def quant_feed_verified():
         return False
 
 
+def intelligence_summary(sha):
+    """Read ONLY the allowlisted aggregate live result for public Issue #49."""
+    try:
+        try:
+            from intelligence_baseline import public_summary
+        except ImportError:
+            from bin.intelligence_baseline import public_summary
+        return public_summary(sha)
+    except Exception:
+        return {"status":"unverified"}
+
+
 def snapshot(timestamp=None):
     """Strict allowlist: no raw local content is copied to GitHub."""
     timestamp=timestamp or now()
@@ -155,6 +167,7 @@ def snapshot(timestamp=None):
         "gateway_reachable":port_up(8791),
         "quant_feed_verified_and_fresh":verified_quant,
         "worker_processes":worker_counts(),
+        "intelligence_baseline":intelligence_summary(head),
         "deployment":{
             "last_state":last if last in ALLOWED_STATES else "none_recorded",
             "target_commit":target if SHA.fullmatch(target) else None,

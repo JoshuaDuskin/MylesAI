@@ -132,6 +132,7 @@ HEAVY_MYLES_PATTERNS = (
     re.compile(r"copy_trader_service\.mjs", re.I),
     re.compile(r"simulate_first_batch\.py", re.I),
     re.compile(r"job_worker\.py", re.I),
+    re.compile(r"intelligence_baseline\.py", re.I),
 )
 
 
