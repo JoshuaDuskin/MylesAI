@@ -61,7 +61,7 @@ class VerifiedReleaseTests(unittest.TestCase):
             with patch.object(agent, "STATE", state_path), \
                  patch.object(agent, "APPLY", apply), \
                  patch.object(agent, "is_windows", return_value=True), \
-                 patch.object(agent.subprocess, "STARTUPINFO", return_value=Mock(), create=True), \
+                 patch.object(agent.subprocess, "STARTUPINFO", return_value=Mock(dwFlags=0), create=True), \
                  patch.object(agent.subprocess, "STARTF_USESHOWWINDOW", 1, create=True), \
                  patch.object(agent.subprocess, "Popen", return_value=process) as proc, \
                  patch.object(agent, "git", side_effect=lambda *args:
