@@ -163,7 +163,9 @@ or live-trading changes.
 
 The owner conversation takes up to 120 stored recent turns, prioritizes the
 latest conversation, and selectively recalls relevant older messages within a
-bounded local-model context. Historical messages never authorize actions.
+bounded local-model context. Historical messages never authorize actions. Transient read-only
+inspection failures get at most one guarded retry; mutating tools are never
+blindly replayed.
 Conversation tool calls are bounded and exceptions remain explicit unverified
 outcomes. The worker no longer treats two screenshots plus input delivery as
 proof the owner's requested desktop state changed. A local vision comparison

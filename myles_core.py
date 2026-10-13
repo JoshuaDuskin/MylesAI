@@ -29,7 +29,7 @@ import myles_tools as tools
 import myles_quick as quick
 import myles_assisted as assisted
 import myles_interactive as interactive
-from myles_conversation import select_history, safe_tool_reply
+from myles_conversation import select_history, safe_tool_reply, should_retry_observation
 from myles_agent_contracts import compact_messages
 from myles_windows import launch_app_verified, launch_fortnite_verified
 from myles_runtime_v9 import (
@@ -959,6 +959,15 @@ def _conversation_agent_turn(raw: str, source: str) -> tuple[str, str | None]:
                     result = _conversation_tool(name, args, source, turn_id=turn_id, request=raw)
                 except Exception as exc:
                     result = f"TOOL_ERROR: {name} failed safely: {type(exc).__name__}"
+                if should_retry_observation(name, result):
+                    # Re-evaluate authorization for the same owner request
+                    # and target. Mutations are never blindly replayed.
+                    if _conversation_tool_authorized(name, raw, args):
+                        try:
+                            result = _conversation_tool(name, args, source,
+                                                        turn_id=turn_id, request=raw)
+                        except Exception as exc:
+                            result = f"TOOL_ERROR: read-only retry failed: {type(exc).__name__}"
                 if name == "start_background_job" and result.startswith("STARTED task_id="):
                     started_job = result.split("task_id=", 1)[1].split(" ", 1)[0]
             if result.startswith(("TOOL_ERROR:", "TOOL_REFUSED:", "ERROR:", "REFUSED")):

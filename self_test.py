@@ -1030,6 +1030,8 @@ def main():
         '"myles_assisted.py"' in tools_source
         and '"myles_agent_contracts.py"' in tools_source
         and '"myles_evidence.py"' in tools_source
+        and '"myles_conversation.py"' in tools_source
+        and '"myles_visual_verify.py"' in tools_source
     )
 
     # --- Self-update completeness / rollback ---

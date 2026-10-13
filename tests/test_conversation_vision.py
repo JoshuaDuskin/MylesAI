@@ -10,6 +10,12 @@ import myles_visual_verify as v
 
 
 class ContextTests(unittest.TestCase):
+    def test_retries_only_transient_read_only(self):
+        self.assertTrue(c.should_retry_observation("inspect_local_file", "TOOL_ERROR: temporarily locked"))
+        self.assertFalse(c.should_retry_observation("inspect_local_file", "TOOL_ERROR: not found"))
+        self.assertFalse(c.should_retry_observation("inspect_desktop_screen", "TOOL_ERROR: busy"))
+        self.assertFalse(c.should_retry_observation("start_background_job", "TOOL_ERROR: timed out"))
+
     def test_keeps_recent_and_relevant_older_topic(self):
         rows = []
         def add(role, text):

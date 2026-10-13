@@ -92,8 +92,23 @@ def safe_tool_reply(content: str, *, any_failure: bool, started_job: bool) -> st
     if any(word in low for word in (
         "couldn't", "could not", "can't", "cannot", "failed",
         "unverified", "not verified", "didn't", "wasn't", "refused",
-        "not completed", "unable",
+        "not completed", "unable", "nothing was", "nothing started",
+        "not started", "did not", "no action",
     )):
         return answer
     return ("I couldn't verify the requested tool action. "
             "An inspection or action failed; I won't claim it succeeded.")
+
+
+READ_RETRY_TOOLS = frozenset({
+    "inspect_local_file", "inspect_local_directory", "inspect_open_windows",
+})
+TEMPORARY_ERRORS = ("temporar", "timeout", "timed out", "busy", "locked",
+                    "try again", "connection reset", "not ready")
+
+
+def should_retry_observation(name: str, result: str) -> bool:
+    """Exactly one retry is permitted only for transient read-only observations."""
+    value = str(result or "").casefold()
+    return bool(name in READ_RETRY_TOOLS and value.startswith("TOOL_ERROR:")
+                and any(term in value for term in TEMPORARY_ERRORS))
