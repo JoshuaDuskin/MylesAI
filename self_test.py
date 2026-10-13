@@ -15,7 +15,7 @@ def main():
     myles_common.init_db()
     cfg = myles_common.load_config()
     checks = {
-        "version": myles_common.APP_VERSION == "10.4.7",
+        "version": myles_common.APP_VERSION == "10.5.0",
         "config_loads": isinstance(cfg, dict),
         "telegram_setting_present": "telegram_enabled" in cfg,
         "root_exists": myles_common.ROOT.exists(),
@@ -29,6 +29,7 @@ def main():
     import job_worker
     import myles_core
     import myles_windows
+    import myles_evidence
     import myles_console
     import configure_telegram
 
@@ -41,6 +42,7 @@ def main():
     checks["quick_lookup_import"] = True
     checks["model_runtime_import"] = True
     checks["windows_action_layer_import"] = True
+    checks["typed_evidence_layer_import"] = True
     checks["conversation_fallback_is_natural"] = (
         myles_model_runtime.fallback_conversation("Yo") == "Hey — I’m here. What’s up?"
         and "task" not in myles_model_runtime.fallback_conversation("Yo").lower()
@@ -188,6 +190,8 @@ def main():
         and "STARTF_USESHOWWINDOW" in windows_source
         and "Get-StartApps" in windows_source
         and "APP_ALIASES" not in windows_source
+        and "gdi32.BitBlt.argtypes" in windows_source
+        and "gdi32.GetDIBits.argtypes" in windows_source
     )
     checks["fortnite_completion_requires_visible_game"] = (
         "_fortnite_visible" in windows_source
@@ -303,6 +307,15 @@ def main():
         and rt.deterministic_control("Stop current work.", has_active=True, has_recent_cancelled=False) == "stop"
         and rt.deterministic_control("Stop the current work.", has_active=True, has_recent_cancelled=False) == "stop"
     )
+    checks["global_stop_is_hard_control"] = (
+        rt.stop_request_scope("Stop all tasks and clear the queue") == "all"
+        and rt.stop_request_scope("I told you to quit all queue tasks and stop all tasks currently") == "all"
+        and rt.deterministic_control("Cancel every queued job", has_active=True) == "stop_all"
+        and rt.stop_request_scope("Why did you stop all tasks?") is None
+        and "def cancel_all_jobs" in core_source
+        and core_source.index("early_stop = stop_request_scope(raw)")
+            < core_source.index("direct_desktop = desktop_action_request(raw)")
+    )
     checks["casual_stop_word_not_destructive"] = (
         rt.explicit_stop_requested("I don't want you to stop working") is False
     )
@@ -321,11 +334,35 @@ def main():
     )
     checks["fortnite_bypasses_model_router"] = (
         "direct_desktop = desktop_action_request(raw)" in core_source
-        and core_source.index("direct_desktop = desktop_action_request(raw)")
-            < core_source.index('CHAT_BUSY.set()')
+        and core_source.index("early_stop = stop_request_scope(raw)")
+            < core_source.index("direct_desktop = desktop_action_request(raw)")
         and "task_result = _start_task(raw, source)" in core_source
         and rt.desktop_action_request("Open Fortnite") == {"kind": "launch", "target": "Fortnite"}
         and "FORTNITE_RUNNING" in Path(myles_windows.__file__).read_text(encoding="utf-8")
+    )
+    checks["worker_completion_uses_owner_lease"] = (
+        "set_job_if_owned(job_id, pid" in worker_source
+        and "job_owned_by(job_id, pid)" in worker_source
+        and "worker.lease_lost" in worker_source
+    )
+    checks["pending_job_launch_is_atomic"] = (
+        "def claim_job_for_launch" in Path(myles_common.__file__).read_text(encoding="utf-8")
+        and "if not claim_job_for_launch(str(job_id))" in core_source
+        and "assign_job_runner(job_id, proc.pid)" in core_source
+    )
+    checks["tool_results_have_typed_evidence"] = (
+        hasattr(myles_evidence, "EvidenceRecord")
+        and "record_tool_evidence(EvidenceRecord(" in worker_source
+        and "CREATE TABLE IF NOT EXISTS evidence" in Path(myles_common.__file__).read_text(encoding="utf-8")
+    )
+    rea_source = (myles_common.ROOT / "capabilities" / "rea_analysis.py").read_text(encoding="utf-8")
+    checks["rea_is_pinned_readonly_and_untrusted"] = (
+        "rea-agents@6.4.0" in rea_source
+        and "analyze-javascript-application" in rea_source
+        and '"untrusted_content": True' in rea_source
+        and "CREATE_NO_WINDOW" in rea_source
+        and "blocked_project_terms" in rea_source
+        and "shell=True" not in rea_source
     )
     checks["fortnite_diagnostic_is_not_shortcut"] = (
         myles_core._direct_fortnite_request("Start Fortnite now.")

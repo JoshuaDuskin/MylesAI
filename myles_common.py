@@ -10,7 +10,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-APP_VERSION = "10.4.7"
+APP_VERSION = "10.5.0"
 ROOT = Path(__file__).resolve().parent
 DATA = ROOT / "data"
 WORKSPACES = ROOT / "workspaces"
@@ -53,6 +53,7 @@ DEFAULT_CONFIG = {
     "light_mode": False,
     "planner_retry_count": 3,
     "internal_retry_budget": 8,
+    "max_desktop_image_bytes": 8388608,
     "capability_plugins_enabled": True,
     "pinetree_isolation_enabled": True,
     "blocked_project_terms": ["pinetree", "pinetreepayments", "pinetree-payments", "pinetree-payments.com", "app.pinetree-payments"],
@@ -180,6 +181,30 @@ def init_db() -> None:
             detail TEXT
         );
 
+        CREATE TABLE IF NOT EXISTS evidence(
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            job_id TEXT NOT NULL,
+            ts TEXT NOT NULL,
+            tool TEXT NOT NULL,
+            attempt INTEGER NOT NULL DEFAULT 1,
+            ok INTEGER NOT NULL,
+            outcome TEXT NOT NULL,
+            arguments_json TEXT NOT NULL,
+            result_text TEXT NOT NULL,
+            provenance_json TEXT NOT NULL,
+            limitations_json TEXT NOT NULL,
+            digest TEXT NOT NULL
+        );
+
+        CREATE TABLE IF NOT EXISTS unknowns(
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            job_id TEXT NOT NULL,
+            ts TEXT NOT NULL,
+            question TEXT NOT NULL,
+            status TEXT NOT NULL DEFAULT 'open',
+            evidence_id INTEGER
+        );
+
         CREATE TABLE IF NOT EXISTS settings(
             key TEXT PRIMARY KEY,
             value TEXT NOT NULL
@@ -281,6 +306,71 @@ def set_job(job_id: str, **fields: Any) -> None:
         con.close()
 
 
+def claim_job_for_launch(job_id: str) -> bool:
+    """Atomically reserve one pending job so duplicate monitors cannot launch it."""
+    con = connect()
+    try:
+        now = now_iso()
+        cur = con.execute(
+            "UPDATE jobs SET state='launching', phase='launching', updated_at=? "
+            "WHERE id=? AND state='pending'",
+            (now, job_id),
+        )
+        con.commit()
+        return int(cur.rowcount or 0) == 1
+    finally:
+        con.close()
+
+
+def assign_job_runner(job_id: str, runner_pid: int) -> bool:
+    """Complete the launch hand-off only if cancellation has not revoked it."""
+    con = connect()
+    try:
+        now = now_iso()
+        cur = con.execute(
+            "UPDATE jobs SET state='running', phase='launching', runner_pid=?, heartbeat_at=?, updated_at=? "
+            "WHERE id=? AND state='launching'",
+            (int(runner_pid), now, now, str(job_id)),
+        )
+        con.commit()
+        return int(cur.rowcount or 0) == 1
+    finally:
+        con.close()
+
+
+def job_owned_by(job_id: str, runner_pid: int) -> bool:
+    """Check the worker lease used to prevent stale completion publication."""
+    con = connect()
+    try:
+        row = con.execute(
+            "SELECT 1 FROM jobs WHERE id=? AND state='running' AND runner_pid=?",
+            (job_id, int(runner_pid)),
+        ).fetchone()
+        return bool(row)
+    finally:
+        con.close()
+
+
+def set_job_if_owned(job_id: str, runner_pid: int, **fields: Any) -> bool:
+    """Update a running job only while ``runner_pid`` still owns its lease."""
+    if not fields:
+        return job_owned_by(job_id, runner_pid)
+    fields["updated_at"] = now_iso()
+    cols = list(fields.keys())
+    sql = (
+        "UPDATE jobs SET " + ", ".join(f"{column}=?" for column in cols)
+        + " WHERE id=? AND state='running' AND runner_pid=?"
+    )
+    values = [fields[column] for column in cols] + [job_id, int(runner_pid)]
+    con = connect()
+    try:
+        cur = con.execute(sql, values)
+        con.commit()
+        return int(cur.rowcount or 0) == 1
+    finally:
+        con.close()
+
+
 def get_job(job_id: str) -> dict[str, Any] | None:
     con = connect()
     try:
@@ -303,7 +393,7 @@ def active_job() -> dict[str, Any] | None:
     con = connect()
     try:
         row = con.execute(
-            "SELECT * FROM jobs WHERE state IN ('running','recovering') ORDER BY created_at LIMIT 1"
+            "SELECT * FROM jobs WHERE state IN ('launching','running','recovering') ORDER BY created_at LIMIT 1"
         ).fetchone()
         return dict(row) if row else None
     finally:
@@ -380,7 +470,7 @@ def job_truth(job: dict[str, Any]) -> dict[str, Any]:
     truth_state = state
     reasons: list[str] = []
 
-    if state == "running":
+    if state in {"launching", "running"}:
         if not live:
             truth_state = "stalled"
             reasons.append("worker process is not alive")

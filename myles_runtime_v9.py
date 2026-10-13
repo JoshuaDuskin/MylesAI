@@ -10,6 +10,13 @@ STOP_PATTERNS = (
     r"^\s*(please\s+)?(stop|cancel|abort)\s+(what you(?:'re| are) doing|the current task|current work|the current work|this task|that task|it)\s*[.!]?\s*$",
     r"^\s*(please\s+)?(?:stop|cancel|abort)\s+(?:the\s+)?(?:current\s+)?[a-z0-9][a-z0-9 _-]{0,60}\s+(?:task|job|work)\s*[.!]?\s*$",
 )
+STOP_ALL_PATTERNS = (
+    r"\b(?:stop|cancel|abort|quit|clear|drop)\s+(?:all|every)\s+(?:(?:currently|current|running|active|pending|queued|queue)\s+)*(?:tasks?|jobs?|work|queues?)\b",
+    r"\b(?:stop|cancel|abort|quit|clear|empty)\s+(?:the\s+)?(?:entire\s+)?(?:task\s+|job\s+)?queue\b",
+    r"\b(?:stop|cancel|abort|quit)\s+(?:everything|all\s+of\s+it)\b",
+    r"\b(?:stop|cancel|abort|quit)\s+(?:all\s+)?(?:running|active)\s+(?:tasks?|jobs?|work)\b",
+    r"\b(?:stop|cancel|abort|quit)\s+current\s+(?:tasks|jobs)\b",
+)
 RESUME_PATTERNS = (
     r"\b(?:don'?t|do not)\s+stop\b",
     r"\bkeep\s+going\b",
@@ -407,12 +414,33 @@ def execution_promise_text(text: str) -> bool:
     )
     return any(re.search(p, t, flags=re.I) for p in patterns)
 
-def explicit_stop_requested(text: str) -> bool:
+def stop_request_scope(text: str) -> str | None:
+    """Return ``all`` or ``current`` only for an explicit owner cancellation.
+
+    Global cancellation language is intentionally recognized inside a longer
+    correction (for example, "I told you to stop all tasks") because it must
+    outrank desktop verbs and follow-up routing. Questions about why something
+    stopped are not cancellation commands.
+    """
     t = normalize_text(text)
     # Negative-stop language must never be treated as stop.
     if re.search(r"\b(?:don'?t|do not|never)\s+stop\b", t):
-        return False
-    return any(re.search(p, t, flags=re.I) for p in STOP_PATTERNS)
+        return None
+    if re.match(r"^(?:why|how|when|what)\b", t) and "?" in str(text or ""):
+        return None
+    if any(re.search(p, t, flags=re.I) for p in STOP_ALL_PATTERNS):
+        return "all"
+    if any(re.search(p, t, flags=re.I) for p in STOP_PATTERNS):
+        return "current"
+    embedded_current = (
+        r"\b(?:i\s+(?:said|told|asked)\s+you\s+to\s+|please\s+)"
+        r"(?:stop|cancel|abort)\s+(?:what you(?:'re| are) doing|the current task|current work|this task|that task|it)\b"
+    )
+    return "current" if re.search(embedded_current, t, flags=re.I) else None
+
+
+def explicit_stop_requested(text: str) -> bool:
+    return stop_request_scope(text) is not None
 
 def explicit_resume_requested(text: str) -> bool:
     t = normalize_text(text)
@@ -461,8 +489,9 @@ def looks_like_status_request(text: str, *, has_active: bool = False) -> bool:
 def deterministic_control(text: str, *, has_active: bool, has_recent_cancelled: bool = False) -> str | None:
     if explicit_resume_requested(text) and has_recent_cancelled and not has_active:
         return "resume"
-    if explicit_stop_requested(text):
-        return "stop"
+    stop_scope = stop_request_scope(text)
+    if stop_scope:
+        return "stop_all" if stop_scope == "all" else "stop"
     if looks_like_status_request(text, has_active=has_active):
         return "status"
     return None

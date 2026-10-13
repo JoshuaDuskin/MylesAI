@@ -397,6 +397,32 @@ def capture_desktop_png(destination: Path) -> dict[str, object]:
         raise RuntimeError("desktop capture is only available on Windows")
     user32 = ctypes.windll.user32
     gdi32 = ctypes.windll.gdi32
+    # ctypes otherwise assumes 32-bit integer arguments for untyped Win32
+    # functions. GDI handles are pointer-sized; on 64-bit Windows that default
+    # raises OverflowError/ArgumentError before a screenshot can be captured.
+    user32.SetProcessDPIAware.argtypes = []
+    user32.SetProcessDPIAware.restype = wintypes.BOOL
+    user32.GetSystemMetrics.argtypes = [ctypes.c_int]
+    user32.GetSystemMetrics.restype = ctypes.c_int
+    user32.GetDC.argtypes = [wintypes.HWND]
+    user32.GetDC.restype = wintypes.HDC
+    user32.ReleaseDC.argtypes = [wintypes.HWND, wintypes.HDC]
+    user32.ReleaseDC.restype = ctypes.c_int
+    gdi32.CreateCompatibleDC.argtypes = [wintypes.HDC]
+    gdi32.CreateCompatibleDC.restype = wintypes.HDC
+    gdi32.CreateCompatibleBitmap.argtypes = [wintypes.HDC, ctypes.c_int, ctypes.c_int]
+    gdi32.CreateCompatibleBitmap.restype = wintypes.HBITMAP
+    gdi32.SelectObject.argtypes = [wintypes.HDC, wintypes.HGDIOBJ]
+    gdi32.SelectObject.restype = wintypes.HGDIOBJ
+    gdi32.BitBlt.argtypes = [
+        wintypes.HDC, ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_int,
+        wintypes.HDC, ctypes.c_int, ctypes.c_int, wintypes.DWORD,
+    ]
+    gdi32.BitBlt.restype = wintypes.BOOL
+    gdi32.DeleteObject.argtypes = [wintypes.HGDIOBJ]
+    gdi32.DeleteObject.restype = wintypes.BOOL
+    gdi32.DeleteDC.argtypes = [wintypes.HDC]
+    gdi32.DeleteDC.restype = wintypes.BOOL
     user32.SetProcessDPIAware()
     left, top = int(user32.GetSystemMetrics(76)), int(user32.GetSystemMetrics(77))
     width, height = int(user32.GetSystemMetrics(78)), int(user32.GetSystemMetrics(79))
@@ -409,10 +435,11 @@ def capture_desktop_png(destination: Path) -> dict[str, object]:
     class BITMAPINFO(ctypes.Structure):
         _fields_ = [("bmiHeader", BITMAPINFOHEADER), ("bmiColors", wintypes.DWORD * 3)]
 
-    user32.GetDC.restype = wintypes.HDC
-    gdi32.CreateCompatibleDC.restype = wintypes.HDC
-    gdi32.CreateCompatibleBitmap.restype = wintypes.HBITMAP
-    gdi32.SelectObject.restype = wintypes.HGDIOBJ
+    gdi32.GetDIBits.argtypes = [
+        wintypes.HDC, wintypes.HBITMAP, wintypes.UINT, wintypes.UINT,
+        ctypes.c_void_p, ctypes.POINTER(BITMAPINFO), wintypes.UINT,
+    ]
+    gdi32.GetDIBits.restype = ctypes.c_int
     screen_dc = user32.GetDC(None)
     memory_dc = gdi32.CreateCompatibleDC(screen_dc)
     bitmap = gdi32.CreateCompatibleBitmap(screen_dc, width, height)

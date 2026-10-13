@@ -16,10 +16,13 @@ from typing import Any
 
 from myles_common import (
     ROOT, WORKSPACES, load_config, init_db, get_job, set_job, trace,
-    history_for_model, add_message, now_iso, traces_for_job, clean_model_text
+    history_for_model, add_message, now_iso, traces_for_job, clean_model_text,
+    job_owned_by, set_job_if_owned,
 )
 import myles_tools as tools
 import myles_capabilities as capabilities
+from myles_evidence import EvidenceRecord, provenance_for_tool, record_tool_evidence, record_unknown
+from myles_model_runtime import model_health_dict
 from myles_windows import launch_app_verified, launch_fortnite_verified
 from myles_runtime_v9 import (
     PlannerParseError, normalize_action_plan, parse_native_arguments,
@@ -111,10 +114,12 @@ Do not promise another report or say 'I'll message you when verified' after comp
 """
 
 
-def heartbeat(job_id: str, stop: threading.Event) -> None:
+def heartbeat(job_id: str, runner_pid: int, stop: threading.Event) -> None:
     while not stop.wait(10):
         try:
-            set_job(job_id, heartbeat_at=now_iso())
+            if not set_job_if_owned(job_id, runner_pid, heartbeat_at=now_iso()):
+                stop.set()
+                return
         except Exception:
             pass
 
@@ -138,7 +143,8 @@ def call_ollama(job_id: str, messages: list[dict]) -> dict:
             method="POST",
             headers={"Content-Type": "application/json"},
         )
-        set_job(job_id, phase="model", heartbeat_at=now_iso())
+        if not set_job_if_owned(job_id, os.getpid(), phase="model", heartbeat_at=now_iso()):
+            raise RuntimeError("Worker lease was revoked before the model request.")
         try:
             with urllib.request.urlopen(req, timeout=int(cfg["model_timeout_seconds"])) as r:
                 return json.loads(r.read().decode("utf-8"))
@@ -324,7 +330,8 @@ Attempt {attempt}/{retries}. Previous parser issue: {last_error or 'none'}.
         req = urllib.request.Request(
             cfg["ollama_url"], data=body, method="POST", headers={"Content-Type": "application/json"}
         )
-        set_job(job_id, phase="action_planner", heartbeat_at=now_iso())
+        if not set_job_if_owned(job_id, os.getpid(), phase="action_planner", heartbeat_at=now_iso()):
+            raise RuntimeError("Worker lease was revoked before action planning.")
         try:
             with urllib.request.urlopen(req, timeout=int(cfg["model_timeout_seconds"])) as r:
                 data = json.loads(r.read().decode("utf-8"))
@@ -881,7 +888,8 @@ def _launch_fortnite_direct() -> str:
 
 
 def execute_tool(job_id: str, name: str, args: dict) -> str:
-    set_job(job_id, phase=f"tool:{name}", heartbeat_at=now_iso())
+    if not set_job_if_owned(job_id, os.getpid(), phase=f"tool:{name}", heartbeat_at=now_iso()):
+        return "TOOL_CANCELLED: owner cancellation revoked this worker before execution."
     if name == "launch_fortnite":
         result = _launch_fortnite_direct()
         trace(job_id, "tool.result", result, tool=name, ok=result.startswith("FORTNITE_RUNNING"))
@@ -971,8 +979,13 @@ def _desktop_image_message(tool_name: str, result: str) -> dict[str, Any] | None
         path = Path(str(meta.get("path") or "")).resolve()
         if not path.is_file() or path.suffix.lower() != ".png":
             return None
-        # Refuse an unexpectedly huge capture rather than flooding the local model.
-        if path.stat().st_size > 25 * 1024 * 1024:
+        health = model_health_dict(load_config())
+        if not bool(health.get("supports_vision")):
+            return None
+        # Bound the multimodal payload. Oversized captures remain available as
+        # evidence on disk but are never pushed into the model context.
+        max_bytes = int(load_config().get("max_desktop_image_bytes", 8 * 1024 * 1024))
+        if path.stat().st_size > max_bytes:
             return None
         encoded = base64.b64encode(path.read_bytes()).decode("ascii")
         return {
@@ -1000,6 +1013,22 @@ def execute_with_internal_retry(job_id: str, name: str, args: dict) -> tuple[str
     for attempt in range(1, attempts + 1):
         result = execute_tool(job_id, name, args)
         outcome = classify_tool_result(result)
+        limitations: tuple[str, ...] = ()
+        if name == "desktop_screenshot" and not bool(model_health_dict(cfg).get("supports_vision")):
+            limitations = ("selected model does not advertise vision support",)
+        evidence_id = record_tool_evidence(EvidenceRecord(
+            job_id=job_id,
+            tool=name,
+            attempt=attempt,
+            ok=outcome.ok,
+            outcome=outcome.kind,
+            arguments=dict(args or {}),
+            result=result,
+            provenance=provenance_for_tool(name),
+            limitations=limitations,
+        ))
+        if outcome.kind == "not_verified":
+            record_unknown(job_id, f"Requested effect of {name} remains unverified.", evidence_id)
 
         if outcome.ok or outcome.owner_gate or outcome.refused:
             return result, outcome
@@ -1038,27 +1067,45 @@ def main() -> int:
         return 2
     job_id = sys.argv[1]
     init_db()
-    job = get_job(job_id)
+    pid = os.getpid()
+    # The parent atomically claims a pending job, spawns this worker, then
+    # records our PID. Wait briefly for that hand-off, but never resurrect a
+    # cancelled or replaced job.
+    job = None
+    deadline = time.time() + 5
+    while time.time() < deadline:
+        candidate = get_job(job_id)
+        if not candidate:
+            return 3
+        state = str(candidate.get("state") or "")
+        owner_pid = int(candidate.get("runner_pid") or 0)
+        if state == "running" and owner_pid == pid:
+            job = candidate
+            break
+        if state in {"cancelled", "completed", "failed", "blocked_auth"}:
+            return 0
+        time.sleep(0.05)
     if not job:
-        return 3
+        return 4
 
     workspace = Path(job["workspace"])
     workspace.mkdir(parents=True, exist_ok=True)
-    pid = os.getpid()
     recovery_count = int(job.get("recovery_count") or 0)
-    set_job(
+    if not set_job_if_owned(
         job_id,
+        pid,
         state="running",
         phase="starting",
         runner_pid=pid,
         started_at=now_iso(),
         heartbeat_at=now_iso(),
         error=None,
-    )
+    ):
+        return 0
     trace(job_id, "worker.started", f"pid={pid} recovery_count={recovery_count}")
 
     stop = threading.Event()
-    hb = threading.Thread(target=heartbeat, args=(job_id, stop), daemon=True)
+    hb = threading.Thread(target=heartbeat, args=(job_id, pid, stop), daemon=True)
     hb.start()
 
     previous = traces_for_job(job_id, 12)
@@ -1093,6 +1140,9 @@ def main() -> int:
         bridge_calls = 0
         cfg = load_config()
         for step in range(1, int(cfg["max_agent_steps"]) + 1):
+            if not job_owned_by(job_id, pid):
+                trace(job_id, "worker.lease_lost", "Owner cancellation or replacement revoked this worker lease.", ok=False)
+                return 0
             if step == 1:
                 direct_desktop = desktop_action_request(job["prompt"])
                 launch_target = _direct_app_launch_target(job["prompt"])
@@ -1190,7 +1240,9 @@ def main() -> int:
                         image_message = _desktop_image_message("desktop_screenshot", observed)
                         if image_message:
                             messages.append(image_message)
-            set_job(job_id, phase="model", heartbeat_at=now_iso())
+            if not set_job_if_owned(job_id, pid, phase="model", heartbeat_at=now_iso()):
+                trace(job_id, "worker.lease_lost", "Lease revoked before model step.", ok=False)
+                return 0
             trace(job_id, "agent.step", f"{step}/{cfg['max_agent_steps']}")
             data = call_ollama(job_id, messages)
             msg = data.get("message") or {}
@@ -1227,7 +1279,8 @@ def main() -> int:
                     result, outcome = execute_with_internal_retry(job_id, name, args)
                     if outcome.owner_gate:
                         message = str(result).split("OWNER_AUTH_REQUIRED:", 1)[1].strip()
-                        set_job(job_id, state="blocked_auth", phase="awaiting_owner_auth", runner_pid=None, heartbeat_at=now_iso(), error=None, result=None)
+                        if not set_job_if_owned(job_id, pid, state="blocked_auth", phase="awaiting_owner_auth", runner_pid=None, heartbeat_at=now_iso(), error=None, result=None):
+                            return 0
                         trace(job_id, "job.blocked_auth", message[:12000])
                         source = job.get("source") or "desktop"
                         auth_text = "I need one authentication step from you before I can continue: " + message
@@ -1305,7 +1358,8 @@ def main() -> int:
                     result, outcome = execute_with_internal_retry(job_id, name, args)
                     if outcome.owner_gate:
                         message = str(result).split("OWNER_AUTH_REQUIRED:", 1)[1].strip()
-                        set_job(job_id, state="blocked_auth", phase="awaiting_owner_auth", runner_pid=None, heartbeat_at=now_iso(), error=None, result=None)
+                        if not set_job_if_owned(job_id, pid, state="blocked_auth", phase="awaiting_owner_auth", runner_pid=None, heartbeat_at=now_iso(), error=None, result=None):
+                            return 0
                         trace(job_id, "job.blocked_auth", message[:12000])
                         source = job.get("source") or "desktop"
                         auth_text = "I need one authentication step from you before I can continue: " + message
@@ -1345,15 +1399,17 @@ def main() -> int:
             count = int(current.get("recovery_count") or 0) + 1
             max_recoveries = int(cfg.get("max_recoveries", 4))
             if count <= max_recoveries and (tool_calls_succeeded > 0 or current.get("material_progress_at")):
-                set_job(
+                if not set_job_if_owned(
                     job_id,
+                    pid,
                     state="pending",
                     phase="continuing_unverified",
                     runner_pid=None,
                     heartbeat_at=now_iso(),
                     recovery_count=count,
                     error=None,
-                )
+                ):
+                    return 0
                 trace(
                     job_id,
                     "job.continuation_queued",
@@ -1368,14 +1424,17 @@ def main() -> int:
             raise RuntimeError("The task required a real change, but no mutating execution tool succeeded.")
 
         owner_final = compact_owner_summary(job_id, job["prompt"], final)
-        set_job(
+        if not set_job_if_owned(
             job_id,
+            pid,
             state="completed",
             phase="completed",
             result=owner_final,
             runner_pid=None,
             heartbeat_at=now_iso(),
-        )
+        ):
+            trace(job_id, "completion.discarded", "Worker lost ownership before completion could be published.", ok=False)
+            return 0
         trace(job_id, "job.completed", owner_final[:12000])
         source = job.get("source") or "desktop"
         if source != "continuous":
@@ -1386,6 +1445,9 @@ def main() -> int:
 
     except Exception as exc:
         error = f"{type(exc).__name__}: {exc}"
+        if not job_owned_by(job_id, pid):
+            trace(job_id, "failure.discarded", "Worker lost ownership; failure was not published.", ok=False)
+            return 0
         current = get_job(job_id) or job
         cfg = load_config()
         count = int(current.get("recovery_count") or 0) + 1
@@ -1396,15 +1458,17 @@ def main() -> int:
             "timeout", "timed out", "connection", "temporar",
         ))
         if internally_retryable and count <= max_recoveries:
-            set_job(
+            if not set_job_if_owned(
                 job_id,
+                pid,
                 state="pending",
                 phase="auto_recovery_internal",
                 error=None,
                 runner_pid=None,
                 heartbeat_at=now_iso(),
                 recovery_count=count,
-            )
+            ):
+                return 0
             trace(
                 job_id,
                 "job.internal_recovery_queued",
@@ -1413,14 +1477,16 @@ def main() -> int:
             )
             return 0
 
-        set_job(
+        if not set_job_if_owned(
             job_id,
+            pid,
             state="failed",
             phase="failed",
             error=error,
             runner_pid=None,
             heartbeat_at=now_iso(),
-        )
+        ):
+            return 0
         trace(job_id, "job.failed", error + "\n" + traceback.format_exc())
         source = job.get("source") or "desktop"
         failure = clean_model_text(f"I hit a real execution failure on that task: {error}")

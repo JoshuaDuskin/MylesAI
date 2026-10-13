@@ -21,6 +21,7 @@ from myles_common import (
     recent_messages, messages_after, latest_message_id, history_for_model,
     get_job, list_jobs, next_pending_job, active_job,
     set_job, trace, job_truth, set_setting, get_setting, clean_model_text,
+    claim_job_for_launch, assign_job_runner,
 )
 
 import myles_capabilities as capabilities
@@ -33,7 +34,7 @@ from myles_runtime_v9 import (
     natural_question,
     followup_action_request, refers_to_previous_result, execution_promise_text,
     behavior_feedback_request, self_capability_request, compact_task_signature,
-    app_launch_target, desktop_action_request,
+    app_launch_target, desktop_action_request, stop_request_scope,
 )
 from myles_model_runtime import (
     fallback_conversation, model_chat, model_health_dict, verify_with_jev,
@@ -247,8 +248,10 @@ def _terminate_pid(pid: int | None) -> None:
             pass
 
 
-def start_job(job: dict[str, Any]) -> None:
+def start_job(job: dict[str, Any]) -> bool:
     job_id = job["id"]
+    if not claim_job_for_launch(str(job_id)):
+        return False
     flags = 0
     if os.name == "nt":
         flags = getattr(subprocess, "CREATE_NO_WINDOW", 0) | getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0)
@@ -256,12 +259,22 @@ def start_job(job: dict[str, Any]) -> None:
             flags |= getattr(subprocess, "BELOW_NORMAL_PRIORITY_CLASS", 0x00004000)
     WORKER_LOG.parent.mkdir(parents=True, exist_ok=True)
     out = open(WORKER_LOG, "a", encoding="utf-8")
-    proc = subprocess.Popen(
-        [sys.executable, str(ROOT / "job_worker.py"), job_id],
-        cwd=str(ROOT), stdout=out, stderr=out, creationflags=flags,
-    )
-    set_job(job_id, state="running", phase="launching", runner_pid=proc.pid, heartbeat_at=now_iso())
+    try:
+        proc = subprocess.Popen(
+            [sys.executable, str(ROOT / "job_worker.py"), job_id],
+            cwd=str(ROOT), stdout=out, stderr=out, creationflags=flags,
+        )
+    except Exception:
+        set_job(job_id, state="pending", phase="launch_failed", runner_pid=None, heartbeat_at=None)
+        out.close()
+        raise
+    if not assign_job_runner(job_id, proc.pid):
+        _terminate_pid(proc.pid)
+        out.close()
+        return False
+    out.close()
     trace(job_id, "worker.launched", f"pid={proc.pid}")
+    return True
 
 
 def _owner_job_summary(job: dict[str, Any]) -> str:
@@ -339,10 +352,49 @@ def cancel_job(job_id: str) -> str:
     job = get_job(job_id)
     if not job:
         return "That task was not found."
-    _terminate_pid(job.get("runner_pid"))
+    # Revoke the database lease before touching the process. Even if the
+    # process exits slowly, every conditional worker write now fails.
     set_job(job_id, state="cancelled", phase="cancelled", runner_pid=None, heartbeat_at=now_iso())
     trace(job_id, "job.cancelled", "Cancelled by owner control.")
+    _terminate_pid(job.get("runner_pid"))
     return "Stopped the current task."
+
+
+def cancel_all_jobs() -> str:
+    """Cancel every executable queue state and stop autonomous respawning."""
+    set_setting("continuous.enabled", "0")
+    set_setting("continuous.next_spawn_epoch", "0")
+    jobs = [
+        row for row in list_jobs(500)
+        if str(row.get("state") or "") in {"launching", "running", "recovering", "pending", "blocked_auth"}
+    ]
+    running = [row for row in jobs if str(row.get("state") or "") in {"launching", "running", "recovering"}]
+    queued = [row for row in jobs if str(row.get("state") or "") == "pending"]
+    blocked = [row for row in jobs if str(row.get("state") or "") == "blocked_auth"]
+    pids = sorted({int(row.get("runner_pid") or 0) for row in running if int(row.get("runner_pid") or 0) > 0})
+    # Revoke every lease first. Process termination is best effort; revoked
+    # workers cannot publish even during the small shutdown interval.
+    for row in jobs:
+        job_id = str(row.get("id") or "")
+        if not job_id:
+            continue
+        set_job(
+            job_id,
+            state="cancelled",
+            phase="owner_cancelled_all",
+            runner_pid=None,
+            heartbeat_at=now_iso(),
+            error=None,
+        )
+        trace(job_id, "job.cancelled_all", "Cancelled by the owner's global stop control.")
+    for pid in pids:
+        _terminate_pid(pid)
+    if not jobs:
+        return "There were no running or queued tasks. Continuous improvement is off."
+    return (
+        f"Stopped {len(running)} running task(s), cleared {len(queued)} queued task(s), "
+        f"and cancelled {len(blocked)} authentication-blocked task(s). Continuous improvement is off."
+    )
 
 
 def recover_job(job_id: str, reason: str = "Owner requested recovery") -> str:
@@ -1337,6 +1389,26 @@ def handle_owner_message(text: str, source: str) -> dict[str, Any]:
     if not raw:
         return {"kind": "chat", "reply": ""}
 
+    # Destructive control always outranks desktop/action parsing. Without this
+    # gate, wording such as "quit all queued tasks" can be misread as an app
+    # close command and create exactly the stale work the owner is cancelling.
+    early_stop = stop_request_scope(raw)
+    if early_stop:
+        add_message(source, "user", raw, None)
+        CHAT_BUSY.set()
+        try:
+            if early_stop == "all":
+                final = cancel_all_jobs()
+            else:
+                active = active_job()
+                if active and str(active.get("source") or "") == "continuous":
+                    set_setting("continuous.enabled", "0")
+                final = cancel_job(str(active["id"])) if active else "Nothing is actively running."
+        finally:
+            CHAT_BUSY.clear()
+        message_id = add_message(source, "assistant", final, None)
+        return {"kind": "conversation", "reply": final, "message_id": message_id}
+
     direct_desktop = desktop_action_request(raw)
     if direct_desktop:
         add_message(source, "user", raw, None)
@@ -1514,7 +1586,7 @@ def handle_owner_message(text: str, source: str) -> dict[str, Any]:
         # The language model is never allowed to stop work unless the owner's
         # latest message contains an explicit stop command. This prevents normal
         # conversation/questions from becoming destructive control actions.
-        if intent in {"stop", "replace"} and not explicit_stop_requested(raw):
+        if intent in {"stop", "stop_all", "replace"} and not explicit_stop_requested(raw):
             intent = "status" if looks_like_status_request(raw, has_active=bool(active_now)) else "chat"
             task = ""
         if intent == "resume" and not explicit_resume_requested(raw):
@@ -1583,6 +1655,9 @@ def handle_owner_message(text: str, source: str) -> dict[str, Any]:
                 set_setting("continuous.enabled", "0")
             result = cancel_job(active["id"]) if active else "Nothing is actively running."
             controller = "OWNER_ACTION=stop\n" + result
+        elif intent == "stop_all":
+            result = cancel_all_jobs()
+            controller = "OWNER_ACTION=stop_all\n" + result
         elif intent == "resume":
             result = _resume_cancelled_job(_latest_cancelled_job())
             controller = "OWNER_ACTION=resume\n" + result
@@ -1646,6 +1721,8 @@ def handle_owner_message(text: str, source: str) -> dict[str, Any]:
             elif intent == "status":
                 final = status_text()
             elif intent == "stop":
+                final = result
+            elif intent == "stop_all":
                 final = result
             elif intent == "resume":
                 final = result
