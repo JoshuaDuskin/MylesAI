@@ -141,3 +141,7 @@ Explicit read-only requests to inspect a text file, list a directory, or inspect
 ## 10.8 assisted visual inspection and verified focus
 
 Owner-requested screen inspection requires Ollama-advertised vision and an interactive Windows desktop. A PNG is captured into a private temporary file, validated by digest/size, attached to the same local model conversation, and removed immediately. Evidence stores only metadata, never image bytes. Protected PineTree windows block capture. A request to focus an already-open window now executes immediately only for one uniquely matching window and with actual foreground verification. Click, type, installs and broad automation remain durable jobs. No tower deployment occurs when this repository source is changed.
+
+## 10.9 pull-only deployment
+
+Opt-in scheduled Windows owner task polls verified canonical GitHub main requests. Explicit, fresh, exact-parent, single-file requests can invoke only the built-in backup-and-recovery updater. Gaming and owner-work gates defer deployments. No inbound service, generic command runner, dashboard modification, PineTree change, wallet signing or live-trading activity is introduced. Logs/receipts remain local.
