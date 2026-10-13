@@ -1058,6 +1058,16 @@ def configure_runtime_status_feed(
     The feed is outbound-only: Myles writes status.json in the dashboard repo and
     pushes only when meaningful state changes. Public pages can poll the raw JSON.
     """
+    # Git-backed live telemetry was retired in 10.4.6. It created a Git commit
+    # or fetch for routine chat state and spawned visible console hosts. The
+    # dashboard already reads fresher authenticated data from gateway 8791.
+    set_setting("status_feed.enabled", "0")
+    set_setting("status_feed.last_error", "Retired: live state is served by the authenticated tower gateway.")
+    return (
+        "STATUS_FEED_RETIRED: Live MYLES state is served by the authenticated "
+        "tower gateway; runtime Git publishing is disabled."
+    )
+
     refused = _guard_pinetree("configure_runtime_status_feed", repo_path, repo_name)
     if refused:
         trace(job_id, "tool.refused", refused, tool="configure_runtime_status_feed", ok=False)
@@ -1140,76 +1150,14 @@ _STATUS_FEED_THREAD_LOCK = threading.RLock()
 _STATUS_FEED_THREAD: threading.Thread | None = None
 
 def runtime_status_feed_tick() -> None:
-    """Push the canonical public status feed. Safe to run off the core monitor thread."""
-    if get_setting("status_feed.enabled", "0") != "1":
-        return
-
-    with _STATUS_FEED_LOCK:
-        try:
-            repo_raw = get_setting("status_feed.repo_path", "")
-            if not repo_raw:
-                return
-            repo = _expand(repo_raw)
-            if not repo.exists() or not (repo / ".git").exists():
-                set_setting("status_feed.last_error", "Configured repo path is unavailable.")
-                return
-
-            # The Myles status feed has one canonical public home.
-            configured_name = _canonical_myles_dashboard_repo_name(
-                get_setting("status_feed.repo_name", MYLES_DASHBOARD_CANONICAL_REPO)
-            )
-            if configured_name != MYLES_DASHBOARD_CANONICAL_REPO:
-                configured_name = MYLES_DASHBOARD_CANONICAL_REPO
-            set_setting("status_feed.repo_name", configured_name)
-
-            refused = _guard_pinetree("runtime_status_feed", str(repo), _repo_remote_text(repo))
-            if refused:
-                set_setting("status_feed.enabled", "0")
-                set_setting("status_feed.last_error", refused)
-                return
-
-            min_seconds = max(5, int(get_setting("status_feed.min_update_seconds", "8") or "8"))
-            force_seconds = max(30, int(get_setting("status_feed.force_refresh_seconds", "60") or "60"))
-            now = int(time.time())
-            last_push = int(get_setting("status_feed.last_push_epoch", "0") or "0")
-            if now - last_push < min_seconds:
-                return
-
-            snapshot = _runtime_public_snapshot()
-            digest = _status_snapshot_stable_hash(snapshot)
-            changed = digest != get_setting("status_feed.last_hash", "")
-            active_or_queued = bool(snapshot.get("current_task")) or int(snapshot.get("queue_count") or 0) > 0
-            force_due = active_or_queued and (now - last_push >= force_seconds)
-
-            if not changed and not force_due:
-                return
-
-            (repo / "status.json").write_text(json.dumps(snapshot, indent=2), encoding="utf-8")
-            result = _status_feed_git_push(repo)
-            if result in {"STATUS_FEED_PUSHED", "STATUS_FEED_NO_CHANGE"}:
-                set_setting("status_feed.last_hash", digest)
-                set_setting("status_feed.last_push_epoch", str(now))
-                set_setting("status_feed.last_success_at", now_iso())
-                set_setting("status_feed.last_error", "")
-            else:
-                set_setting("status_feed.last_error", _sanitize_public_status_text(result, 400))
-        except Exception as exc:
-            set_setting("status_feed.last_error", f"{type(exc).__name__}: {_sanitize_public_status_text(exc, 320)}")
+    """Retire the legacy Git publisher and migrate existing installations."""
+    if get_setting("status_feed.enabled", "0") == "1":
+        set_setting("status_feed.enabled", "0")
+        set_setting("status_feed.last_error", "Retired: live state is served by gateway 8791.")
 
 def runtime_status_feed_tick_async() -> None:
-    """Never let Git/GitHub status publishing block job dispatch or recovery."""
-    global _STATUS_FEED_THREAD
-    if get_setting("status_feed.enabled", "0") != "1":
-        return
-    with _STATUS_FEED_THREAD_LOCK:
-        if _STATUS_FEED_THREAD and _STATUS_FEED_THREAD.is_alive():
-            return
-        _STATUS_FEED_THREAD = threading.Thread(
-            target=runtime_status_feed_tick,
-            name="MylesStatusFeed",
-            daemon=True,
-        )
-        _STATUS_FEED_THREAD.start()
+    """Apply the no-Git migration without spawning a publisher thread."""
+    runtime_status_feed_tick()
 
 
 def install_python_packages(job_id: str, packages: list[str]) -> str:
