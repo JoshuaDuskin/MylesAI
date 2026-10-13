@@ -26,6 +26,10 @@ ID_RE = re.compile(r"[A-Za-z0-9_-]{12,64}\Z")
 NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)
 
 
+def is_windows() -> bool:
+    return os.name == "nt"
+
+
 def now() -> str:
     return dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds")
 
@@ -202,7 +206,7 @@ def try_approved_release(head: str, state: dict) -> int:
                                "deferred_reason": blocker, "deferred_at": now()})
             log("auto-update deferred: " + blocker)
         return 0
-    if os.name != "nt" or not APPLY.is_file():
+    if not is_windows() or not APPLY.is_file():
         log("auto-update wrapper unavailable on this Windows tower")
         return 1
     rid = "ci_" + head

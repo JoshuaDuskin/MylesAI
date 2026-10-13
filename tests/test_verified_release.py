@@ -60,8 +60,8 @@ class VerifiedReleaseTests(unittest.TestCase):
             process=Mock(pid=31415)
             with patch.object(agent, "STATE", state_path), \
                  patch.object(agent, "APPLY", apply), \
-                 patch.object(agent.os, "name", "nt"), \
-                 patch.object(agent.subprocess, "STARTUPINFO", return_value=Mock()), \
+                 patch.object(agent, "is_windows", return_value=True), \
+                 patch.object(agent.subprocess, "STARTUPINFO", return_value=Mock(), create=True), \
                  patch.object(agent.subprocess, "Popen", return_value=process) as proc, \
                  patch.object(agent, "git", side_effect=lambda *args:
                               OLD if args[0]=="rev-parse" else OLD), \
