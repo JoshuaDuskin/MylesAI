@@ -17,7 +17,6 @@ from pathlib import Path
 
 
 CREATE_NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)
-DETACHED_PROCESS = getattr(subprocess, "DETACHED_PROCESS", 0)
 BELOW_NORMAL_PRIORITY_CLASS = getattr(subprocess, "BELOW_NORMAL_PRIORITY_CLASS", 0x00004000)
 ROOT = Path(os.environ.get("LOCALAPPDATA") or (Path.home() / "AppData" / "Local")) / "MylesAI"
 DATA = ROOT / "data"
@@ -276,7 +275,12 @@ def hidden_popen(args, cwd: Path | None = None, stdout_path: Path | None = None,
     stdout_handle = stdout_path.open("ab") if stdout_path else subprocess.DEVNULL
     stderr_handle = stderr_path.open("ab") if stderr_path else subprocess.DEVNULL
     try:
-        flags = (CREATE_NO_WINDOW | DETACHED_PROCESS | (BELOW_NORMAL_PRIORITY_CLASS if low_priority else 0)) if os.name == "nt" else 0
+        flags = (CREATE_NO_WINDOW | (BELOW_NORMAL_PRIORITY_CLASS if low_priority else 0)) if os.name == "nt" else 0
+        startupinfo = None
+        if os.name == "nt":
+            startupinfo = subprocess.STARTUPINFO()
+            startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+            startupinfo.wShowWindow = subprocess.SW_HIDE
         return subprocess.Popen(
             [str(item) for item in args],
             cwd=str(cwd) if cwd else None,
@@ -284,6 +288,7 @@ def hidden_popen(args, cwd: Path | None = None, stdout_path: Path | None = None,
             stdout=stdout_handle,
             stderr=stderr_handle,
             creationflags=flags,
+            startupinfo=startupinfo,
             close_fds=True,
         )
     except Exception as exc:

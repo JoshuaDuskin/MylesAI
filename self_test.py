@@ -589,8 +589,14 @@ def main():
         guardian_path.exists()
         and "runtime_supervisor_v074.py" in guardian_source
         and "CREATE_NO_WINDOW" in guardian_source
-        and "DETACHED_PROCESS" in guardian_source
+        and "STARTF_USESHOWWINDOW" in guardian_source
+        and "DETACHED_PROCESS" not in guardian_source
         and "powershell.exe" not in guardian_source.lower()
+    )
+    checks["hidden_services_do_not_cancel_no_window_flag"] = (
+        "DETACHED_PROCESS" not in supervisor_source
+        and "STARTF_USESHOWWINDOW" in supervisor_source
+        and "SW_HIDE" in supervisor_source
     )
     checks["dashboard_credentials_survive_updates"] = (
         "Preserve-Or-CreateDashboardToken" in updater_source
