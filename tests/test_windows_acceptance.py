@@ -8,7 +8,7 @@ from bin import acceptance_windows as a
 
 class WindowsAcceptanceTests(unittest.TestCase):
     def test_default_does_not_capture_or_call_model(self):
-        with patch.object(a.os, "name", "nt"), \
+        with patch.object(a, "is_windows", return_value=True), \
              patch.object(a, "git_head", return_value="abc"), \
              patch.object(a, "probe_http", return_value={"ok":True}), \
              patch.object(a, "windows_snapshot", return_value={"ok":True}), \
@@ -24,7 +24,7 @@ class WindowsAcceptanceTests(unittest.TestCase):
             capture.assert_not_called()
 
     def test_disconnected_tower_is_not_pass(self):
-        with patch.object(a.os, "name", "nt"), \
+        with patch.object(a, "is_windows", return_value=True), \
              patch.object(a, "git_head", return_value="abc"), \
              patch.object(a, "probe_http", return_value={"ok":False,"reason":"ConnectionRefusedError"}), \
              patch.object(a, "windows_snapshot", return_value={"ok":False}), \
@@ -33,7 +33,7 @@ class WindowsAcceptanceTests(unittest.TestCase):
             self.assertFalse(report["pass"])
 
     def test_requested_source_mismatch_is_error(self):
-        with patch.object(a.os, "name", "nt"), \
+        with patch.object(a, "is_windows", return_value=True), \
              patch.object(a, "git_head", return_value="abc"), \
              patch.object(a, "probe_http", return_value={"ok":True}), \
              patch.object(a, "windows_snapshot", return_value={"ok":True}), \
@@ -43,7 +43,7 @@ class WindowsAcceptanceTests(unittest.TestCase):
             self.assertFalse(report["checks"]["source"]["ok"])
 
     def test_live_model_marker_only_when_explicit(self):
-        with patch.object(a.os, "name", "nt"), \
+        with patch.object(a, "is_windows", return_value=True), \
              patch.object(a, "git_head", return_value="abc"), \
              patch.object(a, "probe_http", return_value={"ok":True}), \
              patch.object(a, "windows_snapshot", return_value={"ok":True}), \

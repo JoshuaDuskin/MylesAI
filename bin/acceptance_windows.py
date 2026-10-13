@@ -35,6 +35,10 @@ def probe_http(port: int, path: str = "/health") -> dict[str, Any]:
                 "reason": type(exc).__name__}
 
 
+def is_windows() -> bool:
+    return os.name == "nt"
+
+
 def windows_snapshot() -> dict[str, Any]:
     if os.name != "nt":
         return {"ok": False, "reason": "Windows-only probe"}
@@ -63,7 +67,7 @@ def run_acceptance(*, live_model: bool = False, screen: bool = False,
     from myles_common import APP_VERSION, load_config
     from myles_model_runtime import model_health_dict
     details: dict[str, Any] = {}
-    details["platform"] = {"ok": os.name == "nt", "windows": os.name == "nt"}
+    details["platform"] = {"ok": is_windows(), "windows": is_windows()}
     head = git_head()
     details["source"] = {
         "ok": bool(head and (not expected_head or head == expected_head.lower())),
