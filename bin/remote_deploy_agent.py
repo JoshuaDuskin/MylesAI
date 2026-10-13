@@ -115,6 +115,30 @@ def validate(req: dict, head: str, parent: str, changed: str, instant: dt.dateti
     return ""
 
 
+def process_running(pid: int) -> bool:
+    """Conservatively assume a wrapper still lives if its state is unknown."""
+    try:
+        pid = int(pid)
+        if pid <= 0:
+            return True
+        if os.name == "nt":
+            import ctypes
+            kernel = ctypes.windll.kernel32
+            handle = kernel.OpenProcess(0x00100000, False, pid)  # SYNCHRONIZE
+            if not handle:
+                return True  # Access denied cannot prove a process ended.
+            try:
+                return int(kernel.WaitForSingleObject(handle, 0)) != 0
+            finally:
+                kernel.CloseHandle(handle)
+        os.kill(pid, 0)
+        return True
+    except ProcessLookupError:
+        return False
+    except (OSError, ValueError, TypeError):
+        return True
+
+
 def idle_gate() -> str:
     if read_json(DATA / "config.json").get("light_mode") is True:
         return "light mode"
@@ -156,7 +180,8 @@ def poll() -> int:
             if receipt.get("request_id") != state.get("request_id"):
                 try:
                     launched = dt.datetime.fromisoformat(str(state["started_at"]))
-                    if (dt.datetime.now(dt.timezone.utc) - launched.astimezone(dt.timezone.utc)).total_seconds() > 7200:
+                    if ((dt.datetime.now(dt.timezone.utc) - launched.astimezone(dt.timezone.utc)).total_seconds() > 7200
+                            and state.get("wrapper_pid") and not process_running(state["wrapper_pid"])):
                         write_json(STATE, {**state, "status": "failed_unverified",
                                            "finished_at": now(), "reason": "receipt missing after two hours"})
                         log("remote update timed out without a verified receipt")
@@ -200,13 +225,23 @@ def poll() -> int:
         si = subprocess.STARTUPINFO()
         si.dwFlags |= subprocess.STARTF_USESHOWWINDOW
         si.wShowWindow = subprocess.SW_HIDE
-        process = subprocess.Popen(
-            ["powershell.exe", "-NoProfile", "-ExecutionPolicy", "Bypass",
-             "-WindowStyle", "Hidden", "-File", str(APPLY),
-             "-RequestId", rid, "-ExpectedHead", head],
-            cwd=str(ROOT), stdin=subprocess.DEVNULL,
-            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-            startupinfo=si, creationflags=NO_WINDOW, close_fds=True)
+        try:
+            process = subprocess.Popen(
+                ["powershell.exe", "-NoProfile", "-ExecutionPolicy", "Bypass",
+                 "-WindowStyle", "Hidden", "-File", str(APPLY),
+                 "-RequestId", rid, "-ExpectedHead", head],
+                cwd=str(ROOT), stdin=subprocess.DEVNULL,
+                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                startupinfo=si, creationflags=NO_WINDOW, close_fds=True)
+        except OSError as exc:
+            write_json(STATE, {"request_id": rid, "status": "failed",
+                               "reason": "could not launch fixed updater",
+                               "failed_at": now(), "marker_sha": head})
+            log(f"wrapper launch failed: {type(exc).__name__}")
+            return 1
+        write_json(STATE, {"request_id": rid, "status": "launched",
+                           "target_sha": req["target_sha"], "marker_sha": head,
+                           "started_at": now(), "wrapper_pid": int(process.pid)})
         log(f"launched approved deployment {rid} pid={process.pid}")
         return 0
     except Exception as exc:

@@ -85,6 +85,12 @@ class RemoteDeployTests(unittest.TestCase):
                 git.assert_not_called()
                 spawn.assert_not_called()
 
+    def test_unknown_wrapper_process_stays_blocked(self):
+        self.assertTrue(agent.process_running(0))
+        with patch.object(agent.os, "name", "posix"), \
+             patch.object(agent.os, "kill", side_effect=ProcessLookupError):
+            self.assertFalse(agent.process_running(43210))
+
     def test_installer_is_fixed_purpose(self):
         repo = Path(__file__).resolve().parents[1]
         installer = (repo / "ENABLE_REMOTE_DEPLOY.ps1").read_text()
