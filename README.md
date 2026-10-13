@@ -136,3 +136,16 @@ Quant feed health in Issue #49 is computed using the existing gateway's
 engine, file/record freshness and generated timestamps. The raw Quant file
 does not itself contain the gateway's `_verified` metadata. The status
 publisher also bypasses environment HTTP proxies for the local core probe.
+
+
+### v10.14.2 — verified GitHub owner authorization fallback
+
+The tower reporter prefers the dedicated Myles GitHub CLI configuration. If
+that profile is not present or no longer authorized, it can use a previously
+signed-in **JoshuaDuskin** GitHub CLI profile after confirming the actual
+GitHub API identity is exactly `JoshuaDuskin`. It strips inherited GitHub
+token/config environment values, never uses a configured PineTree identity,
+and writes exclusively the existing MylesAI Issue #49. No new repository,
+OAuth bypass, unattended token creation or credential exposure. If neither
+profile is authorized to edit the issue, reporting fails closed and remains
+local until the tower account is authorized.

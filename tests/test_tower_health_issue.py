@@ -172,6 +172,44 @@ class HealthIssueTests(unittest.TestCase):
                 self.assertIsNone(issue.dedicated_gh())
                 run.assert_not_called()
 
+    def test_verified_owner_default_gh_profile_can_report_without_extra_repo(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            data=Path(tmp)
+            # No dedicated local GH profile has been configured.
+            # A verified, already-authorized owner CLI profile suffices.
+            with patch.object(issue,"DATA",data), \
+                 patch.object(issue.shutil,"which",return_value="gh"), \
+                 patch.object(issue,"execute",return_value=(0,"JoshuaDuskin\n")) as api, \
+                 patch.dict(issue.os.environ,{"GH_TOKEN":"inherited_should_never_be_used",
+                                             "GH_CONFIG_DIR":str(data/"untrusted-env")}):
+                creds=issue.dedicated_gh()
+                self.assertIsNotNone(creds)
+                self.assertEqual(creds[0],"gh")
+                self.assertNotIn("GH_TOKEN",creds[1])
+                self.assertNotIn("GH_CONFIG_DIR",creds[1])
+                api.assert_called_once()
+                self.assertEqual(api.call_args.args[0],
+                                 ["gh","api","user","--jq",".login"])
+
+    def test_non_owner_default_gh_identity_is_never_used(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            with patch.object(issue,"DATA",Path(tmp)), \
+                 patch.object(issue.shutil,"which",return_value="gh"), \
+                 patch.object(issue,"execute",return_value=(0,"PineTreePayments\n")):
+                self.assertIsNone(issue.dedicated_gh())
+
+    def test_configured_pinetree_profile_never_falls_back(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            d=Path(tmp)
+            (d/"github_identity.json").write_text(json.dumps({
+                "owner":"PineTreePayments",
+                "gh_config_dir":str(d/"PineTree-profile")}))
+            with patch.object(issue,"DATA",d), \
+                 patch.object(issue.shutil,"which",return_value="gh"), \
+                 patch.object(issue,"execute") as api:
+                self.assertIsNone(issue.dedicated_gh())
+                api.assert_not_called()
+
     def test_poll_reports_independently_of_update_decision(self):
         class Lock:
             def close(self): pass
