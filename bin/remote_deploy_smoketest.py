@@ -23,7 +23,10 @@ def git(*args: str) -> str:
 
 
 def probe() -> dict:
-    from bin.verified_release import verify_ci
+    try:
+        from bin.verified_release import verify_ci
+    except ImportError:
+        from verified_release import verify_ci
     try:
         cfg = json.loads(FLAG.read_text(encoding="utf-8-sig"))
     except (ValueError,OSError):
