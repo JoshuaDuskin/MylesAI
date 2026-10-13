@@ -14,6 +14,7 @@ UNTRUSTED_TOOLS = {"web_fetch", "web_search", "browser_automation", "rea_analyze
 @dataclass(frozen=True)
 class Provenance:
     source: str
+    authority: str = "runtime"
     untrusted_content: bool = False
 
 
@@ -40,7 +41,15 @@ def _safe_json(value: Any, limit: int) -> str:
 
 def provenance_for_tool(tool: str) -> Provenance:
     name = str(tool or "")
-    return Provenance(source=name or "unknown_tool", untrusted_content=name in UNTRUSTED_TOOLS)
+    if name.startswith("rea_"):
+        authority = "shipped-artifact"
+    elif name in {"desktop_windows", "desktop_screenshot", "desktop_activate_window", "desktop_click", "desktop_key", "desktop_type", "desktop_launch_app", "desktop_close_app", "launch_fortnite", "system_status"}:
+        authority = "runtime-observation"
+    elif name in {"web_fetch", "web_search", "browser_automation"}:
+        authority = "external-source"
+    else:
+        authority = "local-execution"
+    return Provenance(source=name or "unknown_tool", authority=authority, untrusted_content=name in UNTRUSTED_TOOLS)
 
 
 def record_tool_evidence(record: EvidenceRecord) -> int:

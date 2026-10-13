@@ -10,7 +10,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-APP_VERSION = "10.5.0"
+APP_VERSION = "10.6.0"
 ROOT = Path(__file__).resolve().parent
 DATA = ROOT / "data"
 WORKSPACES = ROOT / "workspaces"
@@ -54,6 +54,7 @@ DEFAULT_CONFIG = {
     "planner_retry_count": 3,
     "internal_retry_budget": 8,
     "max_desktop_image_bytes": 8388608,
+    "max_context_chars": 70000,
     "capability_plugins_enabled": True,
     "pinetree_isolation_enabled": True,
     "blocked_project_terms": ["pinetree", "pinetreepayments", "pinetree-payments", "pinetree-payments.com", "app.pinetree-payments"],
@@ -203,6 +204,43 @@ def init_db() -> None:
             question TEXT NOT NULL,
             status TEXT NOT NULL DEFAULT 'open',
             evidence_id INTEGER
+        );
+
+        CREATE TABLE IF NOT EXISTS agent_sessions(
+            id TEXT PRIMARY KEY,
+            job_id TEXT NOT NULL UNIQUE,
+            goal TEXT NOT NULL,
+            model TEXT NOT NULL,
+            status TEXT NOT NULL,
+            revision INTEGER NOT NULL DEFAULT 0,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        );
+
+        CREATE TABLE IF NOT EXISTS agent_plans(
+            job_id TEXT PRIMARY KEY,
+            steps_json TEXT NOT NULL,
+            state TEXT NOT NULL,
+            revision INTEGER NOT NULL DEFAULT 0,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        );
+
+        CREATE TABLE IF NOT EXISTS tool_calls(
+            id TEXT PRIMARY KEY,
+            job_id TEXT NOT NULL,
+            tool TEXT NOT NULL,
+            attempt INTEGER NOT NULL,
+            state TEXT NOT NULL,
+            ok INTEGER,
+            outcome TEXT,
+            args_json TEXT NOT NULL,
+            fingerprint TEXT NOT NULL,
+            evidence_id INTEGER,
+            result_text TEXT,
+            started_at TEXT NOT NULL,
+            finished_at TEXT,
+            updated_at TEXT NOT NULL
         );
 
         CREATE TABLE IF NOT EXISTS settings(

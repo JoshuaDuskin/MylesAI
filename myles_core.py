@@ -36,6 +36,7 @@ from myles_runtime_v9 import (
     behavior_feedback_request, self_capability_request, compact_task_signature,
     app_launch_target, desktop_action_request, stop_request_scope,
 )
+from myles_agent_contracts import cancel_open_tool_calls
 from myles_model_runtime import (
     fallback_conversation, model_chat, model_health_dict, verify_with_jev,
 )
@@ -355,6 +356,7 @@ def cancel_job(job_id: str) -> str:
     # Revoke the database lease before touching the process. Even if the
     # process exits slowly, every conditional worker write now fails.
     set_job(job_id, state="cancelled", phase="cancelled", runner_pid=None, heartbeat_at=now_iso())
+    cancel_open_tool_calls([str(job_id)])
     trace(job_id, "job.cancelled", "Cancelled by owner control.")
     _terminate_pid(job.get("runner_pid"))
     return "Stopped the current task."
@@ -387,6 +389,7 @@ def cancel_all_jobs() -> str:
             error=None,
         )
         trace(job_id, "job.cancelled_all", "Cancelled by the owner's global stop control.")
+    cancel_open_tool_calls([str(row.get("id") or "") for row in jobs])
     for pid in pids:
         _terminate_pid(pid)
     if not jobs:

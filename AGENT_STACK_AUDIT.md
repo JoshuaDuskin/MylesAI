@@ -1,6 +1,6 @@
 # MYLES Agent Stack Audit
 
-Version reviewed: 10.5.0  
+Version reviewed: 10.6.0  
 Canonical repository: `JoshuaDuskin/MylesAI`  
 Method: complete active-file inventory plus REA contract/workflow comparison
 
@@ -18,13 +18,13 @@ The local Qwen model was being asked to compensate for controller defects. It ca
 - the plugin framework had no real providers, so email, health, and home-control claims could only be aspirational;
 - the test suite had no real Windows interactive-session acceptance lane.
 
-Version 10.5.0 fixes the first six defects, enforces the vision contract, and makes unsupported providers remain visibly unsupported. It does not claim sentience and does not claim access to Codex's private source, prompts, weights, or service internals.
+Version 10.6.0 fixes the first six defects, enforces the vision contract, adds durable agent sessions/plans/context bounds, and makes unsupported providers remain visibly unsupported. It does not claim sentience and does not claim access to Codex's private source, prompts, weights, or service internals.
 
 ## REA findings applied
 
 `morluto/rea` is a reverse-engineering toolkit, not a general autonomous-agent runtime. Its useful engineering patterns are now applied to MYLES:
 
-| REA pattern | MYLES 10.5 implementation |
+| REA pattern | MYLES 10.6 implementation |
 |---|---|
 | Contracts separate from providers | Tool schemas stay separate from Windows/provider handlers |
 | Deterministic session ownership | Atomic pending-job claim plus worker PID lease |
@@ -60,7 +60,7 @@ The model proposes actions inside the loop. It is not the scheduler, queue owner
 
 This comparison uses externally observable behavior and documented design patterns. It is not a claim about private Codex internals.
 
-| Concern | Competent tool agent | MYLES 10.5 state |
+| Concern | Competent tool agent | MYLES 10.6 state |
 |---|---|---|
 | Control | Stop/cancel preempts all semantic routing | Hard gate executes before app/action parsing |
 | Planning | Model selects from typed tools | Qwen receives bounded JSON tool schemas |
@@ -93,7 +93,7 @@ This comparison uses externally observable behavior and documented design patter
 
 Everything under `legacy_archive/` is historical and must not be imported, launched, or treated as runtime truth.
 
-## What 10.5 changes
+## What 10.6 changes
 
 1. Global stop is a deterministic command even when embedded in a correction.
 2. Global stop terminates running workers and cancels pending, recovering, and blocked jobs.
@@ -104,6 +104,23 @@ Everything under `legacy_archive/` is historical and must not be imported, launc
 7. Failed outcome verification records an explicit unknown.
 8. Screenshot images are attached only if Ollama advertises vision and the capture is within the configured budget.
 9. REA analysis is pinned, read-only, windowless, shell-free, bounded, protected-path aware, and untrusted by default.
+10. Agent sessions, short plans, tool-call lifecycle records, context compaction, and authoritative live session metadata are persisted per job.
+
+## Deeper black-box reconstruction
+
+The REA CLI was actually exercised against the repository's six-file JavaScript/Quant artifact. It returned a partial JavaScript application graph, artifact digest, graph node/edge identities, semantic relation families, coverage limitations, and explicit unknowns. It then stopped before runtime-backed analysis because the host did not provide the process-ownership provider in a form REA could use. That is a useful result: the analyzer did not promote static syntax into runtime truth.
+
+The same separation now exists in MYLES:
+
+- `agent_sessions` identifies one durable owner goal and model session;
+- `agent_plans` stores at most 20 bounded steps with revision and status;
+- `tool_calls` records requested/running/succeeded/failed/cancelled attempts, fingerprints, result bounds, and evidence IDs;
+- `evidence` distinguishes runtime observation, local execution, external source, and shipped-artifact authority;
+- `unknowns` remains open until qualifying evidence resolves it;
+- `compact_messages` preserves the system contract and newest working turns within a context budget;
+- the worker receives a live session/plan/evidence/unknown snapshot on every durable job.
+
+This is the important Codex-like behavior to reproduce: the model can propose, but the runtime owns the session, tool lifecycle, context budget, evidence, cancellation, and completion decision.
 
 ## Honest remaining gaps
 

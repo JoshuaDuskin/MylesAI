@@ -22,6 +22,9 @@ from myles_common import (
 import myles_tools as tools
 import myles_capabilities as capabilities
 from myles_evidence import EvidenceRecord, provenance_for_tool, record_tool_evidence, record_unknown
+from myles_agent_contracts import (
+    agent_context_block, compact_messages, ensure_session, finish_tool_call, start_tool_call, update_plan,
+)
 from myles_model_runtime import model_health_dict
 from myles_windows import launch_app_verified, launch_fortnite_verified
 from myles_runtime_v9 import (
@@ -31,6 +34,7 @@ from myles_runtime_v9 import (
 )
 
 TOOL_DEFS = [
+    {"type":"function","function":{"name":"agent_plan","description":"Maintain a short explicit plan for a genuinely multi-step task. Use action=create or replace with up to 20 concrete steps, action=advance with current_step, action=complete when all steps are verified, or action=read to inspect the current plan. Do not create a plan for one-step app launches or simple questions.","parameters":{"type":"object","properties":{"action":{"type":"string","enum":["create","replace","advance","complete","read"]},"steps":{"type":"array","items":{"type":"object"}},"current_step":{"type":"integer","minimum":1}},"required":["action"]}}},
     {"type":"function","function":{"name":"run_powershell","description":"Run a PowerShell command on the owner's Windows tower. Use this for local system work, package managers, process management, Windows settings, building software, testing software, and commands not covered by a narrower tool.","parameters":{"type":"object","properties":{"command":{"type":"string"},"timeout_seconds":{"type":"integer","minimum":1,"maximum":1800}},"required":["command"]}}},
     {"type":"function","function":{"name":"read_text_file","description":"Read a local text file.","parameters":{"type":"object","properties":{"path":{"type":"string"},"max_chars":{"type":"integer"}},"required":["path"]}}},
     {"type":"function","function":{"name":"write_text_file","description":"Create, replace, or append to a local text file.","parameters":{"type":"object","properties":{"path":{"type":"string"},"content":{"type":"string"},"append":{"type":"boolean"}},"required":["path","content"]}}},
@@ -96,6 +100,7 @@ CONTINUOUS GITHUB POLICY: remote GitHub mutation is technically blocked for cont
 
 V9 EXECUTION CONTRACT:
 The model decides WHAT action is needed; the runtime owns HOW actions are serialized, retried, persisted, resumed, and verified.
+For multi-step work, keep an explicit short plan with agent_plan. Treat the session state, plan, tool-call lifecycle, evidence IDs, and unknowns below as authoritative runtime metadata. Never claim that a static observation proves runtime execution. Do not repeat an identical failed tool call without changing the hypothesis or input.
 Prefer write_generated_file for creating HTML/code/scripts/documents or any large text file. Never stuff an entire large file into a JSON tool argument.
 Provider-specific integrations belong in capability plugins. Use capability_status to inspect installed capabilities instead of inventing a provider API.
 Malformed tool output, temporary network errors, timeouts, and ordinary command failures are internal recovery events, not owner gates.
@@ -128,9 +133,12 @@ def call_ollama(job_id: str, messages: list[dict]) -> dict:
     cfg = load_config()
     last_error: Exception | None = None
     for attempt in range(1, 4):
+        bounded_messages = compact_messages(messages, int(cfg.get("max_context_chars", 70000)))
+        if len(bounded_messages) < len(messages):
+            trace(job_id, "context.compacted", f"messages={len(messages)} retained={len(bounded_messages)}", ok=True)
         body = json.dumps({
             "model": cfg["model"],
-            "messages": messages,
+            "messages": bounded_messages,
             "stream": False,
             "think": False,
             "tools": _all_tool_defs(),
@@ -931,6 +939,19 @@ def execute_tool(job_id: str, name: str, args: dict) -> str:
         trace(job_id, "tool.result", out[:12000], tool=name, ok=True)
         return out
 
+    if name == "agent_plan":
+        try:
+            out = json.dumps(update_plan(
+                job_id,
+                str((args or {}).get("action") or "read"),
+                (args or {}).get("steps"),
+                (args or {}).get("current_step"),
+            ), ensure_ascii=False)
+        except Exception as exc:
+            out = f"TOOL_ERROR: agent plan failed: {type(exc).__name__}: {exc}"
+        trace(job_id, "tool.result", out[:12000], tool=name, ok=not out.startswith("TOOL_ERROR"))
+        return out
+
     fn = getattr(tools, name, None)
     if not fn:
         plugin_result = capabilities.execute(name, job_id, args)
@@ -1011,22 +1032,27 @@ def execute_with_internal_retry(job_id: str, name: str, args: dict) -> tuple[str
     outcome = None
 
     for attempt in range(1, attempts + 1):
+        call_handle = start_tool_call(job_id, name, args, attempt)
         result = execute_tool(job_id, name, args)
         outcome = classify_tool_result(result)
         limitations: tuple[str, ...] = ()
         if name == "desktop_screenshot" and not bool(model_health_dict(cfg).get("supports_vision")):
             limitations = ("selected model does not advertise vision support",)
-        evidence_id = record_tool_evidence(EvidenceRecord(
-            job_id=job_id,
-            tool=name,
-            attempt=attempt,
-            ok=outcome.ok,
-            outcome=outcome.kind,
-            arguments=dict(args or {}),
-            result=result,
-            provenance=provenance_for_tool(name),
-            limitations=limitations,
-        ))
+        try:
+            evidence_id = record_tool_evidence(EvidenceRecord(
+                job_id=job_id,
+                tool=name,
+                attempt=attempt,
+                ok=outcome.ok,
+                outcome=outcome.kind,
+                arguments=dict(args or {}),
+                result=result,
+                provenance=provenance_for_tool(name),
+                limitations=limitations,
+            ))
+        except Exception:
+            evidence_id = None
+        finish_tool_call(call_handle, ok=outcome.ok, outcome=outcome.kind, result=result, evidence_id=evidence_id)
         if outcome.kind == "not_verified":
             record_unknown(job_id, f"Requested effect of {name} remains unverified.", evidence_id)
 
@@ -1103,6 +1129,7 @@ def main() -> int:
     ):
         return 0
     trace(job_id, "worker.started", f"pid={pid} recovery_count={recovery_count}")
+    ensure_session(job_id, str(job.get("prompt") or ""), str(load_config().get("model") or "unknown"))
 
     stop = threading.Event()
     hb = threading.Thread(target=heartbeat, args=(job_id, pid, stop), daemon=True)
@@ -1123,6 +1150,8 @@ def main() -> int:
         + f"MYLES_ROOT: {ROOT}\n"
         + f"LEGACY_MYLES_ROOT: {load_config().get('legacy_myles_root','')}\n"
         + recovery_note
+        + "\n"
+        + agent_context_block(job_id)
         + "\nRECENT JOB EVIDENCE:\n"
         + json.dumps(previous, indent=2)[-12000:]
     )
