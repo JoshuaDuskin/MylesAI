@@ -58,3 +58,5 @@ launch must not be reported as running. These are REA-informed controller
 regressions; GitHub CI cannot execute the tower's installed REA binary,
 local Qwen model, or hosted Muse/Grok instances, so no such live benchmark
 result is claimed.
+
+REA capability outcomes are now typed (`observed`, `timeout`, `unavailable`, `provider_or_analysis_failure`). They remain untrusted target evidence; no successful inspection is inferred from timeout, network availability or subprocess exit failures.
