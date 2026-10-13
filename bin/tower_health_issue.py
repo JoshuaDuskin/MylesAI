@@ -25,6 +25,7 @@ MARKER = "<!-- MYLES_TOWER_HEALTH_V1 -->"
 ORIGIN = "https://github.com/JoshuaDuskin/MylesAI.git"
 OWNER = "JoshuaDuskin"
 NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+LOCAL_HTTP = urllib.request.build_opener(urllib.request.ProxyHandler({}))
 SHA = re.compile(r"[0-9a-f]{40}\Z")
 VERSION = re.compile(r"[A-Za-z0-9._-]{1,32}\Z")
 ALLOWED_STATES = {"launched", "succeeded", "failed", "failed_unverified"}
@@ -69,7 +70,7 @@ def git(*args):
 
 def core_health():
     try:
-        with urllib.request.urlopen("http://127.0.0.1:8766/health",timeout=2.5) as r:
+        with LOCAL_HTTP.open("http://127.0.0.1:8766/health",timeout=2.5) as r:
             result=json.loads(r.read(12_000))
             if r.status!=200 or not isinstance(result,dict) or result.get("ok") is not True:
                 return False,None
@@ -107,6 +108,23 @@ def worker_counts():
     return result
 
 
+def quant_feed_verified():
+    """Reuse the gateway's *real* paper/GMX freshness and source checks.
+
+    The raw trading_status.json has no _verified marker. The trusted gateway
+    adds it only after validating mode, timestamps, engine, and GMX source.
+    """
+    try:
+        try:
+            from public_gateway_v074 import local_trading_snapshot
+        except ImportError:
+            from bin.public_gateway_v074 import local_trading_snapshot
+        _, diagnostics = local_trading_snapshot()
+        return bool(isinstance(diagnostics, dict) and diagnostics.get("verified") is True)
+    except Exception:
+        return False
+
+
 def snapshot(timestamp=None):
     """Strict allowlist: no raw local content is copied to GitHub."""
     timestamp=timestamp or now()
@@ -116,12 +134,7 @@ def snapshot(timestamp=None):
     healthy,version=core_health()
     receipt=read_json(DATA/"remote_deploy_result.json")
     state=read_json(DATA/"remote_deploy_state.json")
-    feed_path=DATA/"trading_status.json"
-    feed=read_json(feed_path)
-    try:
-        feed_fresh=0 <= timestamp.timestamp()-feed_path.stat().st_mtime <= 120
-    except OSError:
-        feed_fresh=False
+    verified_quant = quant_feed_verified()
     exit_code=receipt.get("updater_exit_code")
     receipt_matches=bool(
         receipt.get("success") is True
@@ -140,8 +153,7 @@ def snapshot(timestamp=None):
         "core_healthy":healthy,
         "bridge_reachable":port_up(8790),
         "gateway_reachable":port_up(8791),
-        "quant_feed_verified_and_fresh":bool(feed_fresh and feed.get("_verified") is True
-                       and feed.get("_verified_source")=="data/trading_status.json"),
+        "quant_feed_verified_and_fresh":verified_quant,
         "worker_processes":worker_counts(),
         "deployment":{
             "last_state":last if last in ALLOWED_STATES else "none_recorded",

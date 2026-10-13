@@ -63,6 +63,15 @@ class HealthIssueTests(unittest.TestCase):
             self.assertIn(issue.MARKER,body)
             self.assertNotIn("DONT_EVER_REPORT_SECRET",body)
 
+    def test_quant_truth_reuses_the_existing_gateway_validator(self):
+        from bin import public_gateway_v074 as gateway
+        with patch.object(gateway, "local_trading_snapshot",
+                          return_value=({"_verified":True},{"verified":True})):
+            self.assertTrue(issue.quant_feed_verified())
+        with patch.object(gateway, "local_trading_snapshot",
+                          return_value=(None,{"verified":False,"status":"stale"})):
+            self.assertFalse(issue.quant_feed_verified())
+
     def test_wrong_source_cannot_report(self):
         with patch.object(issue,"git",return_value="not-canonical"):
             with self.assertRaises(ValueError):

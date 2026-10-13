@@ -127,3 +127,12 @@ access; a successful report is not a benchmark of game FPS or hardware.
 To verify from ChatGPT, fetch GitHub Issue #49 and check that its marker,
 `reported_at` freshness, `installed_commit`, and locally observed health
 are all consistent with the latest approved GitHub main release.
+
+
+### v10.14.1 verification correction
+
+Quant feed health in Issue #49 is computed using the existing gateway's
+`local_trading_snapshot()` validator, which checks source, paper mode,
+engine, file/record freshness and generated timestamps. The raw Quant file
+does not itself contain the gateway's `_verified` metadata. The status
+publisher also bypasses environment HTTP proxies for the local core probe.
