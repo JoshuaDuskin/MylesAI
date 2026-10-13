@@ -26,6 +26,7 @@ from myles_agent_contracts import (
     agent_context_block, compact_messages, ensure_session, finish_tool_call, start_tool_call, update_plan,
 )
 from myles_model_runtime import model_health_dict
+from myles_visual_verify import verify_desktop_effect
 from myles_windows import launch_app_verified, launch_fortnite_verified
 from myles_runtime_v9 import (
     PlannerParseError, normalize_action_plan, parse_native_arguments,
@@ -1254,13 +1255,28 @@ def main() -> int:
                         image_message = _desktop_image_message("desktop_screenshot", after_result)
                         if image_message:
                             messages.append(image_message)
-                    if outcome.ok and after_outcome.ok:
+                    # Sending input and capturing a second screenshot do not
+                    # prove the intended effect. Only an actual visual comparison
+                    # (or a more specific process/window verifier) may claim it.
+                    ui_verified = False
+                    ui_detail = "Input or after-state screenshot was not verified."
+                    if before_outcome.ok and outcome.ok and after_outcome.ok:
+                        ui_verified, ui_detail = verify_desktop_effect(
+                            job_id, str(job.get("prompt") or ""), before_result, after_result
+                        )
+                    trace(job_id, "desktop.effect_verified", ui_detail[:800],
+                          tool=tool_name, ok=ui_verified)
+                    if ui_verified:
                         label = str(direct_desktop.get("label") or direct_desktop.get("target") or kind)
-                        final = f"DESKTOP_ACTION_VERIFIED: {label}."
+                        final = f"DESKTOP_ACTION_VERIFIED: {label}. {ui_detail}"
                         gaps = completion_gaps(job_id, job["prompt"], workspace, final)
                         if not gaps:
-                            trace(job_id, "completion.accepted", f"direct verified {kind} action completed", ok=True)
+                            trace(job_id, "completion.accepted", f"visually verified {kind} action completed", ok=True)
                             break
+                    else:
+                        messages.append({"role": "user", "content":
+                            "Desktop input was attempted but the requested visible effect is NOT verified: "
+                            + ui_detail[:450] + ". Do not claim completion without stronger evidence."})
                 elif direct_desktop and direct_desktop.get("kind") == "visual":
                     observed, observed_outcome = execute_with_internal_retry(job_id, "desktop_screenshot", {})
                     tool_calls_made += 1

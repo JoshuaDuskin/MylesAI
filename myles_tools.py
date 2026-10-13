@@ -25,7 +25,7 @@ from myles_common import (
     load_config, now_iso, set_job, trace, add_message, clean_model_text,
     list_jobs, active_job, job_truth, get_setting, set_setting
 )
-from myles_windows import capture_desktop_png
+from myles_windows import capture_desktop_png, visible_windows
 
 
 PINETREE_BLOCK_TERMS = (
@@ -1379,6 +1379,12 @@ def desktop_screenshot(job_id: str, path: str = "") -> str:
     """
     if os.name != "nt":
         return "TOOL_ERROR: desktop screenshots are only available on the Windows tower."
+    # A broad full-desktop screenshot can leak protected project material into
+    # the local agent model even when the task itself is unrelated to PineTree.
+    if any(_contains_pinetree_reference(str(row.get("MainWindowTitle") or ""))
+           or _contains_pinetree_reference(str(row.get("ProcessName") or ""))
+           for row in visible_windows()):
+        return _pinetree_refusal("desktop_screenshot", "protected window visible")
     destination = _expand(path) if str(path or "").strip() else (
         WORKSPACES / job_id / f"desktop_{datetime.now().strftime('%Y%m%d_%H%M%S_%f')}.png"
     )

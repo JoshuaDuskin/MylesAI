@@ -37,7 +37,7 @@ jobs:
           python-version: "3.12"
 
       - name: Compile Python runtime
-        run: python -m py_compile dashboard_bridge/dashboard_bridge.py bin/runtime_supervisor_v074.py bin/public_gateway_v074.py bin/game_mode_watch.py bin/ensure_myles_runtime.py bin/remote_deploy_agent.py myles_core.py myles_assisted.py myles_interactive.py myles_agent_contracts.py myles_evidence.py myles_model_runtime.py myles_windows.py myles_tools.py job_worker.py
+        run: python -m py_compile dashboard_bridge/dashboard_bridge.py bin/runtime_supervisor_v074.py bin/public_gateway_v074.py bin/game_mode_watch.py bin/ensure_myles_runtime.py bin/remote_deploy_agent.py myles_core.py myles_conversation.py myles_visual_verify.py myles_assisted.py myles_interactive.py myles_agent_contracts.py myles_evidence.py myles_model_runtime.py myles_windows.py myles_tools.py job_worker.py
 
       - name: Verify durable Windows startup contract
         shell: bash
@@ -73,6 +73,9 @@ jobs:
 
       - name: Test REA provider failure contracts
         run: python -m unittest discover -s tests -p test_rea_capability.py -v
+
+      - name: Test contextual memory and visual effect verification
+        run: python -m unittest discover -s tests -p test_conversation_vision.py -v
 
       - name: Verify BOM-safe pairing JSON
         run: python -c "import json,tempfile,pathlib;p=pathlib.Path(tempfile.gettempdir())/'myles_pair_bom.json';p.write_bytes(b'\\xef\\xbb\\xbf{\"code\":\"TEST1234\",\"pinned\":true,\"expires_epoch\":9999999999}');d=json.loads(p.read_text(encoding='utf-8-sig'));assert d['code']=='TEST1234' and d['pinned'] is True;print('BOM pairing JSON OK')"

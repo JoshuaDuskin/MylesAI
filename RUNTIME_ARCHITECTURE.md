@@ -158,3 +158,16 @@ jobs with observation and verification. The conversation tool loop permits at
 most one background job per turn and refuses repeated side-effect tools; worker
 launch failures can no longer be described as RUNNING. No PineTree/dashboard
 or live-trading changes.
+
+## 10.11 context and visual proof
+
+The owner conversation takes up to 120 stored recent turns, prioritizes the
+latest conversation, and selectively recalls relevant older messages within a
+bounded local-model context. Historical messages never authorize actions.
+Conversation tool calls are bounded and exceptions remain explicit unverified
+outcomes. The worker no longer treats two screenshots plus input delivery as
+proof the owner's requested desktop state changed. A local vision comparison
+must report a specific, high-confidence visible effect; failures stay unknown.
+Full-desktop screenshots are refused when a protected PineTree window is visible.
+Windows acceptance diagnostics are read-only by default; live model calls are
+explicit opt-in. No dashboard or trading changes.

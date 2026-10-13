@@ -10,7 +10,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-APP_VERSION = "10.10.0"
+APP_VERSION = "10.11.0"
 ROOT = Path(__file__).resolve().parent
 DATA = ROOT / "data"
 WORKSPACES = ROOT / "workspaces"
@@ -55,6 +55,7 @@ DEFAULT_CONFIG = {
     "internal_retry_budget": 8,
     "max_desktop_image_bytes": 8388608,
     "max_context_chars": 70000,
+    "conversation_history_chars": 28000,
     "capability_plugins_enabled": True,
     "pinetree_isolation_enabled": True,
     "blocked_project_terms": ["pinetree", "pinetreepayments", "pinetree-payments", "pinetree-payments.com", "app.pinetree-payments"],
