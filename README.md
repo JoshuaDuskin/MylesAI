@@ -79,3 +79,15 @@ This is authorized **deployment** access, not a remote desktop or arbitrary
 PowerShell shell. The ChatGPT session cannot inspect private local receipts
 without a separate authenticated link. GitHub write access is a release
 authority; restrict who may merge to main and require CI.
+
+## v10.13 Fortnite priority mode
+
+The canonical watcher checks process state every 2 seconds (rather than every
+second), unloads the local Ollama model when gameplay starts, and periodically
+re-enforces heavy worker cleanup without a per-second process-kill scan. Only
+processes under the canonical MylesAI root are eligible for worker cleanup.
+Fortnite temporarily pauses Quant, GMX, copy research, model inference and
+both queued/active owner background jobs. Quick status/cancel commands remain
+available without loading Qwen. Work resumes after the game exits. The
+CI-approved updater already defers during gameplay. This is a targeted Myles
+resource fix; network ping, graphics driver or GPU bottlenecks can also cause lag.

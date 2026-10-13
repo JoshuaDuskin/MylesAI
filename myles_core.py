@@ -30,6 +30,7 @@ import myles_quick as quick
 import myles_assisted as assisted
 import myles_interactive as interactive
 from myles_conversation import select_history, safe_tool_reply, should_retry_observation
+from myles_game_guard import game_is_active
 from myles_agent_contracts import compact_messages
 from myles_windows import launch_app_verified, launch_fortnite_verified
 from myles_runtime_v9 import (
@@ -262,6 +263,10 @@ def _terminate_pid(pid: int | None) -> None:
 
 
 def start_job(job: dict[str, Any]) -> bool:
+    # Even a direct call cannot start a resource-heavy job during Fortnite.
+    # Leave the job pending until the watcher confirms the game has exited.
+    if game_is_active():
+        return False
     job_id = job["id"]
     if not claim_job_for_launch(str(job_id)):
         return False
@@ -632,7 +637,7 @@ def _start_task(prompt: str, source: str, *, reuse_workspace: str | Path | None 
 
     job = create_job(prompt, source, record_user=False, reuse_workspace=reuse_workspace)
     cfg = load_config()
-    if not active_job() and (not bool(cfg.get("light_mode")) or str(source or "") != "continuous"):
+    if not game_is_active() and not active_job() and (not bool(cfg.get("light_mode")) or str(source or "") != "continuous"):
         start_job(job)
         # Re-read actual state after spawning; never infer it from intent.
         actual = get_job(str(job.get("id"))) or job
@@ -831,7 +836,7 @@ def _conversation_tool(name: str, args: dict[str, Any], source: str, *, turn_id:
         cfg = load_config()
         # Start immediately when the execution lane is free so conversational claims
         # like "I started it" correspond to a real worker, not merely a DB row.
-        if not active_job() and (not bool(cfg.get("light_mode")) or str(source or "") != "continuous"):
+        if not game_is_active() and not active_job() and (not bool(cfg.get("light_mode")) or str(source or "") != "continuous"):
             try:
                 launched = start_job(job)
             except Exception as exc:
@@ -1479,6 +1484,22 @@ def handle_owner_message(text: str, source: str) -> dict[str, Any]:
         message_id = add_message(source, "assistant", final, None)
         return {"kind": "conversation", "reply": final, "message_id": message_id}
 
+    if game_is_active():
+        # Game mode remains responsive to plain status/cancel without loading
+        # Qwen or starting a new background worker. Other requests can be sent
+        # again when Fortnite has closed.
+        add_message(source, "user", raw, None)
+        if looks_like_status_request(raw, has_active=bool(active_job())):
+            final = status_text() + "\nFortnite performance mode: AI and worker tasks paused."
+        elif _continuous_disable_request(raw):
+            final = _continuous_disable()
+        else:
+            final = ("Fortnite is running. Myles has paused AI inference and "
+                     "background actions to protect game performance. "
+                     "Please repeat the request after Fortnite closes.")
+        message_id = add_message(source, "assistant", final, None)
+        return {"kind": "conversation", "reply": final, "message_id": message_id}
+
     direct_desktop = desktop_action_request(raw)
     if direct_desktop:
         add_message(source, "user", raw, None)
@@ -1991,11 +2012,10 @@ def monitor_loop() -> None:
             active = active_job()
 
             if light:
-                # Gaming/latency mode pauses autonomous and nonessential background
-                # work, but an explicit owner command must still work. Owner jobs run
-                # below normal priority so Myles remains useful without competing
-                # aggressively with the game.
-                if active and str(active.get("source") or "") == "continuous":
+                # Fortnite pauses ALL active worker jobs, including owner
+                # jobs; manual light mode retains the old owner-command policy.
+                gaming = game_is_active()
+                if active and (gaming or str(active.get("source") or "") == "continuous"):
                     _pause_active_job_for_light_mode(active)
                     active = None
                 elif active:
@@ -2003,7 +2023,7 @@ def monitor_loop() -> None:
                     if truth["truth_state"] == "stalled":
                         reason = "; ".join(truth["stall_reasons"]) or "execution truth marked it stalled"
                         recover_job(active["id"], reason=f"Automatic recovery during Game Mode: {reason}")
-                if not active and not CHAT_BUSY.is_set():
+                if not gaming and not active and not CHAT_BUSY.is_set():
                     pending_owner = _next_pending_owner_job()
                     if pending_owner:
                         start_job(pending_owner)

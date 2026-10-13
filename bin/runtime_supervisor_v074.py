@@ -519,6 +519,10 @@ def _restart_for_update() -> bool:
     """Consume a promoted self-update request, verify it, and roll back on failure."""
     if not RESTART_REQUEST.exists():
         return False
+    # No candidate restart while the owner is actively gaming. Leave the
+    # request intact for the next supervisor cycle after the game exits.
+    if light_mode_active():
+        return False
     try:
         payload = json.loads(RESTART_REQUEST.read_text(encoding="utf-8-sig", errors="replace"))
         payload = payload if isinstance(payload, dict) else {}
@@ -849,9 +853,10 @@ try:
         try:
             owner = owner_token()
             read = read_token()
-            start_ollama_service()
-            start_core()
             gaming = light_mode_active()
+            if not gaming:
+                start_ollama_service()
+            start_core()
             start_services(owner, read)
             if http_ok("http://127.0.0.1:8791/dashboard/health", {"X-Myles-Read": read}):
                 ensure_tunnel(read)

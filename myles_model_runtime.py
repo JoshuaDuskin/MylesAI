@@ -217,6 +217,9 @@ def model_chat(
     temperature: float = 0.2,
     timeout: int | None = None,
 ) -> dict[str, Any]:
+    from myles_game_guard import game_is_active
+    if game_is_active():
+        raise ModelRuntimeError("game_performance_mode: AI inference paused during Fortnite")
     health = ensure_model_runtime(cfg)
     if not health.available:
         raise ModelRuntimeError(f"{health.error_kind}: {health.detail}")
@@ -224,6 +227,10 @@ def model_chat(
     request_timeout = timeout or int(cfg.get("conversation_timeout_seconds", 120))
     last_error: BaseException | None = None
     for attempt in range(2):
+        # A game can launch during an ongoing model request/retry; never
+        # resurrect or reload Qwen after Fortnite becomes active.
+        if game_is_active():
+            raise ModelRuntimeError("game_performance_mode: Fortnite started during inference")
         payload: dict[str, Any] = {
             "model": health.model,
             "messages": messages,
@@ -256,6 +263,8 @@ def model_chat(
         # A refused/reset connection is common after sleep or an Ollama update.
         # Recover the service, select the model that is actually installed, and
         # replay this exact owner turn once instead of throwing the stale error.
+        if game_is_active():
+            raise ModelRuntimeError("game_performance_mode: inference retry cancelled for Fortnite")
         health = ensure_model_runtime(cfg, force=True)
         if not health.available:
             raise ModelRuntimeError(f"{health.error_kind}: {health.detail}") from last_error
