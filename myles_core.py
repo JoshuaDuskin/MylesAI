@@ -26,7 +26,7 @@ from myles_common import (
 import myles_capabilities as capabilities
 import myles_tools as tools
 import myles_quick as quick
-from myles_windows import launch_fortnite_verified
+from myles_windows import launch_app_verified, launch_fortnite_verified
 from myles_runtime_v9 import (
     deterministic_control, explicit_stop_requested, explicit_resume_requested,
     looks_like_status_request, likely_action_request, strong_action_request,
@@ -1340,6 +1340,27 @@ def handle_owner_message(text: str, source: str) -> dict[str, Any]:
     direct_desktop = desktop_action_request(raw)
     if direct_desktop:
         add_message(source, "user", raw, None)
+        kind = direct_desktop.get("kind")
+        target = direct_desktop.get("target") or direct_desktop.get("keys") or "the desktop"
+
+        # A basic app launch is an interactive foreground operation, not a
+        # durable project. Execute the generic verified launcher synchronously
+        # so the reply describes the observed result instead of promising that
+        # a queued model job may do it later.
+        if kind == "launch":
+            result = launch_app_verified(str(target), timeout_seconds=20)
+            if result.startswith("DESKTOP_APP_LAUNCH_VERIFIED:"):
+                final = f"{target} is open."
+            elif result.startswith("DESKTOP_APP_LAUNCH_ERROR:"):
+                final = "I couldn't open it: " + result.split(":", 1)[1].strip()
+            else:
+                final = (
+                    f"I sent the launch request for {target}, but I could not verify a visible app window. "
+                    "I am not going to claim it opened."
+                )
+            message_id = add_message(source, "assistant", final, None)
+            return {"kind": "conversation", "reply": final, "message_id": message_id}
+
         replaced = bool(re.search(r"(?i)\binstead\b", raw))
         active = active_job()
         if replaced and active:
@@ -1348,8 +1369,6 @@ def handle_owner_message(text: str, source: str) -> dict[str, Any]:
         job_id = None
         if task_result.startswith("task_id="):
             job_id = task_result.split("task_id=", 1)[1].split(" ", 1)[0]
-        kind = direct_desktop.get("kind")
-        target = direct_desktop.get("target") or direct_desktop.get("keys") or "the desktop"
         running_labels = {
             "launch": f"Opening {target} now.",
             "close": f"Closing {target} now.",
