@@ -149,3 +149,36 @@ and writes exclusively the existing MylesAI Issue #49. No new repository,
 OAuth bypass, unattended token creation or credential exposure. If neither
 profile is authorized to edit the issue, reporting fails closed and remains
 local until the tower account is authorized.
+
+
+## v10.15.0 — measurable live-model and REA baseline
+
+The owner-authorized existing five-minute tower updater launches **one**
+windowless, lower-impact intelligence baseline per installed commit, only
+on the signed-in Windows tower during a verified idle/non-gaming period.
+There is no new task scheduler, model install, data reset, PineTree access,
+wallet action, trading execution or remote shell. Game Mode also terminates
+this explicitly identified MYLES benchmark worker if Fortnite launches.
+
+The benchmark tests the **actually installed** Ollama model (not a mocked
+hosted model): conversational recall/corrections, uncertainty, arithmetic,
+and harmless mock-tool selection. The tool definitions are not connected to
+real side effects. It requests `keep_alive: 0` to release model residency.
+Then it executes the pinned REA 6.4.0 `doctor` and, if available, static
+analysis of a tiny REA fixture inside the existing MylesAI repository.
+No private target, game executable, Muse or Grok service is inspected.
+REA failure/timeout stays explicitly unverified, not a success. The probe
+never reveals proprietary model weights or internals.
+
+Full benchmark results are stored locally in
+`data/intelligence_baseline_latest.json`. The existing same-repo GitHub
+Issue #49 reporter may publish **only** boolean capability flags, number
+of passing test cases, status, and REA outcome kinds; no model responses,
+chat, screenshots, user files, hardware identifiers, credentials, wallet
+values or raw REA records are published. A successful GitHub CI test alone
+does **not** mean this Windows baseline has executed. The user can see the
+actual local results only after a true tower run and a report check-in.
+
+Real benchmarks are necessary before changing the installed default local
+model or introducing optional hosted-model credentials. PineTree remains
+isolated and live trading remains OFF.
