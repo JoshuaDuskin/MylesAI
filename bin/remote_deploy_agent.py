@@ -234,6 +234,26 @@ def try_approved_release(head: str, state: dict) -> int:
     return 0
 
 
+def private_receipt_tick() -> None:
+    """Best-effort PRIVATE health reporting after the normal update poll.
+
+    Reporting is independent from release selection and cannot authorize an
+    update, operate local tools, or publish data to public repositories.
+    """
+    cfg = read_json(ENABLED)
+    if cfg.get("enabled") is not True or cfg.get("auto_update") is not True:
+        return
+    if read_json(DATA / "game_mode_state.json").get("active") is True:
+        return
+    try:
+        from tower_receipt_publisher import tick
+        outcome = tick()
+        if outcome not in {"published_private", "disabled", "throttled"}:
+            log("private receipt unavailable: " + str(outcome)[:100])
+    except Exception as exc:
+        log("private receipt reporter failed: " + type(exc).__name__)
+
+
 def poll() -> int:
     if read_json(ENABLED).get("enabled") is not True:
         return 0
@@ -329,6 +349,7 @@ def poll() -> int:
         return 1
     finally:
         held.close()
+        private_receipt_tick()
 
 
 if __name__ == "__main__":

@@ -91,3 +91,36 @@ both queued/active owner background jobs. Quick status/cancel commands remain
 available without loading Qwen. Work resumes after the game exits. The
 CI-approved updater already defers during gameplay. This is a targeted Myles
 resource fix; network ping, graphics driver or GPU bottlenecks can also cause lag.
+
+
+## v10.14 — private live tower deployment receipts (owner reporting)
+
+The existing five-minute `MylesAI Remote Deploy Poll` also attempts a
+read-only health report after each normal auto-update poll, except during
+detected gameplay. No new scheduled tasks or inbound ports.
+
+The **only** permitted destination is
+`JoshuaDuskin/MylesTowerReceipts`. The tower requires an existing *dedicated*
+Myles `GH_CONFIG_DIR` under the canonical local Myles directory, authenticated
+as exactly `JoshuaDuskin`. If authorized, it creates the repository as
+**private** using GitHub's authenticated API (only after a confirmed HTTP 404)
+and publishes `health.json` on the private `main` branch. If authentication
+is absent, creation fails, or the destination is not private, reporting stops.
+
+The health file contains an allowlisted observation only: collection
+timestamp, locally installed Git SHA, healthy Myles core/version, bridge and
+gateway port reachability, local Quant/GMX/copy-worker process counts where
+available, game/light-mode flags, Quant feed verification flag, and limited
+update receipt state/health. It never includes original private receipts,
+local source paths, chat, pairing credentials, environment values, API keys,
+wallet data, trading balances, task text, errors, arbitrary command output,
+or raw logs. The private GitHub repository is *not* the dashboard and is
+never part of the updater's GitHub source selection.
+
+**Access and trust:** The connected ChatGPT GitHub account must be granted
+read access to the new private repository; this may require one user-authorized
+GitHub App permissions adjustment. ChatGPT can then query current
+`health.json` and compare its installed SHA with release CI, while checking
+its freshness. An installed SHA or passing health endpoint alone cannot
+prove that game FPS, every worker, and all performance goals are optimized.
+A missing/stale receipt is reported as unknown, not a successful update.
