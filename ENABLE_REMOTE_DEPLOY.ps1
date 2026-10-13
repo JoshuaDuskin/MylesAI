@@ -28,11 +28,20 @@ $Settings = New-ScheduledTaskSettingsSet -Hidden -AllowStartIfOnBatteries -DontS
 Register-ScheduledTask -TaskName $TaskName -Action $Action -Trigger $Trigger -Principal $Principal -Settings $Settings -Description "Myles owner-approved GitHub main deployment poller; no incoming network port." -Force | Out-Null
 
 New-Item -ItemType Directory -Force -Path (Split-Path $Flag -Parent) | Out-Null
-@{ enabled = $true; canonical = $Repo; enabled_at = (Get-Date).ToUniversalTime().ToString("o") } |
+@{ enabled = $true; auto_update = $true; canonical = $Repo; enabled_at = (Get-Date).ToUniversalTime().ToString("o") } |
     ConvertTo-Json | Set-Content -LiteralPath $Flag -Encoding UTF8
 
-Write-Host "MYLES REMOTE DEPLOY: ENABLED" -ForegroundColor Green
+Write-Host "MYLES CI-VERIFIED AUTO UPDATE: ENABLED" -ForegroundColor Green
 Write-Host "Task: $TaskName (hidden, every 5 minutes while signed in)"
-Write-Host "GitHub request has no remote shell access and cannot run arbitrary commands."
+Write-Host "Auto-updates: only new GitHub main commits with passing Validate MYLES Runtime CI."
+Write-Host "No special GitHub request, remote shell, arbitrary commands, or open ports."
 Write-Host "Status: $Root\data\remote_deploy_state.json"
 Write-Host "Disable anytime with DISABLE_REMOTE_DEPLOY.ps1"
+$Probe = Join-Path $Root "bin\remote_deploy_smoketest.py"
+$Python = Join-Path $Root ".venv\Scripts\python.exe"
+if ((Test-Path -LiteralPath $Python) -and (Test-Path -LiteralPath $Probe)) {
+    & $Python $Probe
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host "WARNING: Scheduled task registered but CI reachability or source approval is not yet verified." -ForegroundColor Yellow
+    }
+}

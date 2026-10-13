@@ -37,7 +37,7 @@ jobs:
           python-version: "3.12"
 
       - name: Compile Python runtime
-        run: python -m py_compile dashboard_bridge/dashboard_bridge.py bin/runtime_supervisor_v074.py bin/public_gateway_v074.py bin/game_mode_watch.py bin/ensure_myles_runtime.py bin/remote_deploy_agent.py bin/acceptance_windows.py myles_core.py myles_conversation.py myles_visual_verify.py myles_assisted.py myles_interactive.py myles_agent_contracts.py myles_evidence.py myles_model_runtime.py myles_windows.py myles_tools.py job_worker.py
+        run: python -m py_compile dashboard_bridge/dashboard_bridge.py bin/runtime_supervisor_v074.py bin/public_gateway_v074.py bin/game_mode_watch.py bin/ensure_myles_runtime.py bin/remote_deploy_agent.py bin/verified_release.py bin/remote_deploy_smoketest.py bin/acceptance_windows.py myles_core.py myles_conversation.py myles_visual_verify.py myles_assisted.py myles_interactive.py myles_agent_contracts.py myles_evidence.py myles_model_runtime.py myles_windows.py myles_tools.py job_worker.py
 
       - name: Verify durable Windows startup contract
         shell: bash
@@ -67,6 +67,12 @@ jobs:
 
       - name: Test remote deployment safety gates
         run: python -m unittest discover -s tests -p test_remote_deploy.py -v
+
+      - name: Test unattended CI-verified tower releases
+        run: python -m unittest discover -s tests -p test_verified_release.py -v
+
+      - name: Test tower bootstrap smoke probe
+        run: python -m unittest discover -s tests -p test_bootstrap_probe.py -v
 
       - name: Run REA-derived conversation regression matrix
         run: python -m unittest discover -s tests -p test_rea_behavior_matrix.py -v

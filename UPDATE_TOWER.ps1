@@ -1,5 +1,5 @@
 [CmdletBinding()]
-param([switch]$RemoteQuiet)
+param([switch]$RemoteQuiet, [ValidatePattern('^[0-9a-f]{40}$')][string]$ExpectedHead = "")
 
 $ErrorActionPreference = "Stop"
 $ProgressPreference = "SilentlyContinue"
@@ -439,8 +439,18 @@ try {
         Invoke-RepoGit -GitArgs @("remote", "set-url", "origin", $Canonical) | Out-Null
     }
     Invoke-RepoGit -GitArgs @("fetch", "origin", "main", "--prune") | Out-Null
-    Invoke-RepoGit -GitArgs @("checkout", "-B", "main", "origin/main", "--force") | Out-Null
-    Invoke-RepoGit -GitArgs @("reset", "--hard", "origin/main") | Out-Null
+    $CheckoutRef = "origin/main"
+    if ($ExpectedHead) {
+        $RemoteHead = ((Invoke-RepoGit -GitArgs @("rev-parse", "origin/main")) -join "").Trim().ToLowerInvariant()
+        $ObjectKind = ((Invoke-RepoGit -GitArgs @("cat-file", "-t", $ExpectedHead)) -join "").Trim()
+        if ($ObjectKind -ne "commit") { throw "Expected CI revision is not a commit object" }
+        $Base = ((Invoke-RepoGit -GitArgs @("merge-base", $ExpectedHead, $RemoteHead)) -join "").Trim().ToLowerInvariant()
+        if ($Base -ne $ExpectedHead) { throw "CI-approved source is no longer in canonical main history" }
+        $CheckoutRef = $ExpectedHead
+        Log ("Installing exact CI-approved revision " + $ExpectedHead.Substring(0, 12))
+    }
+    Invoke-RepoGit -GitArgs @("checkout", "-B", "main", $CheckoutRef, "--force") | Out-Null
+    Invoke-RepoGit -GitArgs @("reset", "--hard", $CheckoutRef) | Out-Null
     Log "PASS: tracked source now matches JoshuaDuskin/MylesAI main"
 } catch {
     Fail ("Canonical source sync failed: " + $_.Exception.Message)
@@ -963,7 +973,11 @@ if ($GameModeActive) {
     Log ("FAIL: Quant/GMX telemetry is not healthy: " + $DashboardStatusError)
 }
 
-$Head = ((Invoke-RepoGit -GitArgs @("rev-parse", "--short", "HEAD")) -join "").Trim()
+$FullHead = ((Invoke-RepoGit -GitArgs @("rev-parse", "HEAD")) -join "").Trim().ToLowerInvariant()
+if ($ExpectedHead -and $FullHead -ne $ExpectedHead) {
+    Fail ("Installed revision differs from CI-approved source " + $ExpectedHead)
+}
+$Head = $FullHead.Substring(0, 8)
 $Origin = ((Invoke-RepoGit -GitArgs @("remote", "get-url", "origin")) -join "").Trim()
 $GitStatus = @(Invoke-RepoGit -GitArgs @("status", "--short"))
 $GitStatus | Set-Content (Join-Path $Recovery "git_status_after.txt")
