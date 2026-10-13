@@ -15,7 +15,7 @@ def main():
     myles_common.init_db()
     cfg = myles_common.load_config()
     checks = {
-        "version": myles_common.APP_VERSION == "10.12.0",
+        "version": myles_common.APP_VERSION == "10.13.0",
         "config_loads": isinstance(cfg, dict),
         "telegram_setting_present": "telegram_enabled" in cfg,
         "root_exists": myles_common.ROOT.exists(),
@@ -250,11 +250,11 @@ def main():
         )
     finally:
         myles_core.list_jobs = original_core_list_jobs
-    checks["owner_commands_run_during_game_mode"] = (
-        "Direct owner commands remain allowed during Game Mode" in core_source
-        and "BELOW_NORMAL_PRIORITY_CLASS" in core_source
-        and 'str(active.get("source") or "") == "continuous"' in core_source
-        and "pending_owner = _next_pending_owner_job()" in core_source
+    checks["fortnite_owner_work_pauses"] = (
+        "if game_is_active():" in core_source
+        and "if active and (gaming or" in core_source
+        and "if not gaming and not active" in core_source
+        and "Fortnite is running" in core_source
     )
     game_watcher_source = (myles_common.ROOT / "bin" / "game_mode_watch.py").read_text(encoding="utf-8")
     game_watcher_main = game_watcher_source.split("def main() -> int:", 1)[-1]
@@ -264,12 +264,12 @@ def main():
         and "Owner-controlled Windows auto-hide remains untouched" in game_watcher_source
         and "set_taskbar_visible(True)" in game_watcher_source
     )
-    heavy_pattern_block = game_watcher_source.split("HEAVY_MYLES_PATTERNS = (", 1)[-1].split(")", 1)[0]
-    checks["game_mode_preserves_owner_agent_lane"] = (
-        "job_worker" not in heavy_pattern_block
-        and "ollama_llama_server" not in heavy_pattern_block
-        and "unload_ollama_models()" not in game_watcher_main
-        and "owner chat/model/tool lane preserved" in game_watcher_source
+    heavy_pattern_block = game_watcher_source.split("HEAVY_MYLES_PATTERNS = (", 1)[-1].split("\n)\n", 1)[0]
+    checks["fortnite_frees_ai_and_worker_resources"] = (
+        "job_worker" in heavy_pattern_block
+        and "unload_ollama_models()" in game_watcher_main
+        and "HEAVY_RECHECK_SECONDS" in game_watcher_source
+        and "OLLAMA_RECHECK_SECONDS" in game_watcher_source
     )
     checks["conversation_has_live_situational_context"] = (
         "def _conversation_runtime_context" in core_source

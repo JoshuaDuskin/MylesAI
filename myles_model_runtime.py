@@ -217,6 +217,9 @@ def model_chat(
     temperature: float = 0.2,
     timeout: int | None = None,
 ) -> dict[str, Any]:
+    from myles_game_guard import game_is_active
+    if game_is_active():
+        raise ModelRuntimeError("game_performance_mode: AI inference paused during Fortnite")
     health = ensure_model_runtime(cfg)
     if not health.available:
         raise ModelRuntimeError(f"{health.error_kind}: {health.detail}")
