@@ -15,7 +15,7 @@ def main():
     myles_common.init_db()
     cfg = myles_common.load_config()
     checks = {
-        "version": myles_common.APP_VERSION == "10.6.0",
+        "version": myles_common.APP_VERSION == "10.7.0",
         "config_loads": isinstance(cfg, dict),
         "telegram_setting_present": "telegram_enabled" in cfg,
         "root_exists": myles_common.ROOT.exists(),
@@ -971,6 +971,34 @@ def main():
         myles_core._is_pinetree_task(
             "Build a Myles dashboard. Do not access or touch any PineTree resource."
         ) is False
+    )
+
+    # --- Assisted-mode guard regression ---
+    import myles_assisted
+    checks["assisted_read_only_intent_gate"] = (
+        myles_assisted.read_only_intent("List files in the Myles logs folder")
+        and myles_assisted.read_only_intent("What windows are open?")
+        and not myles_assisted.read_only_intent("Delete files in the logs folder")
+        and not myles_assisted.read_only_intent("Read and edit the config file")
+        and not myles_assisted.read_only_intent("How do Windows work?")
+    )
+    checks["assisted_tool_authorization"] = (
+        myles_assisted.authorized("inspect_open_windows", "What windows are open?", {})
+        and not myles_assisted.authorized("inspect_open_windows", "Read the Myles logs file", {})
+        and myles_assisted.authorized("inspect_local_file", "Read the myles_core.py file", {"path": "myles_core.py"})
+        and not myles_assisted.authorized("inspect_local_file", "Read the secrets file", {"path": "data/secrets.env"})
+        and not myles_assisted.authorized("inspect_local_directory", "List PineTree files", {"path": "PineTree"})
+    )
+    checks["assisted_tool_wired_to_conversation"] = (
+        "CONVERSATION_TOOLS.extend(assisted.ASSISTED_TOOLS)" in core_source
+        and "assisted.execute(name, args" in core_source
+        and 'elif assisted.read_only_intent(raw):' in core_source
+        and "assisted.authorized(name, raw, args)" in core_source
+    )
+    checks["self_update_includes_agent_dependencies"] = (
+        '"myles_assisted.py"' in tools_source
+        and '"myles_agent_contracts.py"' in tools_source
+        and '"myles_evidence.py"' in tools_source
     )
 
     # --- Self-update completeness / rollback ---
