@@ -178,11 +178,20 @@ def format_issue(report):
 
 
 def dedicated_gh():
+    """Authenticate GitHub Issue #49 with a VERIFIED owner account.
+
+    Prefer the isolated Myles GH profile. If it is missing/unavailable,
+    permit the already-authorized Windows user's gh profile, but ONLY when
+    GitHub confirms it is exactly JoshuaDuskin. Never borrow PineTree's
+    identity or inherit an environment-supplied credential/token.
+    """
     identity=read_json(DATA/"github_identity.json",max_bytes=16_000)
-    config_dir=str(identity.get("gh_config_dir") or "")
-    if str(identity.get("owner") or "").casefold()!=OWNER.casefold():
+    owner=str(identity.get("owner") or "").strip()
+    config_dir=str(identity.get("gh_config_dir") or "").strip()
+    if owner and owner.casefold()!=OWNER.casefold():
         return None
-    if not config_dir or not Path(config_dir).is_absolute() or "pinetree" in config_dir.casefold():
+    if config_dir and (not Path(config_dir).is_absolute()
+                       or "pinetree" in config_dir.casefold()):
         return None
     gh=shutil.which("gh") or shutil.which("gh.exe")
     if not gh:
@@ -195,15 +204,27 @@ def dedicated_gh():
                 break
     if not gh:
         return None
-    env=os.environ.copy()
-    env.pop("GH_TOKEN",None)
-    env.pop("GITHUB_TOKEN",None)
-    env["GH_CONFIG_DIR"]=config_dir
-    env["GH_HOST"]="github.com"
-    code,login=execute([gh,"api","user","--jq",".login"],env=env,timeout=12)
-    if code or login.strip().casefold()!=OWNER.casefold():
-        return None
-    return gh,env
+
+    clean=os.environ.copy()
+    for key in ("GH_TOKEN","GITHUB_TOKEN","GH_ENTERPRISE_TOKEN","GH_CONFIG_DIR"):
+        clean.pop(key,None)
+    clean["GH_HOST"]="github.com"
+    choices=[]
+    if owner.casefold()==OWNER.casefold() and config_dir:
+        isolated=clean.copy()
+        isolated["GH_CONFIG_DIR"]=config_dir
+        choices.append(isolated)
+    # A default profile is used only after proving ownership with 'gh api
+    # user'; it does NOT inherit the machine's potentially foreign GH_CONFIG_DIR.
+    choices.append(clean)
+    for env in choices:
+        try:
+            code,login=execute([gh,"api","user","--jq",".login"],env=env,timeout=12)
+        except (OSError,subprocess.TimeoutExpired):
+            continue
+        if code==0 and login.strip().casefold()==OWNER.casefold():
+            return gh,env
+    return None
 
 
 def publish(report,gh,env):
