@@ -37,3 +37,11 @@ Write-Host "Auto-updates: only new GitHub main commits with passing Validate MYL
 Write-Host "No special GitHub request, remote shell, arbitrary commands, or open ports."
 Write-Host "Status: $Root\data\remote_deploy_state.json"
 Write-Host "Disable anytime with DISABLE_REMOTE_DEPLOY.ps1"
+$Probe = Join-Path $Root "bin\remote_deploy_smoketest.py"
+$Python = Join-Path $Root ".venv\Scripts\python.exe"
+if ((Test-Path -LiteralPath $Python) -and (Test-Path -LiteralPath $Probe)) {
+    & $Python $Probe
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host "WARNING: Scheduled task registered but CI reachability or source approval is not yet verified." -ForegroundColor Yellow
+    }
+}
