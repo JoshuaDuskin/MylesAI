@@ -10,6 +10,7 @@ from typing import Any
 from myles_common import ROOT, load_config
 from myles_agent_contracts import ensure_session, start_tool_call, finish_tool_call
 from myles_evidence import EvidenceRecord, Provenance, record_tool_evidence, record_unknown
+import myles_interactive as interactive
 
 
 ASSISTED_TOOLS = [
@@ -26,6 +27,7 @@ ASSISTED_TOOLS = [
         "description": "Inspect visible Windows app/window titles on the tower now, without clicking or changing anything.",
         "parameters": {"type": "object", "properties": {}, "additionalProperties": False}}},
 ]
+ASSISTED_TOOLS.extend(interactive.INTERACTIVE_TOOLS)
 TOOL_NAMES = frozenset(x["function"]["name"] for x in ASSISTED_TOOLS)
 READ_PATTERN = re.compile(
     r"\b(read|inspect|view|show|list|look at|look inside|what(?:'s| is| are| files| windows)|"
@@ -51,7 +53,7 @@ TEXT_EXTENSIONS = {".py", ".js", ".mjs", ".cjs", ".ts", ".tsx", ".jsx", ".json",
 
 def read_only_intent(text: str) -> bool:
     raw = str(text or "")
-    return bool(READ_PATTERN.search(raw) and TARGET_PATTERN.search(raw)
+    return interactive.screen_request(raw) or bool(READ_PATTERN.search(raw) and TARGET_PATTERN.search(raw)
                 and not MUTATION_PATTERN.search(raw))
 
 
@@ -78,7 +80,11 @@ def _safe(path: Path, as_file: bool) -> bool:
 
 
 def authorized(name: str, request: str, args: dict[str, Any]) -> bool:
-    if name not in TOOL_NAMES or not isinstance(args, dict) or not read_only_intent(request):
+    if name not in TOOL_NAMES or not isinstance(args, dict):
+        return False
+    if name in interactive.NAMES:
+        return interactive.authorized(name, request, args)
+    if not read_only_intent(request):
         return False
     raw = str(request).lower()
     if name == "inspect_open_windows":
@@ -98,6 +104,8 @@ def authorized(name: str, request: str, args: dict[str, Any]) -> bool:
 
 
 def _observe(name: str, args: dict[str, Any], turn_id: str) -> tuple[str, bool]:
+    if name in interactive.NAMES:
+        return interactive.observe(name, args, turn_id)
     if name == "inspect_open_windows":
         from myles_tools import desktop_windows
         out = str(desktop_windows(turn_id))
@@ -148,8 +156,8 @@ def execute(name: str, args: dict[str, Any], turn_id: str, request: str) -> str:
             job_id=turn_id, tool=name, attempt=1, ok=ok,
             outcome="observed" if ok else "not_verified",
             arguments=args, result=result,
-            provenance=Provenance(source=name, authority="runtime-observation" if name == "inspect_open_windows" else "local-observation", untrusted_content=True),
-            limitations=("Observation only; no system changes made.",),
+            provenance=Provenance(source=name, authority="runtime-observation" if name in interactive.NAMES or name == "inspect_open_windows" else "local-observation", untrusted_content=True),
+            limitations=("No shell/click/typing is authorized by the assisted lane; ephemeral screenshot bytes are not saved to the evidence ledger.",),
         ))
         if not ok:
             record_unknown(turn_id, f"Inspection by {name} was not verified.", eid)

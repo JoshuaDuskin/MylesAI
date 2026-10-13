@@ -1648,7 +1648,7 @@ def self_clone_candidate(job_id: str, description: str = "") -> str:
     include = [
         "myles_common.py", "myles_runtime_v9.py", "myles_model_runtime.py", "myles_windows.py",
         "myles_capabilities.py", "myles_quick.py", "myles_assisted.py",
-        "myles_agent_contracts.py", "myles_evidence.py",
+        "myles_agent_contracts.py", "myles_evidence.py", "myles_interactive.py",
         "myles_tools.py", "job_worker.py", "myles_core.py",
         "myles_console.py", "configure_telegram.py", "restart_helper.py",
         "self_test.py", "README.txt",
@@ -1679,7 +1679,7 @@ def self_verify_candidate(job_id: str, candidate_path: str) -> str:
     required = {
         "myles_common.py", "myles_runtime_v9.py", "myles_model_runtime.py", "myles_windows.py",
         "myles_capabilities.py", "myles_quick.py", "myles_assisted.py",
-        "myles_agent_contracts.py", "myles_evidence.py",
+        "myles_agent_contracts.py", "myles_evidence.py", "myles_interactive.py",
         "myles_tools.py", "job_worker.py", "myles_core.py",
         "restart_helper.py", "self_test.py",
     }
