@@ -151,7 +151,17 @@ def poll() -> int:
                                    "health_verified": receipt.get("health_verified"),
                                    "updater_exit_code": receipt.get("updater_exit_code")})
                 log(f"request {state.get('request_id')} {status}")
-            # Never launch another update if the previous one is in flight.
+            # Never relaunch this ID; a crashed wrapper is marked unverified
+            # after two hours so a separate, newer owner request can recover.
+            if receipt.get("request_id") != state.get("request_id"):
+                try:
+                    launched = dt.datetime.fromisoformat(str(state["started_at"]))
+                    if (dt.datetime.now(dt.timezone.utc) - launched.astimezone(dt.timezone.utc)).total_seconds() > 7200:
+                        write_json(STATE, {**state, "status": "failed_unverified",
+                                           "finished_at": now(), "reason": "receipt missing after two hours"})
+                        log("remote update timed out without a verified receipt")
+                except (KeyError, ValueError, TypeError, OverflowError):
+                    pass
             return 0
         git("fetch", "--no-tags", CANONICAL, "refs/heads/main")
         head = git("rev-parse", "FETCH_HEAD").lower()

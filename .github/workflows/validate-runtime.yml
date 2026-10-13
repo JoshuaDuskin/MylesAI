@@ -9,6 +9,7 @@ on:
       - "dashboard_bridge/**"
       - "quant/**"
       - "bin/**"
+      - "tests/**"
       - "index.html"
       - ".github/workflows/validate-runtime.yml"
   pull_request:
@@ -19,6 +20,7 @@ on:
       - "dashboard_bridge/**"
       - "quant/**"
       - "bin/**"
+      - "tests/**"
       - "index.html"
       - ".github/workflows/validate-runtime.yml"
 

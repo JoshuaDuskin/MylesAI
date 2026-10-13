@@ -82,8 +82,7 @@ class RemoteDeployTests(unittest.TestCase):
                  patch.object(agent.subprocess, "Popen") as spawn:
                 self.assertEqual(agent.poll(), 0)
                 self.assertEqual(json.loads(state.read_text())["status"], "succeeded")
-                self.assertEqual(agent.poll(), 0)
-                git.assert_called()
+                git.assert_not_called()
                 spawn.assert_not_called()
 
     def test_installer_is_fixed_purpose(self):
