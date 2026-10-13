@@ -989,6 +989,29 @@ def main():
         and not myles_assisted.authorized("inspect_local_file", "Read the secrets file", {"path": "data/secrets.env"})
         and not myles_assisted.authorized("inspect_local_directory", "List PineTree files", {"path": "PineTree"})
     )
+    # End-to-end assisted observation: inspect a harmless fixture, retain evidence,
+    # redact credential values and refuse protected paths without opening them.
+    import tempfile
+    with tempfile.TemporaryDirectory(prefix="myles_assisted_", dir=str(myles_common.WORKSPACES)) as temp_dir:
+        fixture = Path(temp_dir) / "probe.txt"
+        fixture.write_text('API_KEY = do-not-expose\n"access_token": "also-secret"\nvisible_marker\n', encoding="utf-8")
+        observed = myles_assisted.execute(
+            "inspect_local_file", {"path": str(fixture)}, "chat_selftest_read_fixture",
+            "Read the probe.txt file"
+        )
+        refused = myles_assisted.execute(
+            "inspect_local_file", {"path": "data/secrets.env"}, "chat_selftest_secret_refusal",
+            "Read the secrets.env file"
+        )
+        checks["assisted_observation_evidence_and_redaction"] = (
+            "EVIDENCE_ID=" in observed
+            and "FILE_OBSERVED=" in observed
+            and "visible_marker" in observed
+            and "[REDACTED]" in observed
+            and "do-not-expose" not in observed
+            and "also-secret" not in observed
+            and refused.startswith("TOOL_REFUSED:")
+        )
     checks["assisted_tool_wired_to_conversation"] = (
         "CONVERSATION_TOOLS.extend(assisted.ASSISTED_TOOLS)" in core_source
         and "assisted.execute(name, args" in core_source

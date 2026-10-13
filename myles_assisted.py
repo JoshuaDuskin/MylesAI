@@ -9,7 +9,7 @@ from typing import Any
 
 from myles_common import ROOT, load_config
 from myles_agent_contracts import ensure_session, start_tool_call, finish_tool_call
-from myles_evidence import EvidenceRecord, record_tool_evidence, record_unknown, provenance_for_tool
+from myles_evidence import EvidenceRecord, Provenance, record_tool_evidence, record_unknown
 
 
 ASSISTED_TOOLS = [
@@ -42,8 +42,8 @@ SENSITIVE_PATTERN = re.compile(
     r"(^|[/\\._-])(\.env|\.ssh|secrets?|passwords?|credentials?|private[-_]?keys?|"
     r"api[-_]?keys?|tokens?|auth|wallet|browser[-_]?profile|hosts\.yml)([/\\._-]|$)", re.I)
 SENSITIVE_LINE = re.compile(
-    r"(?im)^(\s*(?:export\s+)?[A-Z0-9_]*(?:SECRET|TOKEN|PASSWORD|PRIVATE_KEY|"
-    r"API_KEY|CLIENT_SECRET)[A-Z0-9_]*\s*[:=]\s*).+$")
+    r"(?im)^(\s*(?:export\s+)?[\x22\x27]?[A-Z0-9_]*(?:SECRET|TOKEN|PASSWORD|PRIVATE_KEY|"
+    r"API_KEY|CLIENT_SECRET)[A-Z0-9_]*[\x22\x27]?\s*[:=]\s*).+$")
 TEXT_EXTENSIONS = {".py", ".js", ".mjs", ".cjs", ".ts", ".tsx", ".jsx", ".json",
                    ".md", ".txt", ".log", ".yaml", ".yml", ".toml", ".ini",
                    ".csv", ".html", ".css", ".ps1", ".cmd", ".bat", ".xml"}
@@ -148,8 +148,7 @@ def execute(name: str, args: dict[str, Any], turn_id: str, request: str) -> str:
             job_id=turn_id, tool=name, attempt=1, ok=ok,
             outcome="observed" if ok else "not_verified",
             arguments=args, result=result,
-            provenance=provenance_for_tool(
-                "desktop_windows" if name == "inspect_open_windows" else "read_text_file"),
+            provenance=Provenance(source=name, authority="runtime-observation" if name == "inspect_open_windows" else "local-observation", untrusted_content=True),
             limitations=("Observation only; no system changes made.",),
         ))
         if not ok:
