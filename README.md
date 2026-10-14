@@ -182,3 +182,24 @@ actual local results only after a true tower run and a report check-in.
 Real benchmarks are necessary before changing the installed default local
 model or introducing optional hosted-model credentials. PineTree remains
 isolated and live trading remains OFF.
+
+
+## v10.15.1 — one-click GitHub check-in authorization
+
+GitHub CI and the existing unattended updater can read **public** source
+without logging into GitHub, but publishing sanitized results to public
+Issue #49 requires owner-approved GitHub **write** credentials on Windows.
+The existing GitHub connection in ChatGPT does not authorize the Windows
+computer. When the tower's dedicated GitHub CLI is not yet authorized, the
+owner can double-click `CONNECT_TOWER_REPORTING.cmd` inside the existing
+`%LOCALAPPDATA%\MylesAI` installation. No PowerShell or new repository.
+GitHub CLI opens its official browser/device approval. The only accepted
+identity is exactly JoshuaDuskin; `public_repo` scope is requested because
+writing a public issue requires it. Credentials stay in the owner's isolated
+`data/github_cli_tower` CLI store and are never written into the public repo,
+issue, model prompts, dashboard, logs or chat. A previous local GitHub identity
+is preserved for rollback. The script checks the same Issue #49, then attempts
+an authentic tower report and announces CONNECTED only after GitHub confirms
+the write. If GitHub CLI is missing or authorization is declined, it fails
+closed; it never uses PineTree credentials or creates another repository.
+This one-time owner approval cannot be manufactured by GitHub CI.
