@@ -264,3 +264,16 @@ indefinitely, blocking deployment reconciliation and the subsequent REAL
 Ollama+REA benchmark. Every recovered update still requires matching GitHub
 CI, exact installed commit and independently healthy tower services. It
 never fabricates a successful PowerShell receipt.
+
+
+### v10.15.5 — contextual owner close follow-ups
+
+When Fortnite is active, the owner can repeat an explicitly recorded
+`Close Fortnite` request as `close the app`, `close it`, or the exact
+frustrated phrase `Mother fucker close the app`. Myles resolves the target
+only if the *immediately previous owner message in the same channel* was an
+explicit Fortnite close command from the past five minutes; it never guesses
+which app to close from Game Mode alone. Negative instructions, unrelated
+apps and stale/other-channel requests remain non-executable. This route
+bypasses expensive AI inference, retains process identity verification, and
+is unit-tested. A green GitHub build does not establish live Windows behavior.
