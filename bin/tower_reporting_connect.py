@@ -85,8 +85,12 @@ def browser_login(gh,env):
         return False
 
 
+def is_windows():
+    return os.name=="nt"
+
+
 def connect(interactive=True):
-    if os.name!="nt":
+    if not is_windows():
         return False,"windows_required"
     if not (ROOT/"bin"/"tower_health_issue.py").is_file():
         return False,"reporter_not_installed"
