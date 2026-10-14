@@ -1494,6 +1494,40 @@ def _direct_fortnite_close_request(raw: str) -> bool:
     ))
 
 
+
+def _fortnite_close_followup(raw: str, source: str) -> bool:
+    """Resolve 'close the app' ONLY against an immediately prior Fortnite close.
+
+    Never guess the target from Game Mode alone: Xbox, browsers and other
+    applications may also be open. No model inference is needed.
+    """
+    t = re.sub(r"\s+", " ", str(raw or "").strip().casefold())
+    t = re.sub(r"^(?:(?:mother ?fucker|dammit|damn|dude|bro|come on)[ ,!]+)+", "", t).strip()
+    if not re.fullmatch(
+        r"(?:(?:i said|i told you to|please)\s+)?"
+        r"(?:close|quit|exit|shut down)\s+"
+        r"(?:(?:the|that|this)\s+)?(?:app|game|it)"
+        r"(?:\s+(?:now|already|please|for me))?[.!?]*", t
+    ):
+        return False
+    try:
+        prior = next(
+            (row for row in reversed(recent_messages(12))
+             if row.get("source") == source and row.get("role") == "user"), None
+        )
+        if prior is None or not _direct_fortnite_close_request(
+            str(prior.get("content") or "")
+        ):
+            return False
+        when = datetime.fromisoformat(str(prior.get("ts") or "").replace("Z","+00:00"))
+        if when.tzinfo is None:
+            return False
+        age = (datetime.now(when.tzinfo) - when).total_seconds()
+        return 0 <= age <= 300
+    except (TypeError,ValueError,OverflowError):
+        return False
+
+
 def _direct_fortnite_close() -> str:
     evidence = close_fortnite_verified(timeout_seconds=12)
     if evidence.startswith("FORTNITE_CLOSED_VERIFIED:"):
@@ -1581,7 +1615,7 @@ def handle_owner_message(text: str, source: str) -> dict[str, Any]:
 
     # Explicit owner close/quit must outrank Game Mode's inference pause.
     # This is one narrow verified Windows operation, not a background worker.
-    if _direct_fortnite_close_request(raw):
+    if _direct_fortnite_close_request(raw) or _fortnite_close_followup(raw, source):
         add_message(source, "user", raw, None)
         try:
             final = _direct_fortnite_close()

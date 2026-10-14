@@ -47,6 +47,47 @@ class FortniteCloseTests(unittest.TestCase):
                 model.assert_not_called()
                 worker.assert_not_called()
 
+
+    def test_contextual_angry_followup_targets_only_recent_explicit_game_close(self):
+        from datetime import datetime,timezone,timedelta
+        prior=lambda phrase,minutes=0,source="dashboard": [{
+            "role":"user","source":source,"content":phrase,
+            "ts":(datetime.now(timezone.utc)-timedelta(minutes=minutes)).isoformat()}]
+        for phrase in ("Mother fucker close the app", "close the app",
+                       "close it", "I said close the game"):
+            with self.subTest(phrase=phrase), \
+                 patch.object(core,"recent_messages",return_value=prior("Close Fortnite")):
+                self.assertTrue(core._fortnite_close_followup(phrase,"dashboard"))
+        for history in ([],prior("Close Xbox"),prior("Don't close Fortnite"),
+                        prior("Close Fortnite",minutes=10),
+                        prior("Close Fortnite",source="telegram"),
+                        prior("Close Fortnite")+prior("Open browser")):
+            with self.subTest(history=history), \
+                 patch.object(core,"recent_messages",return_value=history):
+                self.assertFalse(core._fortnite_close_followup(
+                    "Mother fucker close the app","dashboard"))
+        with patch.object(core,"recent_messages",return_value=prior("Close Fortnite")):
+            for text in ("Don't close the app","What if I close the game?",
+                         "Close the browser", "kill all processes"):
+                self.assertFalse(core._fortnite_close_followup(text,"dashboard"))
+
+    def test_contextual_phone_followup_works_in_game_mode_without_model(self):
+        from datetime import datetime,timezone
+        history=[{"role":"user","source":"dashboard","content":"Close Fortnite",
+                  "ts":datetime.now(timezone.utc).isoformat()}]
+        with patch.object(core,"recent_messages",return_value=history), \
+             patch.object(core,"game_is_active",return_value=True), \
+             patch.object(core,"add_message",return_value=77), \
+             patch.object(core,"close_fortnite_verified",
+                          return_value="FORTNITE_CLOSED_VERIFIED: game exited") as close, \
+             patch.object(core,"_conversation_agent_turn") as model, \
+             patch.object(core,"_start_task") as work:
+            result=core.handle_owner_message("Mother fucker close the app","dashboard")
+            self.assertIn("verified",result["reply"].casefold())
+            close.assert_called_once()
+            model.assert_not_called()
+            work.assert_not_called()
+
     def test_close_failure_is_truthful_and_does_not_claim_game_exited(self):
         with patch.object(core,"game_is_active",return_value=True), \
              patch.object(core,"add_message",return_value=99), \
