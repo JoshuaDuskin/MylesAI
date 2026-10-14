@@ -230,3 +230,15 @@ After this verifiable transition, the existing unattended benchmark may
 run the actual installed Ollama model and pinned REA against only its
 repository-owned fixture, while idle and off-game. This is not a claim that
 these runtime benchmarks have passed before the tower reports results.
+
+
+### v10.15.3 — evidence-backed phone chat and complete replies
+
+Phone requests like “Give me report” and “With the background job” now read
+the durable job database rather than trust a small-model paraphrase. Replies
+state the actual worker, phase and verified result or failure and never
+launch a new job merely to report. Cut-off model sentences are rejected
+before saving. Continuous-job status no longer asserts “running normally”
+without checking live worker truth. REA remains a separate **software
+analysis instrument**, not a model or automatic integration: diagnostic
+fixture tests do not count as research on Grok/Muse behavior.
