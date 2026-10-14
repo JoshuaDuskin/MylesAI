@@ -361,6 +361,102 @@ def _fortnite_visible() -> dict[str, object] | None:
     return None
 
 
+
+# Only the actual Fortnite game client is in scope. Do not terminate the
+# Xbox app, Epic Launcher, anti-cheat service or any similarly named process.
+FORTNITE_CLIENT_EXES = frozenset({
+    "fortniteclient-win64-shipping.exe",
+    "fortniteclient-win64-shipping_be.exe",
+})
+
+
+def _fortnite_client_pids() -> set[int]:
+    return {int(pid) for pid, name in _native_process_rows()
+            if int(pid) > 0 and str(name).casefold() in FORTNITE_CLIENT_EXES}
+
+
+def _fortnite_client_still_present() -> bool:
+    return bool(_fortnite_client_pids() or process_running(*FORTNITE_CLIENT_EXES)
+                or _fortnite_visible())
+
+
+def _terminate_exact_fortnite_client(pid: int) -> bool:
+    """Target one confirmed game client, not Xbox/Epic/launcher children."""
+    if os.name != "nt" or not isinstance(pid, int) or pid <= 0:
+        return False
+    # psutil confirms the executable identity from the existing process handle.
+    try:
+        import psutil
+        proc = psutil.Process(pid)
+        if str(proc.name()).casefold() not in FORTNITE_CLIENT_EXES:
+            return False
+        proc.terminate()
+        return True
+    except ImportError:
+        pass
+    except (OSError, PermissionError, Exception):
+        # A rejected kill is not grounds to kill by PID without verification.
+        return False
+    # Native fallback checks the actual image held open, including PID reuse.
+    try:
+        kernel = ctypes.windll.kernel32
+        kernel.OpenProcess.restype = wintypes.HANDLE
+        handle = kernel.OpenProcess(0x0001 | 0x1000, False, int(pid))
+        if not handle:
+            return False
+        try:
+            size = wintypes.DWORD(32768)
+            image = ctypes.create_unicode_buffer(size.value)
+            if not kernel.QueryFullProcessImageNameW(handle, 0, image, ctypes.byref(size)):
+                return False
+            if Path(image.value).name.casefold() not in FORTNITE_CLIENT_EXES:
+                return False
+            return bool(kernel.TerminateProcess(handle, 0))
+        finally:
+            kernel.CloseHandle(handle)
+    except Exception:
+        return False
+
+
+def close_fortnite_verified(timeout_seconds: int = 12) -> str:
+    """Execute explicit owner CLOSE even during Game Mode, without model/worker.
+
+    Attempt WM_CLOSE on verified game windows first, then terminate only
+    confirmed Fortnite client executables. Success requires actual disappearance.
+    """
+    if os.name != "nt":
+        return "FORTNITE_CLOSE_UNAVAILABLE: Windows tower required."
+    targets = _fortnite_client_pids()
+    if not targets:
+        if _fortnite_client_still_present():
+            return "FORTNITE_CLOSE_NOT_VERIFIED: Game detected but its exact process could not be identified safely."
+        return "FORTNITE_NOT_RUNNING: No Fortnite game client is running."
+    try:
+        user32 = ctypes.windll.user32
+        for row in visible_windows():
+            if (int(row.get("Id") or 0) in targets
+                    and str(row.get("ProcessName") or "").casefold() in FORTNITE_CLIENT_EXES):
+                hwnd = int(row.get("Handle") or 0)
+                if hwnd:
+                    user32.PostMessageW(hwnd, 0x0010, 0, 0)  # WM_CLOSE
+    except Exception:
+        pass
+    grace_end = time.monotonic() + min(5, max(1, int(timeout_seconds) // 2))
+    while time.monotonic() < grace_end:
+        if not _fortnite_client_still_present():
+            return "FORTNITE_CLOSED_VERIFIED: Fortnite game client has exited."
+        time.sleep(0.3)
+    # Explicit "close Fortnite" authorizes targeting the game client itself,
+    # but not force-closing Xbox, other games, game launchers, or services.
+    for pid in _fortnite_client_pids() & targets:
+        _terminate_exact_fortnite_client(pid)
+    deadline = time.monotonic() + min(6, max(1, int(timeout_seconds) // 2))
+    while time.monotonic() < deadline:
+        if not _fortnite_client_still_present():
+            return "FORTNITE_CLOSED_VERIFIED: Fortnite game client has exited."
+        time.sleep(0.3)
+    return "FORTNITE_CLOSE_NOT_VERIFIED: Fortnite is still running or Windows denied closing its verified game process."
+
 def launch_fortnite_verified(timeout_seconds: int = 40) -> str:
     """Request Fortnite through Epic, but succeed only on a visible game client."""
     if os.name != "nt":

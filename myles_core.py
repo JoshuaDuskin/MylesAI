@@ -32,7 +32,7 @@ import myles_interactive as interactive
 from myles_conversation import select_history, safe_tool_reply, should_retry_observation, unfinished_model_reply
 from myles_game_guard import game_is_active
 from myles_agent_contracts import compact_messages
-from myles_windows import launch_app_verified, launch_fortnite_verified
+from myles_windows import launch_app_verified, launch_fortnite_verified, close_fortnite_verified
 from myles_runtime_v9 import (
     deterministic_control, explicit_stop_requested, explicit_resume_requested,
     looks_like_status_request, likely_action_request, strong_action_request,
@@ -1477,6 +1477,37 @@ def _failed_action_followup_task(raw: str) -> str | None:
     )
 
 
+
+def _direct_fortnite_close_request(raw: str) -> bool:
+    """Allow only explicit close commands, even while game inference is paused.
+
+    Never interpret 'do not close Fortnite', questions, or casual mentions
+    as consent to close a running game.
+    """
+    normalized = re.sub(r"\s+", " ", str(raw or "").strip().casefold())
+    return bool(re.fullmatch(
+        r"(?:(?:i said|i told you to|please|can you|could you|would you|"
+        r"will you|go ahead and)\s+)?"
+        r"(?:close|quit|exit|shut down)\s+(?:the\s+)?fortnite"
+        r"(?:\s+(?:now|please|for me|on (?:the )?(?:tower|computer|pc)))?[.!?]*",
+        normalized,
+    ))
+
+
+def _direct_fortnite_close() -> str:
+    evidence = close_fortnite_verified(timeout_seconds=12)
+    if evidence.startswith("FORTNITE_CLOSED_VERIFIED:"):
+        return "Fortnite is closed. I verified the game client exited."
+    if evidence.startswith("FORTNITE_NOT_RUNNING:"):
+        return "Fortnite is not running. No game process was closed."
+    if evidence.startswith("FORTNITE_CLOSE_NOT_VERIFIED:"):
+        return ("I tried to close Fortnite, but couldn't verify it exited. "
+                "I didn't close the Xbox app or unrelated processes.")
+    if evidence.startswith("FORTNITE_CLOSE_UNAVAILABLE:"):
+        return "I can't access Windows game processes from this environment."
+    return "The Fortnite close attempt did not produce a verified result."
+
+
 def _direct_fortnite_request(raw: str) -> bool:
     """Recognize a short owner launch command, not a diagnostic paragraph."""
     text = re.sub(r"\s+", " ", str(raw or "").strip().lower())
@@ -1545,6 +1576,18 @@ def handle_owner_message(text: str, source: str) -> dict[str, Any]:
                 final = cancel_job(str(active["id"])) if active else "Nothing is actively running."
         finally:
             CHAT_BUSY.clear()
+        message_id = add_message(source, "assistant", final, None)
+        return {"kind": "conversation", "reply": final, "message_id": message_id}
+
+    # Explicit owner close/quit must outrank Game Mode's inference pause.
+    # This is one narrow verified Windows operation, not a background worker.
+    if _direct_fortnite_close_request(raw):
+        add_message(source, "user", raw, None)
+        try:
+            final = _direct_fortnite_close()
+        except Exception as exc:
+            log("Fortnite close failed: " + type(exc).__name__)
+            final = "I couldn't verify Fortnite closed. Windows rejected the game-only close attempt."
         message_id = add_message(source, "assistant", final, None)
         return {"kind": "conversation", "reply": final, "message_id": message_id}
 

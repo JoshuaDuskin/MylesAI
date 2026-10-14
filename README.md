@@ -242,3 +242,25 @@ before saving. Continuous-job status no longer asserts “running normally”
 without checking live worker truth. REA remains a separate **software
 analysis instrument**, not a model or automatic integration: diagnostic
 fixture tests do not count as research on Grok/Muse behavior.
+
+
+### v10.15.4 — direct owner Fortnite close during game mode and Windows PID recovery
+
+The owner's phone chat correctly paused Qwen inference during gaming but also
+blocked the explicit, narrow request to **close Fortnite**. The core now routes
+`Close Fortnite`, `I said close Fortnite`, and equivalent direct imperatives
+before the game/inference gate. It uses the native Windows layer to target
+**only** genuine Fortnite client executable processes, attempts graceful
+`WM_CLOSE` first, then verifies actual exit. A bounded terminate fallback
+revalidates executable identity; Xbox, Epic Launcher, anti-cheat services,
+other games and unrelated Windows processes are explicitly out of scope.
+No Qwen, prompt inference, new worker or console is involved. Negative or
+hypothetical commands never authorize closure. Failure stays unverified.
+
+The remote updater's Windows `OpenProcess` check now distinguishes an exited
+wrapper (ERROR_INVALID_PARAMETER / NOT_FOUND) from ACCESS_DENIED. This repairs
+a code path where an already-exited updater could remain marked `launched`
+indefinitely, blocking deployment reconciliation and the subsequent REAL
+Ollama+REA benchmark. Every recovered update still requires matching GitHub
+CI, exact installed commit and independently healthy tower services. It
+never fabricates a successful PowerShell receipt.
