@@ -89,6 +89,9 @@ jobs:
       - name: Test tower bootstrap smoke probe
         run: python -m unittest discover -s tests -p test_bootstrap_probe.py -v
 
+      - name: Test direct Fortnite close and update-wrapper exit detection
+        run: python -m unittest discover -s tests -p test_game_close_truth.py -v
+
       - name: Test owner phone chat job reports and uncut responses
         run: python -m unittest discover -s tests -p test_owner_chat_truth.py -v
 

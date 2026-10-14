@@ -123,20 +123,36 @@ def validate(req: dict, head: str, parent: str, changed: str, instant: dt.dateti
     return ""
 
 
+def _windows_open_process_is_gone(error_code: int) -> bool:
+    """Only definite Windows missing-process errors count as an exited PID."""
+    return int(error_code) in {87, 1168}  # ERROR_INVALID_PARAMETER/NOT_FOUND
+
+
 def process_running(pid: int) -> bool:
-    """Conservatively assume a wrapper still lives if its state is unknown."""
+    """Check the update wrapper without treating missing PID as still running.
+
+    Before v10.15.4, OpenProcess returned NULL for an exited Windows PID and
+    this code assumed 'alive' forever. Access-denied remains conservative.
+    """
     try:
         pid = int(pid)
         if pid <= 0:
             return True
         if os.name == "nt":
             import ctypes
-            kernel = ctypes.windll.kernel32
+            kernel = ctypes.WinDLL("kernel32", use_last_error=True)
+            kernel.OpenProcess.argtypes = [ctypes.c_uint32, ctypes.c_int, ctypes.c_uint32]
+            kernel.OpenProcess.restype = ctypes.c_void_p
+            kernel.WaitForSingleObject.argtypes = [ctypes.c_void_p, ctypes.c_uint32]
+            kernel.WaitForSingleObject.restype = ctypes.c_uint32
+            kernel.CloseHandle.argtypes = [ctypes.c_void_p]
+            kernel.CloseHandle.restype = ctypes.c_int
             handle = kernel.OpenProcess(0x00100000, False, pid)  # SYNCHRONIZE
             if not handle:
-                return True  # Access denied cannot prove a process ended.
+                return not _windows_open_process_is_gone(ctypes.get_last_error())
             try:
-                return int(kernel.WaitForSingleObject(handle, 0)) != 0
+                result = int(kernel.WaitForSingleObject(handle, 0))
+                return result != 0  # WAIT_OBJECT_0 is exited; UNKNOWN stays alive
             finally:
                 kernel.CloseHandle(handle)
         os.kill(pid, 0)
