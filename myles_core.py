@@ -29,7 +29,7 @@ import myles_tools as tools
 import myles_quick as quick
 import myles_assisted as assisted
 import myles_interactive as interactive
-from myles_conversation import select_history, safe_tool_reply, should_retry_observation
+from myles_conversation import select_history, safe_tool_reply, should_retry_observation, unfinished_model_reply
 from myles_game_guard import game_is_active
 from myles_agent_contracts import compact_messages
 from myles_windows import launch_app_verified, launch_fortnite_verified
@@ -306,6 +306,60 @@ def _owner_job_summary(job: dict[str, Any]) -> str:
     return _human_task_label(prompt, 220)
 
 
+def owner_report_request(raw: str) -> bool:
+    """Recognize direct owner requests about existing work, not new jobs."""
+    t = re.sub(r"\s+", " ", str(raw or "").casefold()).strip(" .!?,")
+    if not t or len(t) > 170:
+        return False
+    if re.match(r"^(?:give|send|show)(?: me)? (?:a |the |an )?(?:current |latest |full |brief )?(?:progress |job |task |background job |cleanup job )?report(?: on (?:the |that |my )?(?:background |cleanup |current )?(?:job|task|work))?$", t):
+        return True
+    if re.match(r"^(?:what(?:'s| is)|how(?:'s| is)) (?:the |that |my )?(?:background |cleanup |previous )?(?:job|task|work)(?: doing| going| progressing| status)?$", t):
+        return True
+    if re.match(r"^(?:with|about|for) (?:the |that |my )?(?:background |cleanup |previous )?(?:job|task|work)(?:,? stupid)?$", t):
+        return True
+    if re.match(r"^(?:let me know|tell me|notify me) when (?:you(?:'re| are)|it(?:'s| is)|that(?:'s| is)|the (?:job|task) is) (?:done|finished|complete)$", t):
+        return True
+    return False
+
+
+def owner_job_report(raw: str) -> str:
+    """Answer from persisted jobs and live worker evidence, never a model guess."""
+    jobs = list_jobs(100)
+    t = str(raw or "").casefold()
+    owner = [j for j in jobs if str(j.get("source") or "").casefold() != "continuous"]
+    relevant = owner
+    if "cleanup" in t or "clean up" in t:
+        relevant = [j for j in owner if re.search(r"clean[\s_-]*up", str(j.get("prompt") or ""), re.I)]
+        if not relevant:
+            return "I couldn't find a recorded cleanup job. " + status_text()
+    active = active_job()
+    chosen = active if active and active in relevant else next(iter(relevant), None)
+    if chosen is None:
+        return status_text()
+    truth = job_truth(chosen)
+    state = str(truth.get("truth_state") or chosen.get("state") or "unknown").casefold()
+    phase = str(truth.get("phase") or "unknown").replace("_", " ")
+    label = _owner_job_summary(chosen)
+    prefix = f"Job: {label}\nState: {state.upper()}\nPhase: {phase}"
+    if state in {"running", "launching", "stalled", "recovering"}:
+        why = "; ".join(str(x) for x in (truth.get("stall_reasons") or []))
+        return (prefix + f"\nWorker alive: {bool(truth.get('live_worker'))}"
+                + (f"\nProblem: {why[:300]}" if why else "")
+                + "\nNo completion has been verified.")
+    if state in {"pending", "queued", "blocked_auth"}:
+        return prefix + "\nWork is not running yet; no completion has been verified."
+    if state == "completed":
+        result = clean_model_text(str(chosen.get("result") or "")).strip()
+        return prefix + ("\nStored result: " + result[:1200] if result else
+                         "\nThe task is recorded complete, but no textual result is stored.")
+    if state == "failed":
+        error = clean_model_text(str(chosen.get("error") or "")).strip()
+        return prefix + "\nThe job did not complete." + (f" Error: {error[:400]}" if error else "")
+    if state == "cancelled":
+        return prefix + "\nThe job was cancelled; it is not running."
+    return prefix + "\nThe worker state cannot be verified as completed."
+
+
 def status_text() -> str:
     active = active_job()
     cfg = load_config()
@@ -347,10 +401,13 @@ def status_text() -> str:
         return "I'm online. No owner task is currently running." + tail + continuous_tail + (" Light mode is on." if light else "")
     t = job_truth(active)
     if str(active.get("source") or "").lower() == "continuous":
+        reason = "; ".join(t.get("stall_reasons") or [])
         return (
-            "I'm currently working on a continuous-improvement cycle focused on making Myles "
-            "faster, more reliable, and easier to use. It's running normally, and no owner task "
-            "is queued behind it."
+            "Continuous improvement is recorded as "
+            + str(t.get("truth_state") or "unknown").upper()
+            + f". Phase: {t.get('phase')}. Worker alive: {t.get('live_worker')}."
+            + (f" Problem: {reason[:250]}." if reason else "")
+            + f" Owner tasks queued behind it: {len(pending)}."
         )
     reasons = "; ".join(t.get("stall_reasons") or [])
     return (
@@ -933,6 +990,13 @@ def _conversation_agent_turn(raw: str, source: str) -> tuple[str, str | None]:
         messages.append(assistant_message)
 
         if not calls:
+            if unfinished_model_reply(data, content):
+                # Never store a broken response as a verified completion.
+                if started_job:
+                    return owner_job_report(raw), started_job
+                if any(w in raw.casefold() for w in ("job", "task", "work", "report", "done")):
+                    return owner_job_report(raw), None
+                return "My answer cut off before I could finish it. I haven't started any work from that reply.", None
             return safe_tool_reply(content, any_failure=tool_failed,
                                    started_job=bool(started_job)), started_job
 
@@ -1489,7 +1553,9 @@ def handle_owner_message(text: str, source: str) -> dict[str, Any]:
         # Qwen or starting a new background worker. Other requests can be sent
         # again when Fortnite has closed.
         add_message(source, "user", raw, None)
-        if looks_like_status_request(raw, has_active=bool(active_job())):
+        if owner_report_request(raw):
+            final = owner_job_report(raw) + "\nFortnite performance mode: AI and workers remain paused."
+        elif looks_like_status_request(raw, has_active=bool(active_job())):
             final = status_text() + "\nFortnite performance mode: AI and worker tasks paused."
         elif _continuous_disable_request(raw):
             final = _continuous_disable()
@@ -1497,6 +1563,13 @@ def handle_owner_message(text: str, source: str) -> dict[str, Any]:
             final = ("Fortnite is running. Myles has paused AI inference and "
                      "background actions to protect game performance. "
                      "Please repeat the request after Fortnite closes.")
+        message_id = add_message(source, "assistant", final, None)
+        return {"kind": "conversation", "reply": final, "message_id": message_id}
+
+    # Direct owner reports never launch jobs, model inference or a new task.
+    if owner_report_request(raw):
+        add_message(source, "user", raw, None)
+        final = owner_job_report(raw)
         message_id = add_message(source, "assistant", final, None)
         return {"kind": "conversation", "reply": final, "message_id": message_id}
 

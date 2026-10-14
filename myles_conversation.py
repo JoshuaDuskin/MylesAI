@@ -88,6 +88,22 @@ def select_history(rows: list[dict[str, Any]], current: str,
             for _, row, content in accepted]
 
 
+def unfinished_model_reply(data: dict[str, Any], content: str) -> bool:
+    """Do not present model cut-offs as completed owner-facing answers."""
+    stop = str(data.get("done_reason") or "").casefold() if isinstance(data, dict) else ""
+    if stop in {"length", "max_tokens", "limit"}:
+        return True
+    text = str(content or "").strip()
+    if not text:
+        return True
+    if re.search(r"(?:\bdidn['’]?t?\b|\bwon['’]?t?\b|\bcan['’]?t?\b)$", text, re.I):
+        return True
+    if len(text.split()) >= 9 and not re.search(r"[.!?…:;\)\]\"'’]$", text):
+        if re.search(r"\b(?:when|that|the|this|because|if|and|but|job|task|work)$", text, re.I):
+            return True
+    return False
+
+
 def safe_tool_reply(content: str, *, any_failure: bool, started_job: bool) -> str:
     """Never turn a failed/unverified tool into a successful completion claim."""
     answer = str(content or "").strip()
