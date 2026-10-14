@@ -203,3 +203,30 @@ an authentic tower report and announces CONNECTED only after GitHub confirms
 the write. If GitHub CLI is missing or authorization is declined, it fails
 closed; it never uses PineTree credentials or creates another repository.
 This one-time owner approval cannot be manufactured by GitHub CI.
+
+
+## v10.15.2 — fix interrupted CI update receipts and unblock real REA tests
+
+The v10.15.1 Windows updater's general process cleanup could kill the
+**PowerShell parent receipt writer** when its command line included the
+canonical Myles directory. The installed commit and services could be
+healthy while `remote_deploy_state.json` stayed `launched` indefinitely,
+blocking the intelligence benchmark.
+
+The updater now explicitly protects only the identified, fixed-purpose
+`remote_deploy_apply.ps1` parent PID during the source switch. If the
+*already-installed* old updater kills this wrapper on the first upgrade,
+the new auto-update poller can recover **without faking the missing receipt**.
+It requires at least five minutes elapsed, wrapper confirmed exited, exact
+canonical installed commit, matching successful GitHub main push CI, and
+real healthy core/bridge/gateway/verified Quant evidence. It then records
+`installed_verified_post_restart` with a separate verification source,
+not `succeeded`, because original wrapper exit code remains unavailable.
+Issue #49 exposes both the independent post-restart verification and the
+truth about whether the original receipt exists. No existing trading account,
+paper history, pairing, local data or PineTree project is touched.
+
+After this verifiable transition, the existing unattended benchmark may
+run the actual installed Ollama model and pinned REA against only its
+repository-owned fixture, while idle and off-game. This is not a claim that
+these runtime benchmarks have passed before the tower reports results.

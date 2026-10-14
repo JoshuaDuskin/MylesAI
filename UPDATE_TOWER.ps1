@@ -241,11 +241,31 @@ foreach ($rel in $Modified) {
 }
 Log "PASS: modified tracked source files preserved separately"
 
+# A CI remote update is launched by a dedicated PowerShell parent wrapper.
+# That wrapper MUST survive to write remote_deploy_result.json after this updater
+# returns. Old broad $Root command-line matching killed its own parent and
+# left the deployment state "launched" forever despite a healthy new runtime.
+$ReceiptWriterPid = 0
+if ($RemoteQuiet -and $ExpectedHead) {
+    try {
+        $CurrentUpdater = Get-CimInstance Win32_Process -Filter ("ProcessId = " + $PID) -ErrorAction Stop
+        $ParentPid = [int]$CurrentUpdater.ParentProcessId
+        $ParentProc = Get-CimInstance Win32_Process -Filter ("ProcessId = " + $ParentPid) -ErrorAction Stop
+        $ParentCommand = [string]$ParentProc.CommandLine
+        if ($ParentProc -and $ParentPid -gt 0 -and $ParentCommand -like ("*" + $Root + "*") -and
+            $ParentCommand -match '(?i)remote_deploy_apply\.ps1') {
+            $ReceiptWriterPid = $ParentPid
+            Log ("Protecting CI receipt writer PID " + $ReceiptWriterPid + " from process cleanup")
+        }
+    } catch {
+        Log "Could not identify remote receipt writer; the post-restart verifier will preserve truthful status"
+    }
+}
 Log "Stopping MYLES runtime processes before switching source..."
 $processes = Get-CimInstance Win32_Process -ErrorAction SilentlyContinue | Where-Object {
     $cmd = [string]$_.CommandLine
     $name = [string]$_.Name
-    $_.ProcessId -ne $PID -and (
+    $_.ProcessId -ne $PID -and $_.ProcessId -ne $ReceiptWriterPid -and (
         $cmd -like ("*" + $Root + "*") -or
         $cmd -match "(?i)(runtime_supervisor_v074|runtime_supervisor\.py|myles_core\.py|myles_console_v074|myles_console\.py|START_MYLESAI\.cmd|dashboard_bridge\.py|public_gateway_v074\.py|quant_service\.mjs|gmx_live\.mjs|copy_trader_service\.mjs|game_mode_watch)" -or
         ($name -ieq "cloudflared.exe" -and $cmd -match "8791")
