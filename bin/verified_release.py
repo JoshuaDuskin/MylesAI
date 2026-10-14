@@ -77,6 +77,7 @@ def candidate_allowed(
         return False, "matching GitHub main push CI is not successful"
     if state.get("request_id") == "ci_" + target_sha and state.get("status") in {
         "launched", "succeeded", "failed", "failed_unverified",
+        "installed_verified_post_restart",
     }:
         return False, "this exact source was already attempted"
     return True, "CI-approved release"

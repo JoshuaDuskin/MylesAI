@@ -260,6 +260,62 @@ def start_intelligence_baseline() -> None:
         log("intelligence baseline launch failed: " + type(exc).__name__)
 
 
+def reconcile_interrupted_update(state: dict, receipt: dict) -> dict | None:
+    """Independently verify a completed install whose PowerShell receipt was lost.
+
+    v10.15.1's updater could kill its own receipt-writing parent during
+    cleanup. Never fake an exit code or "succeeded" result: this returns a
+    separate explicitly evidence-based recovery state only when GitHub CI,
+    canonical installed SHA and observed live services agree.
+    """
+    if state.get("source") != "ci_approved_main":
+        return None
+    target = str(state.get("target_sha") or "").lower()
+    if not SHA_RE.fullmatch(target) or state.get("request_id") != "ci_" + target:
+        return None
+    if receipt.get("request_id") == state.get("request_id"):
+        return None
+    try:
+        launched = dt.datetime.fromisoformat(str(state.get("started_at") or ""))
+        if launched.tzinfo is None:
+            return None
+        age = (dt.datetime.now(dt.timezone.utc) - launched.astimezone(dt.timezone.utc)).total_seconds()
+        if age < 300 or age > 7200:
+            return None
+        wrapper_pid = state.get("wrapper_pid")
+        if not wrapper_pid or process_running(wrapper_pid):
+            return None
+        if git("rev-parse", "HEAD").lower() != target:
+            return None
+        if not verify_ci(target):
+            return None
+        try:
+            from tower_health_issue import snapshot
+        except ImportError:
+            from bin.tower_health_issue import snapshot
+        observed = snapshot()
+        if (
+            observed.get("installed_commit") != target
+            or observed.get("core_healthy") is not True
+            or observed.get("bridge_reachable") is not True
+            or observed.get("gateway_reachable") is not True
+            or observed.get("quant_feed_verified_and_fresh") is not True
+        ):
+            return None
+    except Exception as exc:
+        log("interrupted update reconciliation blocked: " + type(exc).__name__)
+        return None
+    return {
+        **state,
+        "status": "installed_verified_post_restart",
+        "installed_sha": target,
+        "post_restart_health_verified": True,
+        "verification_source": "git_ci_and_live_local_services",
+        "verified_at": now(),
+        "receipt_missing": True,
+    }
+
+
 def poll() -> int:
     if read_json(ENABLED).get("enabled") is not True:
         return 0
@@ -278,9 +334,16 @@ def poll() -> int:
                                    "health_verified": receipt.get("health_verified"),
                                    "updater_exit_code": receipt.get("updater_exit_code")})
                 log(f"request {state.get('request_id')} {status}")
-            # Never relaunch this ID; a crashed wrapper is marked unverified
-            # after two hours so a separate, newer owner request can recover.
+            # A historic updater could kill its receipt writer. After the
+            # parent has exited, check real installed source, GitHub CI,
+            # and live tower services before allowing benchmarks to resume.
+            # This is NOT equivalent to the missing wrapper's exit receipt.
             if receipt.get("request_id") != state.get("request_id"):
+                recovered = reconcile_interrupted_update(state, receipt)
+                if recovered:
+                    write_json(STATE, recovered)
+                    log("interrupted CI update independently verified against live installed runtime")
+                    return 0
                 try:
                     launched = dt.datetime.fromisoformat(str(state["started_at"]))
                     if ((dt.datetime.now(dt.timezone.utc) - launched.astimezone(dt.timezone.utc)).total_seconds() > 7200

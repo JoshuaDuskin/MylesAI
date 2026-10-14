@@ -28,7 +28,8 @@ NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)
 LOCAL_HTTP = urllib.request.build_opener(urllib.request.ProxyHandler({}))
 SHA = re.compile(r"[0-9a-f]{40}\Z")
 VERSION = re.compile(r"[A-Za-z0-9._-]{1,32}\Z")
-ALLOWED_STATES = {"launched", "succeeded", "failed", "failed_unverified"}
+ALLOWED_STATES = {"launched", "succeeded", "failed", "failed_unverified",
+                  "installed_verified_post_restart"}
 
 
 def now():
@@ -172,6 +173,10 @@ def snapshot(timestamp=None):
             "last_state":last if last in ALLOWED_STATES else "none_recorded",
             "target_commit":target if SHA.fullmatch(target) else None,
             "verified_local_receipt_matches_installed":receipt_matches,
+            "verified_after_restart":bool(
+                last=="installed_verified_post_restart"
+                and state.get("post_restart_health_verified") is True
+                and str(state.get("installed_sha") or "").lower()==head),
         },
         "report_kind":"PUBLIC_sanitized_no_private_receipts",
     }

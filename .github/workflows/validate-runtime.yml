@@ -74,6 +74,9 @@ jobs:
       - name: Test unattended CI-verified tower releases
         run: python -m unittest discover -s tests -p test_verified_release.py -v
 
+      - name: Test CI receipt survival and independent post-restart recovery
+        run: python -m unittest discover -s tests -p test_deployment_receipt_recovery.py -v
+
       - name: Test one-click authenticated tower reporting
         run: python -m unittest discover -s tests -p test_tower_reporting_connect.py -v
 

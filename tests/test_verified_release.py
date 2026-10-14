@@ -47,7 +47,8 @@ class VerifiedReleaseTests(unittest.TestCase):
         self.assertFalse(release.candidate_allowed(NEW, OLD, {}, True, False)[0])
         self.assertFalse(release.candidate_allowed(NEW, OLD, state, True, True)[0])
         self.assertTrue(release.candidate_allowed(NEW, OLD, {}, True, True)[0])
-        for status in ("launched", "succeeded", "failed", "failed_unverified"):
+        for status in ("launched", "succeeded", "failed", "failed_unverified",
+                       "installed_verified_post_restart"):
             with self.subTest(status=status):
                 record={"request_id":"ci_"+NEW,"status":status}
                 self.assertFalse(release.candidate_allowed(NEW, OLD, record, True, True)[0])
