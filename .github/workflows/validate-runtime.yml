@@ -71,6 +71,9 @@ jobs:
       - name: Test remote deployment safety gates
         run: python -m unittest discover -s tests -p test_remote_deploy.py -v
 
+      - name: Test hidden launches and sanitized console forensics
+        run: python -m unittest discover -s tests -p test_console_window_quiet.py -v
+
       - name: Test unattended CI-verified tower releases
         run: python -m unittest discover -s tests -p test_verified_release.py -v
 

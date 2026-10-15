@@ -138,6 +138,18 @@ def intelligence_summary(sha):
         return {"status":"unverified"}
 
 
+def recent_console_events():
+    """Only aggregate, fixed-category telemetry; no commands or private logs."""
+    try:
+        try:
+            from console_window_audit import recent_summary
+        except ImportError:
+            from bin.console_window_audit import recent_summary
+        return recent_summary()
+    except Exception:
+        return {"status": "unavailable"}
+
+
 def snapshot(timestamp=None):
     """Strict allowlist: no raw local content is copied to GitHub."""
     timestamp=timestamp or now()
@@ -169,6 +181,7 @@ def snapshot(timestamp=None):
         "quant_feed_verified_and_fresh":verified_quant,
         "worker_processes":worker_counts(),
         "intelligence_baseline":intelligence_summary(head),
+        "console_window_audit":recent_console_events(),
         "deployment":{
             "last_state":last if last in ALLOWED_STATES else "none_recorded",
             "target_commit":target if SHA.fullmatch(target) else None,

@@ -277,3 +277,23 @@ which app to close from Game Mode alone. Negative instructions, unrelated
 apps and stale/other-channel requests remain non-executable. This route
 bypasses expensive AI inference, retains process identity verification, and
 is unit-tested. A green GitHub build does not establish live Windows behavior.
+
+
+### v10.15.6 — silent auto-updates and evidence for unexpected console windows
+
+Auto-update remains the existing Windows-scheduled poll of CI-approved GitHub
+`main`; no new repo, token, approval, scheduled task, or remote command
+mechanism is introduced. The fixed-purpose remote updater now launches its
+nested PowerShell with `-WindowStyle Hidden`, independently of the hidden
+parent. Supervisor CLI calls use both `CREATE_NO_WINDOW` and Win32
+`SW_HIDE`. The existing supervisor monitor also identifies Myles-owned
+console-capable child executables instead of relying solely on shell names,
+without hiding the owner's single intentional console.
+
+Issue #49 includes a privacy-filtered, last-hour aggregate from the existing
+local console spawn audit: only the number of Myles-owned console-capable
+process launches, the number of windows hidden, and fixed executable/source
+categories. It never publishes full process command lines, paths, PIDs,
+private logs, credentials, or task content. A green CI test cannot prove
+that the Windows pop-up has stopped; subsequent authentic tower evidence
+must determine that. PineTree and live trading are unchanged.

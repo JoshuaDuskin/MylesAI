@@ -199,9 +199,11 @@ def console_spawn_monitor() -> None:
         seen = {int(process.pid) for process in psutil.process_iter(["pid"])}
     except Exception:
         seen = set()
+    # Include console-capable child runtimes, not just explicit shells.
     shell_names = {
         "cmd.exe", "powershell.exe", "pwsh.exe", "windowsterminal.exe",
-        "wt.exe", "conhost.exe", "openconsole.exe",
+        "wt.exe", "conhost.exe", "openconsole.exe", "python.exe",
+        "uv.exe", "node.exe", "git.exe",
     }
     root_text = str(ROOT).lower()
 
@@ -219,6 +221,9 @@ def console_spawn_monitor() -> None:
                 name = str(current.name() or "")
                 command = " ".join(current.cmdline() or [])
                 chain.append(f"{pid}:{name}:{command}")
+                if re.search(r"(?i)(myles_console_v074\.py|start_mylesai\.cmd)", command):
+                    # The single owner's intentional console is never hidden.
+                    return False, "owner_console_excluded"
                 if root_text in command.lower():
                     return True, " <- ".join(chain)
                 current = current.parent()
@@ -256,6 +261,12 @@ def console_spawn_monitor() -> None:
 
 def run(args, cwd: Path | None = None, env: dict | None = None, timeout: int = 90):
     try:
+        kwargs = {}
+        if os.name == "nt":
+            si = subprocess.STARTUPINFO()
+            si.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+            si.wShowWindow = subprocess.SW_HIDE
+            kwargs = {"creationflags": CREATE_NO_WINDOW, "startupinfo": si}
         return subprocess.run(
             [str(item) for item in args],
             cwd=str(cwd) if cwd else None,
@@ -264,7 +275,7 @@ def run(args, cwd: Path | None = None, env: dict | None = None, timeout: int = 9
             capture_output=True,
             stdin=subprocess.DEVNULL,
             timeout=timeout,
-            creationflags=CREATE_NO_WINDOW if os.name == "nt" else 0,
+            **kwargs,
         )
     except Exception as exc:
         log(f"command failed: {args} ({exc})")
