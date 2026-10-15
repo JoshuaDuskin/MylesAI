@@ -43,7 +43,7 @@ const DEFAULT_CONFIG = {
     require_candidate_evidence: true,
     min_forward_stress_return_pct: 0,
     emergency_stop: false,
-    allow_research_shadow_entries: true,
+    allow_research_shadow_entries: true, // research signal only; never an executable paper order
   },
   research_exploration: {
     enabled: true,
@@ -184,6 +184,8 @@ function forwardCandidate(r,config){
   const minBase=n(config.validation?.min_base_return_pct,0);
   return n(r?.base?.trades,0)>=minimum&&
     r?.walk_forward?.status==='complete'&&
+    n(r?.walk_forward?.total_windows,0)>=2&&
+    n(r?.walk_forward?.positive_windows,0)>=1&&
     n(r?.stress?.return_pct,-1000)>=minStress&&
     n(r?.base?.return_pct,-1000)>=minBase;
 }
@@ -359,8 +361,9 @@ function choosePaperSignal(symbol,candles,config,results=[],decisionIndex=candle
     if(signal!==0)return{strategy,signal,source:row.validation?.pass?'validated_candidate':'forward_candidate'};
   }
   if(config.paper?.allow_research_shadow_entries!==false){
+    // Research hypotheses are not eligible to enter the paper portfolio.
     const shadowSignal=strategySignal(configured,candles,index);
-    if(shadowSignal!==0)return{strategy:configured,signal:shadowSignal,source:'research_shadow_candidate'};
+    if(shadowSignal!==0)return{strategy:configured,signal:0,source:'research_shadow_only',research_signal:shadowSignal};
   }
   return{strategy:configured,signal:0,source:'evidence_gate_hold'};
 }
@@ -371,19 +374,20 @@ function updatePaper(state,candlesBySymbol,latest,config,researchResults=[]){
   const newestTs=Math.max(...enabled.map(sym=>candlesBySymbol[sym]?.at(-1)?.timestamp||0),0);
   const dayKey=new Date(newestTs*1000||Date.now()).toISOString().slice(0,10);
   let eq=stateEquity(state,latest);
-  if(dayKey!==state.day_key){state.day_key=dayKey;state.day_start_equity=eq;state.halted=false;state.halt_reason=null;}
+  if(dayKey!==state.day_key){
+    const persistentHalt=state.halt_reason==='max_drawdown_limit'||state.halt_reason==='owner_emergency_stop';
+    state.day_key=dayKey;state.day_start_equity=eq;
+    if(!persistentHalt){state.halted=false;state.halt_reason=null;}
+  }
   const dailyLoss=(state.day_start_equity-eq)/Math.max(1,state.day_start_equity)*100;
   const dd=(state.peak_equity-eq)/Math.max(1,state.peak_equity)*100;
   if(config.paper.emergency_stop){state.halted=true;state.halt_reason='owner_emergency_stop';}
   else if(dailyLoss>=n(config.risk.max_daily_loss_pct,2)){state.halted=true;state.halt_reason='daily_loss_limit';}
   else if(dd>=n(config.risk.max_drawdown_pct,8)){state.halted=true;state.halt_reason='max_drawdown_limit';}
-  if(state.halted && config.paper?.allow_research_shadow_entries!==false && state.halt_reason!=='owner_emergency_stop'){
-    state.halt_cycles=Math.max(0,n(state.halt_cycles,0))+1;
-    if(state.halt_cycles>=5){
-      state.halted=false; state.halt_reason='research_shadow_recovery'; state.halt_cycles=0;
-      state.peak_equity=eq; state.day_start_equity=eq;
-    }
-  } else if(!state.halted){ state.halt_cycles=0; }
+  // Research must never clear daily-loss/drawdown/owner halts by itself.
+  // A daily-loss stop resets on the next trading day; max drawdown persists
+  // until an explicit owner reset, without erasing peak equity.
+  if(!state.halted){state.halt_cycles=0;}
   if(state.halted){for(const symbol of Object.keys(state.positions)){const c=candlesBySymbol[symbol]?.at(-1);if(c)closePaperPosition(state,symbol,c.close,c.timestamp,cost,state.halt_reason);}}
   for(const symbol of enabled){
     const candles=candlesBySymbol[symbol],markCandle=candles?.at(-1),decisionCandle=candles?.at(-2);
@@ -419,7 +423,9 @@ function updatePaper(state,candlesBySymbol,latest,config,researchResults=[]){
     else if(state.positions[symbol]){decision='hold';reason='position_open'}
     else if(openCount>=n(config.risk.max_concurrent_positions,2)){decision='hold';reason='max_concurrent_positions'}
     else if(choice.source==='evidence_gate_hold'){decision='hold';reason='paper_entry_evidence_gate'}
-    state.decision_feed.push({at:iso(),symbol,strategy,signal:signal>0?'long':signal<0?'short':'flat',source:choice.source,action:decision,reason});
+    state.decision_feed.push({at:iso(),symbol,strategy,signal:signal>0?'long':signal<0?'short':'flat',
+      research_signal:choice.source==='research_shadow_only'?(choice.research_signal>0?'long':'short'):null,
+      source:choice.source,action:decision,reason});
     state.last_candle_ts[symbol]=decisionCandle.timestamp;
   }
   eq=stateEquity(state,latest);state.peak_equity=Math.max(state.peak_equity,eq);state.equity_curve.push({timestamp:newestTs||Math.floor(Date.now()/1000),equity:round(eq,2)});state.equity_curve=state.equity_curve.slice(-2000);state.trades=state.trades.slice(-500);state.decision_feed=state.decision_feed.slice(-300);return state;
