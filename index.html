@@ -837,9 +837,34 @@ html,body{max-width:100%;overflow-x:clip}
       <label class="field"><span>Bridge URL</span><input id="bridgeUrlInput" type="url" placeholder="https://…trycloudflare.com" /></label>
       <label class="field"><span>Saved tower pair code</span><input id="bridgeTokenInput" type="text" inputmode="text" maxlength="8" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="8-character code" /></label>
       <div id="pairResult" class="pair-result"></div>
+      <section class="guest-owner-invite"><p class="muted">Share chat-only access without your owner controls, files or trading.</p><div class="modal-actions"><button id="makeGuestInvite" class="secondary-btn" type="button">Create family chat invite</button><button id="revokeGuestChat" class="secondary-btn" type="button">Revoke guest</button></div><div id="guestInviteResult" class="pair-result" style="white-space:pre-wrap"></div></section>
       <div class="modal-actions"><button id="clearPairing" class="secondary-btn">Clear</button><button id="testPairing" class="secondary-btn">Test</button><button id="savePairing" class="primary-btn">Save</button></div>
     </div>
   </div>
+
+  <style>
+    #guestShell{display:none}
+    body.guest-chat-mode .app-shell,body.guest-chat-mode #pairModal{display:none!important}
+    body.guest-chat-mode #guestShell{display:flex;max-width:750px;min-height:100dvh;margin:0 auto;flex-direction:column;padding:24px 16px;color:#e7ecfa;background:#0b1020;gap:14px}
+    .guest-header{padding:14px 4px;border-bottom:1px solid #28324a}
+    .guest-header small{letter-spacing:.18em;color:#9daac6}.guest-header h1{font-size:27px;margin:7px 0}
+    .guest-box{padding:15px;border:1px solid #303b52;border-radius:16px;background:#111a2e}
+    #guestConversation{min-height:42vh;max-height:55vh;overflow-y:auto;display:flex;flex-direction:column;gap:12px}
+    .guest-bubble{border:1px solid #2c3752;background:#1b2741;padding:12px 14px;border-radius:16px;white-space:pre-wrap;overflow-wrap:anywhere;max-width:92%;align-self:flex-start}
+    .guest-bubble.mine{background:#444ad8;border-color:#5b62e4;align-self:flex-end}
+    #guestForm{display:flex;gap:8px;align-items:stretch}
+    #guestText{flex:1;min-height:66px;resize:vertical;min-width:0;border-radius:14px;padding:12px;background:#111a2e;color:#fff;border:1px solid #3e4a66}
+    #guestSubmit{border:0;border-radius:14px;padding:12px 18px;background:#6763ed;color:white;font-weight:650}
+    #guestInviteCode{width:100%;padding:12px;background:#111a2e;border:1px solid #3e4a66;border-radius:12px;color:#fff;text-transform:uppercase}
+    #guestStatus{color:#bdc8dd;min-height:22px}
+  </style>
+  <section id="guestShell" aria-label="Chat-only Myles guest access">
+    <header class="guest-header"><small>MYLES · GUEST CHAT</small><h1>Talk with Myles</h1><p>General conversation only. No owner tasks, files, trading, or computer controls.</p></header>
+    <div id="guestPairBox" class="guest-box"><label for="guestInviteCode">One-time 8-character invitation</label><input id="guestInviteCode" autocomplete="off" autocapitalize="characters" maxlength="8" placeholder="Enter invitation code" /><button id="guestPairBtn" class="primary-btn" style="margin-top:12px" type="button">Connect chat</button></div>
+    <div id="guestConversation" class="guest-box" role="log" aria-live="polite"></div>
+    <form id="guestForm"><textarea id="guestText" maxlength="2500" placeholder="Ask Myles anything…" aria-label="Guest message"></textarea><button id="guestSubmit" type="submit">Send</button></form>
+    <div id="guestStatus" role="status"></div>
+  </section>
 
   <script>
 (() => {
@@ -1262,10 +1287,117 @@ function renderResearchTournament(m){
   function bindChartRangeRefresh(){document.addEventListener('click',e=>{const b=e.target.closest('[data-trade-range],[data-bot-range]');if(!b)return;if(b.dataset.tradeRange){state.tradeRange=b.dataset.tradeRange;refreshFundChart('trade');}if(b.dataset.botRange){state.botChart.range=b.dataset.botRange;refreshFundChart('bot');}});}
   function scheduleStatusPoll(){clearTimeout(state.refreshTimer);const ms=document.hidden?30000:(state.view==='trading'?5000:REFRESH_MS);state.refreshTimer=setTimeout(async()=>{await fetchStatus();scheduleStatusPoll();},ms);}
   function scheduleChatPoll(){clearTimeout(state.chatTimer);const ms=document.hidden?30000:(state.view==='chat'?CHAT_POLL_MS:5000);state.chatTimer=setTimeout(async()=>{if(state.bridge.healthy&&state.view==='chat')await pollMessages();scheduleChatPoll();},ms);}
-  async function init(){loadPairing();const savedWalletMode=localStorage.getItem('myles_wallet_connection_mode');if(savedWalletMode&&$('walletConnectionMode'))$('walletConnectionMode').value=savedWalletMode;bind();renderAll();await discoverBridge();if(!state.bridge.url&&state.bridge.discovered)$('bridgeUrlInput').value=state.bridge.discovered;if(bridgeUrl())await testBridge(false);await fetchStatus();if(state.bridge.healthy){await pollMessages();await quantGet().catch(()=>{});await liveGet().catch(()=>{});}scheduleStatusPoll();scheduleChatPoll();state.chart.timer=setInterval(()=>{if(!document.hidden&&state.view==='trading'&&state.tradeTab==='tradeManual'&&state.bridge.healthy)loadMarketChart();},20000);state.liveTimer=setInterval(()=>{if(!document.hidden&&state.bridge.healthy&&state.view==='trading')liveGet().catch(()=>{});},20000);document.addEventListener('visibilitychange',()=>{scheduleStatusPoll();scheduleChatPoll();});}
+  async function init(){if(isGuestPage){await initGuestChat();return;}loadPairing();const savedWalletMode=localStorage.getItem('myles_wallet_connection_mode');if(savedWalletMode&&$('walletConnectionMode'))$('walletConnectionMode').value=savedWalletMode;bind();renderAll();await discoverBridge();if(!state.bridge.url&&state.bridge.discovered)$('bridgeUrlInput').value=state.bridge.discovered;if(bridgeUrl())await testBridge(false);await fetchStatus();if(state.bridge.healthy){await pollMessages();await quantGet().catch(()=>{});await liveGet().catch(()=>{});}scheduleStatusPoll();scheduleChatPoll();state.chart.timer=setInterval(()=>{if(!document.hidden&&state.view==='trading'&&state.tradeTab==='tradeManual'&&state.bridge.healthy)loadMarketChart();},20000);state.liveTimer=setInterval(()=>{if(!document.hidden&&state.bridge.healthy&&state.view==='trading')liveGet().catch(()=>{});},20000);document.addEventListener('visibilitychange',()=>{scheduleStatusPoll();scheduleChatPoll();});}
 
   document.addEventListener('DOMContentLoaded',()=>{const box=$('chatMessages'),jump=$('chatJumpLatest');if(box)box.addEventListener('scroll',updateChatJump,{passive:true});if(jump)jump.addEventListener('click',jumpChatLatest);});
   document.addEventListener('DOMContentLoaded',init);
+
+  const isGuestPage = new URLSearchParams(location.search).get('guest') === '1';
+  const guest = {endpoint:'',token:'',busy:false};
+  function guestUrl(){return location.origin+(location.pathname||'/')+'?guest=1';}
+  async function loadGuestEndpoint(){
+    for(const url of ['./bridge.json?t='+Date.now(),RAW_BASE+'/bridge.json?t='+Date.now()]){
+      try{
+        const data=await fetchJson(url,{},4500);
+        const value=normalizeUrl(data.url||data.bridge_url||'');
+        if(/^https:\/\//.test(value)){guest.endpoint=value;return value;}
+      }catch(_){}
+    }
+    throw new Error('Myles tower connection is not available');
+  }
+  function renderGuestMessages(rows){
+    const box=$('guestConversation');box.replaceChildren();
+    if(!rows.length){box.textContent='Start a conversation with Myles.';return;}
+    rows.forEach(row=>{
+      if(!['user','assistant'].includes(row.role))return;
+      const el=document.createElement('div');
+      el.className='guest-bubble'+(row.role==='user'?' mine':'');
+      el.textContent=String(row.content||'').slice(0,2500);
+      box.appendChild(el);
+    });
+    box.scrollTop=box.scrollHeight;
+  }
+  async function guestLoadMessages(){
+    if(!guest.endpoint||!guest.token)return;
+    const data=await fetchJson(guest.endpoint+'/dashboard/guest/messages',
+      {headers:{'X-Myles-Guest':guest.token}},8000);
+    renderGuestMessages(data.messages||[]);
+  }
+  async function initGuestChat(){
+    document.body.classList.add('guest-chat-mode');
+    guest.token=localStorage.getItem('myles_guest_chat_token')||'';
+    const status=$('guestStatus');
+    try{await loadGuestEndpoint();}
+    catch(e){status.textContent=String(e.message||e);return;}
+    if(guest.token){
+      try{await guestLoadMessages();$('guestPairBox').classList.add('hidden');
+          status.textContent='Connected · Chat only';}
+      catch(_){guest.token='';localStorage.removeItem('myles_guest_chat_token');}
+    }
+    $('guestPairBtn').addEventListener('click',async()=>{
+      if(guest.busy)return;
+      guest.busy=true;
+      status.textContent='Connecting guest chat…';
+      try{
+        const code=String($('guestInviteCode').value||'').trim().toUpperCase();
+        if(!/^[A-Z0-9]{8}$/.test(code))throw new Error('Enter the 8-character invitation code');
+        const r=await fetchJson(guest.endpoint+'/dashboard/guest/pair',{
+          method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({code})},8500);
+        if(r.role!=='guest_chat_only'||!r.token)throw new Error('Guest access was not granted');
+        guest.token=r.token;
+        localStorage.setItem('myles_guest_chat_token',guest.token);
+        $('guestInviteCode').value='';
+        $('guestPairBox').classList.add('hidden');
+        await guestLoadMessages();
+        status.textContent='Connected · Chat only';
+      }catch(e){status.textContent=String(e.message||e);}
+      finally{guest.busy=false;}
+    });
+    $('guestForm').addEventListener('submit',async event=>{
+      event.preventDefault();
+      const message=String($('guestText').value||'').trim();
+      if(!guest.token){status.textContent='Enter a guest invitation first.';return;}
+      if(guest.busy||!message)return;
+      guest.busy=true;$('guestSubmit').disabled=true;
+      status.textContent='Myles is responding…';
+      try{
+        const out=await fetchJson(guest.endpoint+'/dashboard/guest/messages',{
+          method:'POST',headers:{'Content-Type':'application/json','X-Myles-Guest':guest.token},
+          body:JSON.stringify({message})},90000);
+        renderGuestMessages(out.messages||[]);
+        $('guestText').value='';status.textContent='Connected · Chat only';
+      }catch(e){
+        if(e.status===401){guest.token='';localStorage.removeItem('myles_guest_chat_token');$('guestPairBox').classList.remove('hidden');}
+        status.textContent=String(e.message||e);
+      }finally{guest.busy=false;$('guestSubmit').disabled=false;}
+    });
+  }
+  function bindGuestOwnerControls(){
+    $('makeGuestInvite')?.addEventListener('click',async()=>{
+      const out=$('guestInviteResult');
+      if(!state.bridge.healthy||!state.bridge.token){out.textContent='Connect your owner phone first.';return;}
+      out.textContent='Generating a one-time chat invitation…';
+      try{
+        const result=await fetchJson(bridgeUrl()+'/dashboard/guest/invite',{
+          method:'POST',headers:bridgeHeaders({'Content-Type':'application/json'}),
+          body:'{}'},12000);
+        out.textContent='Share this link:\n'+guestUrl()+'\n\nGuest code: '+result.code+
+          '\nExpires in 20 minutes · Chat-only access; no owner controls.';
+      }catch(e){out.textContent='Could not create invitation: '+String(e.message||e);}
+    });
+    $('revokeGuestChat')?.addEventListener('click',async()=>{
+      const out=$('guestInviteResult');
+      if(!state.bridge.healthy||!state.bridge.token){out.textContent='Owner pairing required.';return;}
+      try{
+        await fetchJson(bridgeUrl()+'/dashboard/guest/revoke',{
+          method:'POST',headers:bridgeHeaders({'Content-Type':'application/json'}),
+          body:'{}'},12000);
+        out.textContent='Guest access revoked. Your owner dashboard is unchanged.';
+      }catch(e){out.textContent='Could not revoke guest access: '+String(e.message||e);}
+    });
+  }
+
+  document.addEventListener('DOMContentLoaded',bindGuestOwnerControls);
   document.addEventListener('DOMContentLoaded',bindPairCodeOnly);
   document.addEventListener('DOMContentLoaded',bindIndependentQuantControls);
   document.addEventListener('DOMContentLoaded',bindChartRangeRefresh);

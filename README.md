@@ -297,3 +297,35 @@ categories. It never publishes full process command lines, paths, PIDs,
 private logs, credentials, or task content. A green CI test cannot prove
 that the Windows pop-up has stopped; subsequent authentic tower evidence
 must determine that. PineTree and live trading are unchanged.
+
+
+## v10.15.7 — household chat-only invitations and safer Quant paper execution
+
+The owner can open **Phone connection** on the existing dashboard and select
+**Create family chat invite**. Share the generated site link ending in
+`?guest=1` and its single-use eight-character code privately. The invitation
+expires in 20 minutes. A recipient can then use a separate text-only Myles
+conversation without the owner's task, Windows desktop, filesystem, Quant,
+wallet, trading, configuration, pairing, or message-history permissions.
+The guest token is distinct from the owner and dashboard read tokens; it is
+stored as a hash on the tower, and the owner can revoke it from the same
+Phone connection dialog. Guest message history stays in a separate local file.
+Guest messages cannot execute desktop actions, start jobs, or use AI tools;
+inference pauses during gaming. Authorization is enforced at BOTH the public
+gateway and local bridge, not by merely hiding dashboard buttons. Do not
+share the owner's existing eight-character pairing code with a guest.
+
+Quant keeps the existing paper account and historical trades without resets,
+but **unvalidated research-shadow ideas are no longer executable paper orders**.
+Shadow signal directions remain visible in the paper decision feed for
+investigation; only candidates passing the real validated/forward evidence
+gate may enter automatic paper positions. Research cannot silently clear
+loss/drawdown stops after five cycles; max drawdown remains halted until an
+explicit owner reset. This prevents unearned simulated losses but is not
+proof that the strategy is profitable. Live GMX/wallet settings and owner
+signing controls are unchanged, and live auto remains OFF.
+
+Stray Windows console debugging continues through the existing supervisor
+console-spawn audit and sanitized Issue #49 summary. This release does not
+claim the cause of any specific window until new tower audit evidence arrives;
+we do not add another scheduled task or a second supervisor.

@@ -267,7 +267,7 @@ class Handler(BaseHTTPRequestHandler):
 
     def cors(self):
         self.send_header("Access-Control-Allow-Origin", "*")
-        self.send_header("Access-Control-Allow-Headers", "Authorization, Content-Type, X-Myles-Token, X-Myles-Read")
+        self.send_header("Access-Control-Allow-Headers", "Authorization, Content-Type, X-Myles-Token, X-Myles-Read, X-Myles-Guest")
         self.send_header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
         self.send_header("Cache-Control", "no-store")
 
@@ -330,6 +330,29 @@ class Handler(BaseHTTPRequestHandler):
             pass
         self.send_json(status, raw, response_headers.get("Content-Type", "application/json"))
 
+    def proxy_guest(self):
+        """Only two exact guest routes; guest tokens never grant owner proxy."""
+        path = self.path.split("?",1)[0]
+        if path not in {"/dashboard/guest/pair","/dashboard/guest/messages"}:
+            return self.send_json(404,{"ok":False,"error":"Unknown guest route"})
+        if self.command not in {"GET","POST"} or (path.endswith("/pair") and self.command!="POST"):
+            return self.send_json(405,{"ok":False,"error":"Guest method not allowed"})
+        token = self.headers.get("X-Myles-Guest","").strip()
+        if path.endswith("/messages") and not (32 <= len(token) <= 256):
+            return self.send_json(401,{"ok":False,"error":"Guest chat pairing required"})
+        try:
+            size = int(self.headers.get("Content-Length","0"))
+        except ValueError:
+            size = -1
+        if size < 0 or size > 4096:
+            return self.send_json(400,{"ok":False,"error":"Guest request too large"})
+        body = self.rfile.read(size) if size else None
+        forwarded = {"X-Myles-Guest":token} if token else {}
+        if body is not None:
+            forwarded["Content-Type"]="application/json"
+        status,response_headers,raw = request_local(path,self.command,body,forwarded,85)
+        return self.send_json(status,raw,response_headers.get("Content-Type","application/json"))
+
     def proxy(self):
         # The public URL is read-only by default. Pairing is protected by the
         # bridge's one-time code; every other private route needs the owner token.
@@ -350,11 +373,15 @@ class Handler(BaseHTTPRequestHandler):
         self.send_json(status, raw, response_headers.get("Content-Type", "application/json"))
 
     def do_GET(self):
+        if self.path.split("?",1)[0] == "/dashboard/guest/messages":
+            return self.proxy_guest()
         if self.path.startswith("/dashboard/health") or self.path.startswith("/dashboard/status") or self.path.startswith("/api/public-status"):
             return self.public_status()
         return self.proxy()
 
     def do_POST(self):
+        if self.path.split("?",1)[0] in {"/dashboard/guest/pair","/dashboard/guest/messages"}:
+            return self.proxy_guest()
         return self.proxy()
 
     def do_PUT(self):

@@ -37,7 +37,7 @@ jobs:
           python-version: "3.12"
 
       - name: Compile Python runtime
-        run: python -m py_compile dashboard_bridge/dashboard_bridge.py bin/runtime_supervisor_v074.py bin/public_gateway_v074.py bin/game_mode_watch.py bin/ensure_myles_runtime.py bin/remote_deploy_agent.py bin/tower_reporting_connect.py bin/intelligence_baseline.py bin/tower_health_issue.py bin/verified_release.py bin/remote_deploy_smoketest.py bin/acceptance_windows.py myles_core.py myles_game_guard.py myles_conversation.py myles_visual_verify.py myles_assisted.py myles_interactive.py myles_agent_contracts.py myles_evidence.py myles_model_runtime.py myles_windows.py myles_tools.py job_worker.py
+        run: python -m py_compile dashboard_bridge/guest_chat.py dashboard_bridge/dashboard_bridge.py bin/runtime_supervisor_v074.py bin/public_gateway_v074.py bin/game_mode_watch.py bin/ensure_myles_runtime.py bin/remote_deploy_agent.py bin/tower_reporting_connect.py bin/intelligence_baseline.py bin/tower_health_issue.py bin/verified_release.py bin/remote_deploy_smoketest.py bin/acceptance_windows.py myles_core.py myles_game_guard.py myles_conversation.py myles_visual_verify.py myles_assisted.py myles_interactive.py myles_agent_contracts.py myles_evidence.py myles_model_runtime.py myles_windows.py myles_tools.py job_worker.py
 
       - name: Verify durable Windows startup contract
         shell: bash
@@ -58,6 +58,9 @@ jobs:
           ! grep -q -- "-NoExit" UPDATE_TOWER.cmd UPDATE_TOWER.ps1
           ! grep -q "Launching the single owner console automatically" UPDATE_TOWER.ps1
           echo "durable startup and recovery contract OK"
+
+      - name: Test household guest permission isolation
+        run: python -m unittest discover -s tests -p test_guest_chat_permissions.py -v
 
       - name: Run MYLES regression self-test
         run: python self_test.py
@@ -125,6 +128,9 @@ jobs:
 
       - name: Verify automatic game-mode contract
         run: python -c "from pathlib import Path;w=Path('bin/game_mode_watch.py').read_text().lower();s=Path('bin/runtime_supervisor_v074.py').read_text();c=Path('myles_core.py').read_text();assert 'fortniteclient-win64-shipping.exe' in w;assert 'ollama' in w and 'stop_heavy_myles_processes' in w;assert 'light_mode_active' in s and 'stop_heavy_background' in s;assert 'paused_for_game' in c;print('automatic game-mode contract OK')"
+
+      - name: Test Quant evidence gate and persistent risk stops
+        run: python -m unittest discover -s tests -p test_quant_paper_safety.py -v
 
       - name: Check Quant syntax
         run: node --check quant/quant_service.mjs

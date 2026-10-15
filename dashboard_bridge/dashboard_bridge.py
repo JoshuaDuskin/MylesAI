@@ -19,6 +19,10 @@ from urllib.request import Request, urlopen
 from urllib.parse import parse_qs, quote, urlparse
 
 ROOT = Path(os.environ.get("LOCALAPPDATA", str(Path.home() / "AppData" / "Local"))) / "MylesAI"
+# This module runs as a standalone Windows script and also as a test package.
+import sys
+if str(ROOT) not in sys.path:
+    sys.path.insert(0,str(ROOT))
 CORE = "http://127.0.0.1:8766"
 HOST = "127.0.0.1"
 PORT = 8790
@@ -847,6 +851,30 @@ def build_status() -> dict[str, Any]:
     return result
 
 
+def guest_credentials(handler: BaseHTTPRequestHandler) -> bool:
+    """Separate credential namespace; never treat guest as Myles owner."""
+    from dashboard_bridge import guest_chat
+    token = handler.headers.get("X-Myles-Guest", "").strip()
+    return guest_chat.is_guest(token)
+
+
+def guest_request_rate(handler: BaseHTTPRequestHandler, is_post: bool) -> bool:
+    """Do not let shared 127.0.0.1 gateway IP bypass guest throttling."""
+    token = handler.headers.get("X-Myles-Guest", "")
+    ident = hashlib.sha256(token.encode("utf-8")).hexdigest()[:24]
+    key = "guest-chat:" + ident
+    # A separate, conservative 20/minute guest quota.
+    now = time.monotonic()
+    with RATE_LOCK:
+        q = RATE[key]
+        while q and q[0] < now - RATE_WINDOW:
+            q.popleft()
+        if len(q) >= (20 if is_post else 80):
+            return False
+        q.append(now)
+    return True
+
+
 def authorized(handler: BaseHTTPRequestHandler) -> bool:
     if not TOKEN:
         return False
@@ -917,7 +945,7 @@ class Handler(BaseHTTPRequestHandler):
         if origin in ALLOWED_ORIGINS or origin.startswith("http://127.0.0.1:") or origin.startswith("http://localhost:"):
             self.send_header("Access-Control-Allow-Origin", origin)
             self.send_header("Vary", "Origin")
-        self.send_header("Access-Control-Allow-Headers", "Authorization, X-Myles-Token, Content-Type")
+        self.send_header("Access-Control-Allow-Headers", "Authorization, X-Myles-Token, X-Myles-Guest, Content-Type")
         self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
         self.send_header("Cache-Control", "no-store")
         self.send_header("X-Content-Type-Options", "nosniff")
@@ -960,6 +988,19 @@ class Handler(BaseHTTPRequestHandler):
         return True
 
     def do_GET(self) -> None:  # noqa: N802
+        path = urlparse(self.path).path
+        if path == "/dashboard/guest/messages":
+            origin = self.headers.get("Origin","")
+            if (origin and origin not in ALLOWED_ORIGINS
+                    and not origin.startswith("http://127.0.0.1:")
+                    and not origin.startswith("http://localhost:")):
+                return self.deny(403,"Origin not allowed")
+            if not guest_credentials(self):
+                return self.deny(401,"Guest chat pairing required")
+            if not guest_request_rate(self, False):
+                return self.deny(429,"Guest chat rate limit")
+            from dashboard_bridge import guest_chat
+            return self.json_response(200,guest_chat.messages())
         if not self.preflight(False):
             return
         parsed = urlparse(self.path)
@@ -1018,6 +1059,43 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_POST(self) -> None:  # noqa: N802
         path = self.path.split("?", 1)[0]
+        # Guest pairing/chat is a wholly separate capability from owner pairing.
+        # No guest request is allowed to reach jobs, computer, settings or trading.
+        if path in {"/dashboard/guest/pair","/dashboard/guest/messages"}:
+            origin = self.headers.get("Origin","")
+            if (origin and origin not in ALLOWED_ORIGINS
+                    and not origin.startswith("http://127.0.0.1:")
+                    and not origin.startswith("http://localhost:")):
+                return self.deny(403,"Origin not allowed")
+            if not rate_ok(self.client_address[0]+":guest-pair",True):
+                return self.deny(429,"Too many guest requests")
+            if path == "/dashboard/guest/messages":
+                if not guest_credentials(self):
+                    return self.deny(401,"Guest chat pairing required")
+                if not guest_request_rate(self,True):
+                    return self.deny(429,"Guest chat rate limit")
+            try:
+                size = int(self.headers.get("Content-Length","0"))
+            except ValueError:
+                size = 0
+            if not 0 < size <= 4096:
+                return self.deny(400,"Invalid guest request body")
+            try:
+                body = json.loads(self.rfile.read(size).decode("utf-8"))
+            except (ValueError, UnicodeDecodeError):
+                return self.deny(400,"Invalid guest JSON")
+            if not isinstance(body,dict):
+                return self.deny(400,"Guest request must be an object")
+            from dashboard_bridge import guest_chat
+            if path == "/dashboard/guest/pair":
+                pair = guest_chat.exchange(str(body.get("code") or ""))
+                if pair is None:
+                    time.sleep(0.3)
+                    return self.deny(401,"Incorrect or expired guest invite")
+                return self.json_response(200,pair)
+            status,response = guest_chat.send(body.get("message") or body.get("text") or "")
+            return self.json_response(status,response)
+
         if path == "/dashboard/pair":
             refresh_pair_state()
             origin = self.headers.get("Origin", "")
@@ -1070,6 +1148,12 @@ class Handler(BaseHTTPRequestHandler):
             self.deny(400, "JSON object required")
             return
 
+        if path == "/dashboard/guest/invite":
+            from dashboard_bridge import guest_chat
+            return self.json_response(200,guest_chat.make_invite())
+        if path == "/dashboard/guest/revoke":
+            from dashboard_bridge import guest_chat
+            return self.json_response(200,guest_chat.revoke())
         if path == "/dashboard/control/game-mode":
             enabled = bool(payload.get("enabled"))
             cfg_path = ROOT / "data" / "config.json"

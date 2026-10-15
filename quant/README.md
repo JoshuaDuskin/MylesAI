@@ -35,3 +35,16 @@ Myles Quant combines GMX market research, a chart-based scalp terminal, simulate
 The GMX one-click subaccount may execute only the authorized trading actions. The main wallet remains the account owner. The dashboard's withdraw flow creates a USDC transfer that the owner wallet itself must sign. There is no owner private key or seed phrase in GitHub, the browser source, or Myles's config.
 
 Live defaults are intentionally conservative: $100 max margin per trade, $250 max notional, 2x max leverage, 2 concurrent positions, an 8-hour armed session, and LIVE Auto OFF. Any live-adapter restart automatically disarms both manual LIVE and LIVE Auto. The Advanced page exposes these limits, but changing them requires the configured owner wallet to sign the exact new limit set.
+
+
+## Research versus paper performance safety (v10.15.7)
+
+An unvalidated research/shadow signal now records the hypothesis separately
+and **never becomes an automatic paper order**. Paper entries require an
+actual qualified strategy with stressed-cost and walk-forward evidence.
+Existing trades, equity history and paper balances are preserved. Drawdown
+stops can no longer be cleared by five unattended research cycles; the owner
+must explicitly reset the paper account to clear a max-drawdown halt.
+This improves evidence quality and risk containment, not guaranteed returns.
+The live execution adapter, owner-wallet signing, and LIVE Auto policy are
+not changed.
