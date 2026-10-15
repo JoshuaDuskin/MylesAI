@@ -129,6 +129,9 @@ jobs:
       - name: Verify automatic game-mode contract
         run: python -c "from pathlib import Path;w=Path('bin/game_mode_watch.py').read_text().lower();s=Path('bin/runtime_supervisor_v074.py').read_text();c=Path('myles_core.py').read_text();assert 'fortniteclient-win64-shipping.exe' in w;assert 'ollama' in w and 'stop_heavy_myles_processes' in w;assert 'light_mode_active' in s and 'stop_heavy_background' in s;assert 'paused_for_game' in c;print('automatic game-mode contract OK')"
 
+      - name: Test Quant evidence gate and persistent risk stops
+        run: python -m unittest discover -s tests -p test_quant_paper_safety.py -v
+
       - name: Check Quant syntax
         run: node --check quant/quant_service.mjs
 
