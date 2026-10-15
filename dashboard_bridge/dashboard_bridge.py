@@ -19,6 +19,10 @@ from urllib.request import Request, urlopen
 from urllib.parse import parse_qs, quote, urlparse
 
 ROOT = Path(os.environ.get("LOCALAPPDATA", str(Path.home() / "AppData" / "Local"))) / "MylesAI"
+# This module runs as a standalone Windows script and also as a test package.
+import sys
+if str(ROOT) not in sys.path:
+    sys.path.insert(0,str(ROOT))
 CORE = "http://127.0.0.1:8766"
 HOST = "127.0.0.1"
 PORT = 8790
@@ -849,7 +853,7 @@ def build_status() -> dict[str, Any]:
 
 def guest_credentials(handler: BaseHTTPRequestHandler) -> bool:
     """Separate credential namespace; never treat guest as Myles owner."""
-    import guest_chat
+    from dashboard_bridge import guest_chat
     token = handler.headers.get("X-Myles-Guest", "").strip()
     return guest_chat.is_guest(token)
 
@@ -995,7 +999,7 @@ class Handler(BaseHTTPRequestHandler):
                 return self.deny(401,"Guest chat pairing required")
             if not guest_request_rate(self, False):
                 return self.deny(429,"Guest chat rate limit")
-            import guest_chat
+            from dashboard_bridge import guest_chat
             return self.json_response(200,guest_chat.messages())
         if not self.preflight(False):
             return
@@ -1082,7 +1086,7 @@ class Handler(BaseHTTPRequestHandler):
                 return self.deny(400,"Invalid guest JSON")
             if not isinstance(body,dict):
                 return self.deny(400,"Guest request must be an object")
-            import guest_chat
+            from dashboard_bridge import guest_chat
             if path == "/dashboard/guest/pair":
                 pair = guest_chat.exchange(str(body.get("code") or ""))
                 if pair is None:
@@ -1145,10 +1149,10 @@ class Handler(BaseHTTPRequestHandler):
             return
 
         if path == "/dashboard/guest/invite":
-            import guest_chat
+            from dashboard_bridge import guest_chat
             return self.json_response(200,guest_chat.make_invite())
         if path == "/dashboard/guest/revoke":
-            import guest_chat
+            from dashboard_bridge import guest_chat
             return self.json_response(200,guest_chat.revoke())
         if path == "/dashboard/control/game-mode":
             enabled = bool(payload.get("enabled"))
