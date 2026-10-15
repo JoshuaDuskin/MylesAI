@@ -116,6 +116,8 @@ def send(text: str) -> tuple[int, dict]:
     from myles_game_guard import game_is_active
     if game_is_active():
         return 503, {"ok": False, "error": "Conversation is paused while the tower is gaming"}
+    if str(ROOT) not in sys.path:
+        sys.path.insert(0, str(ROOT))
     with LOCK:
         existing = messages()["messages"]
         context = [{"role": "system", "content":
