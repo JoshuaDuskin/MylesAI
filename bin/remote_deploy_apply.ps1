@@ -15,7 +15,9 @@ $ExitCode = 99
 $Healthy = $false
 try {
     $Updater = Join-Path $Root "UPDATE_TOWER.ps1"
-    & powershell.exe -NoProfile -ExecutionPolicy Bypass -NonInteractive -File $Updater -RemoteQuiet -ExpectedHead $ExpectedHead *> $RunLog
+    # A nested PowerShell can allocate its OWN visible console even when its
+    # parent was started with CREATE_NO_WINDOW. Hide the child explicitly.
+    & powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -NonInteractive -WindowStyle Hidden -File $Updater -RemoteQuiet -ExpectedHead $ExpectedHead *> $RunLog
     $ExitCode = [int]$LASTEXITCODE
     $HeadOutput = & git.exe -C $Root rev-parse HEAD 2>$null
     if ($LASTEXITCODE -eq 0) {
