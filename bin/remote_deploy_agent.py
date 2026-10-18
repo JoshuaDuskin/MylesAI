@@ -339,7 +339,7 @@ def reconcile_interrupted_update(state: dict, receipt: dict) -> dict | None:
         if age < 300 or age > 7 * 86400:
             return None
         wrapper_pid = state.get("wrapper_pid")
-        if not wrapper_pid or process_running(wrapper_pid):
+        if not wrapper_pid or wrapper_process_running(wrapper_pid):
             return None
         if git("rev-parse", "HEAD").lower() != target:
             return None
