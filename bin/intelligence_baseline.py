@@ -299,8 +299,7 @@ def launch_if_due() -> str:
         if prior.get("status")=="completed":
             return "already_completed"
         if prior.get("status")=="running":
-            # Never create duplicate tests. A crashed worker remains unverified
-            # and is not silently represented as a completed benchmark.
+            # A stale record must remain unverified rather than silently passing.
             return "already_launched"
     if not is_windows() or not PYTHONW.is_file():
         return "missing_python_runtime"
