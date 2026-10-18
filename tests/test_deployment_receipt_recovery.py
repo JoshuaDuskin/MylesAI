@@ -5,8 +5,10 @@ They do not treat Linux CI as an actual Windows tower installation.
 """
 from __future__ import annotations
 import datetime as dt
+import sys
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import patch
 
 from bin import remote_deploy_agent as agent
@@ -35,11 +37,32 @@ class ReceiptRecoveryTests(unittest.TestCase):
     def _guards(self,snapshot=None,*,wrapper_alive=False,head=SHA,ci=True):
         from contextlib import ExitStack
         s=ExitStack()
-        s.enter_context(patch.object(agent,"process_running",return_value=wrapper_alive))
+        s.enter_context(patch.object(agent,"wrapper_process_running",return_value=wrapper_alive))
         s.enter_context(patch.object(agent,"git",return_value=head))
         s.enter_context(patch.object(agent,"verify_ci",return_value=ci))
         s.enter_context(patch.object(issue,"snapshot",return_value=snapshot if snapshot is not None else healthy()))
         return s
+
+    def test_pid_identity_distinguishes_reused_process_from_wrapper(self):
+        class NoSuchProcess(Exception):
+            pass
+
+        unrelated=SimpleNamespace(
+            Process=lambda pid: SimpleNamespace(
+                cmdline=lambda: ["python.exe","unrelated_worker.py"]),
+            NoSuchProcess=NoSuchProcess,
+        )
+        wrapper=SimpleNamespace(
+            Process=lambda pid: SimpleNamespace(
+                cmdline=lambda: ["powershell.exe","-File",str(agent.APPLY)]),
+            NoSuchProcess=NoSuchProcess,
+        )
+        with patch.object(agent,"process_running",return_value=True), \
+             patch.dict(sys.modules,{"psutil":unrelated}):
+            self.assertFalse(agent.wrapper_process_running(12345))
+        with patch.object(agent,"process_running",return_value=True), \
+             patch.dict(sys.modules,{"psutil":wrapper}):
+            self.assertTrue(agent.wrapper_process_running(12345))
 
     def test_recovered_state_is_not_faked_as_successful_wrapper_receipt(self):
         with self._guards():
