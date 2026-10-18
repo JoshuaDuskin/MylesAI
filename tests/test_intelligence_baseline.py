@@ -5,7 +5,9 @@ can establish actual Qwen tool choices, conversation accuracy or REA readiness.
 """
 from __future__ import annotations
 
+import datetime as dt
 import json
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -153,6 +155,38 @@ class BaselineTests(unittest.TestCase):
                 self.assertNotIn("local_model_name",published)
                 self.assertNotIn("raw_reply",published)
                 self.assertNotIn("private_stdout",published)
+
+    def test_dead_worker_gets_one_bounded_recovery(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path=Path(tmp)
+            py=path/"pythonw.exe"
+            py.write_text("fixture")
+            state=path/"state.json"
+            stale=(dt.datetime.now(dt.timezone.utc)-dt.timedelta(minutes=20)).isoformat()
+            state.write_text(json.dumps({
+                "installed_commit":SHA,"status":"running",
+                "checked_at":stale,"worker_pid":321
+            }))
+            process=Mock(pid=654)
+            class MissingProcess(Exception):
+                pass
+            fake_psutil=type("FakePsutil",(),{
+                "NoSuchProcess":MissingProcess,
+                "Process":staticmethod(lambda pid: (_ for _ in ()).throw(MissingProcess()))
+            })
+            with patch.object(base,"STATE",state), \
+                 patch.object(base,"PYTHONW",py), \
+                 patch.object(base,"safe_to_run",return_value=True), \
+                 patch.object(base,"is_windows",return_value=True), \
+                 patch.object(base,"installed_sha",return_value=SHA), \
+                 patch.dict(sys.modules,{"psutil":fake_psutil}), \
+                 patch.object(base.subprocess,"Popen",return_value=process) as popen:
+                self.assertEqual(base.launch_if_due(),"started")
+                self.assertEqual(base.launch_if_due(),"already_launched")
+                popen.assert_called_once()
+            saved=json.loads(state.read_text())
+            self.assertEqual(saved["recovery_attempts"],1)
+            self.assertEqual(saved["worker_pid"],654)
 
     def test_launch_uses_existing_windowless_venv_only_once(self):
         with tempfile.TemporaryDirectory() as tmp:
