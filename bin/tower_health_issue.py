@@ -64,9 +64,10 @@ def execute(args, *, env=None, data=None, timeout=18):
         si.dwFlags |= subprocess.STARTF_USESHOWWINDOW
         si.wShowWindow = subprocess.SW_HIDE
         opts["startupinfo"] = si
+    if data is None:
+        opts["stdin"] = subprocess.DEVNULL
     p=subprocess.run(args,env=env,input=data,stdout=subprocess.PIPE,
                      stderr=subprocess.DEVNULL,text=True,errors="replace",
-                     stdin=subprocess.DEVNULL if data is None else None,
                      timeout=timeout,creationflags=NO_WINDOW,check=False,
                      **opts)
     return p.returncode,(p.stdout or "")[:100_000]
