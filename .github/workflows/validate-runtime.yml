@@ -74,6 +74,9 @@ jobs:
       - name: Test remote deployment safety gates
         run: python -m unittest discover -s tests -p test_remote_deploy.py -v
 
+      - name: Test silent unchanged GitHub poll and safe console attribution
+        run: python -m unittest discover -s tests -p test_quiet_git_poll.py -v
+
       - name: Test hidden launches and sanitized console forensics
         run: python -m unittest discover -s tests -p test_console_window_quiet.py -v
 
