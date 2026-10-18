@@ -31,6 +31,18 @@ def _category(line: str) -> str:
     for name, markers in SOURCE_MATCHES:
         if any(word in value for word in markers):
             return name
+    # Supervisor records a bounded ancestry chain. Classify known parents
+    # without exporting their command lines, paths, or process identifiers.
+    ancestry = re.search(r"\\bancestry=(.+)$", line, flags=re.IGNORECASE)
+    if ancestry:
+        parent_names = re.findall(
+            r"<-\\s*\\d+:([a-zA-Z0-9._-]{1,40}):", ancestry.group(1))
+        for name in parent_names:
+            lower = name.lower()
+            if lower in {"powershell.exe", "pwsh.exe", "cmd.exe"}:
+                return "shell_parent"
+            if lower in {"python.exe", "pythonw.exe", "node.exe", "git.exe"}:
+                return "runtime_child"
     return "unclassified_myles_child"
 
 
