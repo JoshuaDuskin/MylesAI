@@ -329,3 +329,24 @@ Stray Windows console debugging continues through the existing supervisor
 console-spawn audit and sanitized Issue #49 summary. This release does not
 claim the cause of any specific window until new tower audit evidence arrives;
 we do not add another scheduled task or a second supervisor.
+
+
+## v10.15.8 — reduce redundant Git polling and inspect console pop-ups
+
+The already-authorized five-minute Windows deploy checker first reads
+`.git/HEAD` without starting a process and checks GitHub's public main
+branch SHA over HTTPS. When the exact installed commit equals GitHub main,
+it skips unnecessary `git.exe fetch` and `rev-parse` launches. When SHA
+cannot be determined, GitHub is offline, or a newer release exists, the
+original canonical `git fetch`, ancestry verification, signed CI validation,
+idle/game restrictions and updater remain **unchanged** (fail-open to the
+original verified path; never installs on the basis of API response alone).
+Scheduled Git/health/benchmark child subprocesses now set both
+`CREATE_NO_WINDOW` and `STARTUPINFO SW_HIDE` and do not open owner consoles.
+The existing local console audit publishes only safe grouped counts of
+suppressed window executables/source classes through Issue #49; never raw
+command lines, paths, tokens, usernames, PIDs or private logs. The new
+aggregates are diagnostic evidence, not proof all flashes have stopped.
+Guest-chat-only role remains separate from owner controls; the local model
+must be healthy to answer guests. Quant paper history is preserved, and no
+live trading is enabled or trading settings changed.
