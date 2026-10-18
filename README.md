@@ -350,3 +350,24 @@ aggregates are diagnostic evidence, not proof all flashes have stopped.
 Guest-chat-only role remains separate from owner controls; the local model
 must be healthy to answer guests. Quant paper history is preserved, and no
 live trading is enabled or trading settings changed.
+
+
+## v10.15.9 — tower recovery after lost receipts and model readiness diagnosis
+
+When a prior CI-approved source update installed successfully but the updater's
+PowerShell receipt was lost, the existing poller can now independently verify a
+`failed_unverified` state (within seven days) against the exact installed SHA,
+matching successful GitHub push CI, confirmed exited wrapper, and healthy live
+core/bridge/gateway/verified Quant feed. This records
+`installed_verified_post_restart`, **not** a fabricated successful receipt.
+The source installer also preserves its fixed CI receipt-writing PowerShell
+parent if Windows CIM parent-PID lookup is unavailable; it does not relax
+release verification, restart safeguards or protections for owner data.
+
+The idle-only model baseline now uses the same bounded Ollama service recovery
+as Myles owner chat before declaring the model absent. GitHub Issue #49 receives
+only a fixed-category model readiness reason such as `no_chat_model` or
+`ollama_missing`, never a model name, private prompt, error text or file path.
+It does not download a model or modify the owner's model selection, and it
+never starts inference while the tower is gaming. The actual Windows result
+remains unverified until the tower checks in at this new commit.

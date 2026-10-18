@@ -296,7 +296,7 @@ def reconcile_interrupted_update(state: dict, receipt: dict) -> dict | None:
     separate explicitly evidence-based recovery state only when GitHub CI,
     canonical installed SHA and observed live services agree.
     """
-    if state.get("source") != "ci_approved_main":
+    if state.get("source") != "ci_approved_main" or state.get("status") not in {"launched", "failed_unverified"}:
         return None
     target = str(state.get("target_sha") or "").lower()
     if not SHA_RE.fullmatch(target) or state.get("request_id") != "ci_" + target:
@@ -308,7 +308,9 @@ def reconcile_interrupted_update(state: dict, receipt: dict) -> dict | None:
         if launched.tzinfo is None:
             return None
         age = (dt.datetime.now(dt.timezone.utc) - launched.astimezone(dt.timezone.utc)).total_seconds()
-        if age < 300 or age > 7200:
+        # A two-hour receipt timeout is a reporting state, not proof that
+        # a deployed revision failed. Independently verify it for up to a week.
+        if age < 300 or age > 7 * 86400:
             return None
         wrapper_pid = state.get("wrapper_pid")
         if not wrapper_pid or process_running(wrapper_pid):
@@ -403,6 +405,15 @@ def poll() -> int:
         return 0
     try:
         state = read_json(STATE)
+        if state.get("status") == "failed_unverified":
+            # Historic wrappers sometimes died after installing code but before
+            # saving their receipt. Never rewrite them as successful: recover
+            # only when installed SHA, push CI and live services all match.
+            recovered = reconcile_interrupted_update(state, read_json(RESULT))
+            if recovered:
+                write_json(STATE, recovered)
+                log("timed-out installation independently verified against live tower")
+                return 0
         if state.get("status") == "launched":
             receipt = read_json(RESULT)
             if receipt.get("request_id") == state.get("request_id"):

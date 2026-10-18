@@ -52,6 +52,16 @@ CASES = (
         {"role":"user","content":"A mock server has 3 queues with 4 jobs each. Two jobs finish. How many remain?"},
     ], "ten"),
 )
+class ModelProbeUnavailable(RuntimeError):
+    """A small, public-safe local provider readiness category."""
+
+
+MODEL_FAILURE_KINDS = frozenset({
+    "ollama_missing", "ollama_unreachable", "ollama_start_failed",
+    "ollama_start_timeout", "no_chat_model", "nonlocal_ollama_not_benchmarked",
+})
+
+
 TOOLS = [
     {"type":"function","function":{"name":"lookup_reference","description":"Read a harmless reference text by subject.",
      "parameters":{"type":"object","properties":{"subject":{"type":"string"}},"required":["subject"]}}},
@@ -144,22 +154,19 @@ def request(base: str, path: str, payload: dict | None=None, timeout: int=8) -> 
 def ollama_identity() -> tuple[str,str,list[str]]:
     sys.path.insert(0,str(ROOT))
     from myles_common import load_config
-    from myles_model_runtime import select_model, _ollama_base
+    from myles_model_runtime import ensure_model_runtime, _ollama_base
     cfg=load_config()
     base=_ollama_base(cfg)
-    # Only talk to a preexisting localhost Ollama process; no model downloads
-    # and no remote inference/third-party hosted provider.
+    # Never send benchmark prompts to a hosted model or download anything.
     if not base.startswith(("http://127.0.0.1:","http://localhost:")):
-        raise RuntimeError("nonlocal_ollama_not_benchmarked")
-    tags=request(base,"/api/tags",timeout=6)
-    installed=[str(v.get("name") or "") for v in tags.get("models",[])
-               if isinstance(v,dict) and str(v.get("name") or "")]
-    name=select_model(cfg,installed)
-    if not name:
-        raise RuntimeError("no_installed_model")
-    details=request(base,"/api/show",{"model":name},timeout=8)
-    caps=details.get("capabilities") or []
-    return base,name,[str(v).lower() for v in caps if isinstance(v,str)]
+        raise ModelProbeUnavailable("nonlocal_ollama_not_benchmarked")
+    # Use exactly the same bounded local service recovery used by owner chat.
+    # A stopped Ollama service must not be mistaken for a missing model.
+    health=ensure_model_runtime(cfg,force=True)
+    if not health.available:
+        reason=health.error_kind if health.error_kind in MODEL_FAILURE_KINDS else "unknown"
+        raise ModelProbeUnavailable(reason)
+    return base,health.model,list(health.capabilities)
 
 
 def evaluate_case(base: str, model: str, messages: list[dict], case_id: str) -> bool:
@@ -259,7 +266,8 @@ def run() -> int:
         except InterruptedError:
             raise
         except Exception as exc:
-            outcome["model"]["failure_kind"]=type(exc).__name__
+            outcome["model"]["failure_kind"]=(
+                str(exc) if isinstance(exc,ModelProbeUnavailable) else type(exc).__name__)
         if not safe_to_run():
             raise InterruptedError("gaming_or_owner_work_started")
         try:
@@ -330,6 +338,9 @@ def public_summary(current_sha: str) -> dict:
             "model_present":model.get("present") is True,
             "model_tools_capable":model.get("tools_capable") is True,
             "model_vision_capable":model.get("vision_capable") is True,
+            "model_runtime_issue":(
+                model.get("failure_kind") if model.get("failure_kind") in MODEL_FAILURE_KINDS
+                else "unknown" if model.get("failure_kind") else "none"),
             "test_cases_passed":int(model.get("cases_passed") or 0),
             "test_cases_total":int(model.get("cases_total") or 0),
             "rea_doctor":str(rea.get("doctor_outcome") or "not_run")[:40],

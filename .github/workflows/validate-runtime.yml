@@ -74,6 +74,9 @@ jobs:
       - name: Test remote deployment safety gates
         run: python -m unittest discover -s tests -p test_remote_deploy.py -v
 
+      - name: Test verified recovery and Ollama readiness diagnosis
+        run: python -m unittest discover -s tests -p test_tower_recovery_10159.py -v
+
       - name: Test silent unchanged GitHub poll and safe console attribution
         run: python -m unittest discover -s tests -p test_quiet_git_poll.py -v
 
