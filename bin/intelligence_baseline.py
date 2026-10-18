@@ -90,9 +90,16 @@ def write_json(path: Path,obj: dict) -> None:
 
 def installed_sha() -> str:
     try:
+        opts={}
+        if is_windows():
+            si=subprocess.STARTUPINFO()
+            si.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+            si.wShowWindow=subprocess.SW_HIDE
+            opts["startupinfo"]=si
         p=subprocess.run(["git","-C",str(ROOT),"rev-parse","HEAD"],
+                         stdin=subprocess.DEVNULL,
                          stdout=subprocess.PIPE,stderr=subprocess.DEVNULL,
-                         text=True,timeout=12,creationflags=NO_WINDOW)
+                         text=True,timeout=12,creationflags=NO_WINDOW,**opts)
         value=p.stdout.strip().lower()
         return value if p.returncode==0 and SHA.fullmatch(value) else ""
     except (OSError,subprocess.TimeoutExpired):

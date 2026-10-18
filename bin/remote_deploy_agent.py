@@ -62,11 +62,23 @@ def write_json(path: Path, value: dict) -> None:
         tmp.unlink(missing_ok=True)
 
 
+def quiet_windows_startup() -> dict:
+    """Prevent console flashes from scheduled, noninteractive Git children."""
+    if not is_windows():
+        return {}
+    si = subprocess.STARTUPINFO()
+    si.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+    si.wShowWindow = subprocess.SW_HIDE
+    return {"startupinfo": si}
+
+
 def git(*args: str, timeout: int = 30) -> str:
     result = subprocess.run(
         ["git", "-C", str(ROOT), *args],
+        stdin=subprocess.DEVNULL,
         stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
         timeout=timeout, creationflags=NO_WINDOW, check=False,
+        **quiet_windows_startup(),
     )
     if result.returncode:
         raise RuntimeError(f"git {args[0]} returned {result.returncode}")
@@ -332,6 +344,57 @@ def reconcile_interrupted_update(state: dict, receipt: dict) -> dict | None:
     }
 
 
+def local_head_without_process() -> str:
+    """Read canonical .git HEAD directly, without starting a flashing git.exe.
+
+    This is an OPTIMIZATION only. Missing/packed/unusual Git metadata causes
+    the existing full Git+CI verification path to run unchanged.
+    """
+    try:
+        gitdir = ROOT / ".git"
+        if not gitdir.is_dir():
+            return ""
+        head = (gitdir / "HEAD").read_text(encoding="utf-8").strip()
+        if SHA_RE.fullmatch(head.lower()):
+            return head.lower()
+        if not head.startswith("ref: "):
+            return ""
+        ref = head[5:].strip()
+        if not re.fullmatch(r"refs/heads/[A-Za-z0-9_./-]{1,140}", ref) or ".." in ref:
+            return ""
+        filepath = gitdir.joinpath(*ref.split("/"))
+        value = filepath.read_text(encoding="utf-8").strip().lower()
+        return value if SHA_RE.fullmatch(value) else ""
+    except (OSError, ValueError):
+        return ""
+
+
+def unchanged_main_without_git() -> bool:
+    """Avoid Git subprocesses when already at GitHub main; fail OPEN to Git.
+
+    Only an exact 40-character SHA comparison from GitHub's official branch
+    API can skip network fetches; it never authorizes ANY update. When a
+    release is newer (or lookup fails), the original signed-CI Git path runs.
+    """
+    installed = local_head_without_process()
+    if not installed:
+        return False
+    try:
+        request = urllib.request.Request(
+            "https://api.github.com/repos/JoshuaDuskin/MylesAI/branches/main",
+            headers={"User-Agent": "MylesAI-QuietUpdatePoll/1",
+                     "Accept": "application/vnd.github+json"})
+        with urllib.request.urlopen(request, timeout=7) as reply:
+            payload = reply.read(150_001)
+        if len(payload) > 150_000:
+            return False
+        data = json.loads(payload)
+        sha = str((data.get("commit") or {}).get("sha") or "").lower()
+        return bool(SHA_RE.fullmatch(sha) and sha == installed)
+    except (OSError, ValueError, TypeError, KeyError):
+        return False
+
+
 def poll() -> int:
     if read_json(ENABLED).get("enabled") is not True:
         return 0
@@ -369,6 +432,10 @@ def poll() -> int:
                         log("remote update timed out without a verified receipt")
                 except (KeyError, ValueError, TypeError, OverflowError):
                     pass
+            return 0
+        # Once installed, don't spawn git.exe repeatedly just to discover that
+        # GitHub main hasn't changed. New releases ALWAYS take original CI gate.
+        if read_json(ENABLED).get("auto_update") is True and unchanged_main_without_git():
             return 0
         git("fetch", "--no-tags", CANONICAL, "refs/heads/main")
         head = git("rev-parse", "FETCH_HEAD").lower()

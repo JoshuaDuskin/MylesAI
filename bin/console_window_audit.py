@@ -82,9 +82,18 @@ def recent_summary(at: dt.datetime | None = None, *, path: Path | None = None) -
         return {"status":"no_recent_myles_console_events"}
     events.sort(key=lambda x:x[0])
     last = events[-1]
+    # Public-safe aggregates reveal which trusted source category is creating
+    # visible console windows; never leak raw command lines or local paths.
+    from collections import Counter
+    visible_categories = Counter(x[3] for x in events if x[2] > 0)
+    visible_executables = Counter(x[1] for x in events if x[2] > 0)
     return {"status":"events_observed",
             "myles_console_process_launches_last_hour":min(9999,len(events)),
             "visible_windows_suppressed_last_hour":min(9999,sum(x[2] for x in events)),
+            "suppressed_source_counts":{k:min(9999,int(v))
+                                        for k,v in sorted(visible_categories.items())},
+            "suppressed_executable_counts":{k:min(9999,int(v))
+                                            for k,v in sorted(visible_executables.items())},
             "last_executable_category":last[1],
             "last_source_category":last[3],
             "last_observed_at":last[0].isoformat(timespec="seconds")}
