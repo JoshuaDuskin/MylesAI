@@ -316,7 +316,7 @@ def launch_if_due() -> str:
                     pass
                 if int(prior.get("recovery_attempts") or 0) >= 1:
                     return "stale_worker_unverified"
-            except (ValueError, TypeError, KeyError, OverflowError, OSError, ImportError, psutil.AccessDenied):
+            except Exception:
                 return "already_launched"
     if not is_windows() or not PYTHONW.is_file():
         return "missing_python_runtime"
