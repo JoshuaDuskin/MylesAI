@@ -33,10 +33,10 @@ def _category(line: str) -> str:
             return name
     # Supervisor records a bounded ancestry chain. Classify known parents
     # without exporting their command lines, paths, or process identifiers.
-    ancestry = re.search(r"\\bancestry=(.+)$", line, flags=re.IGNORECASE)
+    ancestry = re.search(r"\bancestry=(.+)$", line, flags=re.IGNORECASE)
     if ancestry:
         parent_names = re.findall(
-            r"<-\\s*\\d+:([a-zA-Z0-9._-]{1,40}):", ancestry.group(1))
+            r"<-\s*\d+:([a-zA-Z0-9._-]{1,40}):", ancestry.group(1))
         for name in parent_names:
             lower = name.lower()
             if lower in {"powershell.exe", "pwsh.exe", "cmd.exe"}:
