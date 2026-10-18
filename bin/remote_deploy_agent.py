@@ -436,8 +436,13 @@ def poll() -> int:
                     return 0
                 try:
                     launched = dt.datetime.fromisoformat(str(state["started_at"]))
+                    wrapper_pid = state.get("wrapper_pid")
+                    wrapper_is_gone = (not wrapper_pid or not process_running(wrapper_pid))
                     if ((dt.datetime.now(dt.timezone.utc) - launched.astimezone(dt.timezone.utc)).total_seconds() > 7200
-                            and state.get("wrapper_pid") and not process_running(state["wrapper_pid"])):
+                            and wrapper_is_gone):
+                        # Some older launches wrote the state before spawning and
+                        # never persisted wrapper_pid. Do not call that success;
+                        # release the permanent "launched" deadlock explicitly.
                         write_json(STATE, {**state, "status": "failed_unverified",
                                            "finished_at": now(), "reason": "receipt missing after two hours"})
                         log("remote update timed out without a verified receipt")

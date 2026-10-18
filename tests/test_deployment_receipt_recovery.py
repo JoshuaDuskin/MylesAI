@@ -85,6 +85,28 @@ class ReceiptRecoveryTests(unittest.TestCase):
         self.assertFalse(accepted)
         self.assertIn("already attempted",reason)
     
+    def test_orphaned_legacy_launch_becomes_explicitly_unverified(self):
+        from contextlib import ExitStack
+        state = launched(age=3*3600)
+        state.pop("wrapper_pid")
+        with ExitStack() as s:
+            s.enter_context(patch.object(agent,"ENABLED",Path("remote_deploy_enabled.json")))
+            s.enter_context(patch.object(agent,"STATE",Path("remote_deploy_state.json")))
+            s.enter_context(patch.object(agent,"RESULT",Path("remote_deploy_result.json")))
+            s.enter_context(patch.object(agent,"read_json",side_effect=lambda p:(
+                {"enabled":True,"auto_update":True}
+                if p==agent.ENABLED else state
+                if p==agent.STATE else {})))
+            s.enter_context(patch.object(agent,"lock",return_value=type("Held",(),{"close":lambda self:None})()))
+            s.enter_context(patch.object(agent,"reconcile_interrupted_update",return_value=None))
+            s.enter_context(patch.object(agent,"report_tower_health"))
+            s.enter_context(patch.object(agent,"start_intelligence_baseline"))
+            s.enter_context(patch.object(agent,"process_running",return_value=False))
+            write=s.enter_context(patch.object(agent,"write_json"))
+            self.assertEqual(agent.poll(),0)
+        self.assertEqual(write.call_args.args[1]["status"],"failed_unverified")
+        self.assertEqual(write.call_args.args[1]["reason"],"receipt missing after two hours")
+
     def test_reporter_keeps_missing_receipt_explicit(self):
         with patch.object(issue,"git",side_effect=lambda *args:
                  SHA if args[0]=="rev-parse" else issue.ORIGIN), \
