@@ -175,6 +175,32 @@ def process_running(pid: int) -> bool:
         return True
 
 
+def wrapper_process_running(pid: int) -> bool:
+    """Treat a PID as the live updater only when its identity matches."""
+    if not process_running(pid):
+        return False
+    try:
+        import psutil
+    except ImportError:
+        # Without process metadata, retain the conservative old behavior.
+        return True
+    try:
+        process = psutil.Process(int(pid))
+        command = " ".join(process.cmdline() or []).casefold()
+        if not command:
+            # An access-limited command line is not proof that the wrapper ended.
+            return True
+        return (
+            "remote_deploy_apply.ps1" in command
+            and ("powershell.exe" in command or "pwsh.exe" in command)
+        )
+    except psutil.NoSuchProcess:
+        return False
+    except Exception:
+        # Access denied and transient process inspection failures remain fail-closed.
+        return True
+
+
 def idle_gate() -> str:
     if read_json(DATA / "config.json").get("light_mode") is True:
         return "light mode"
@@ -437,7 +463,7 @@ def poll() -> int:
                 try:
                     launched = dt.datetime.fromisoformat(str(state["started_at"]))
                     wrapper_pid = state.get("wrapper_pid")
-                    wrapper_is_gone = (not wrapper_pid or not process_running(wrapper_pid))
+                    wrapper_is_gone = (not wrapper_pid or not wrapper_process_running(wrapper_pid))
                     if ((dt.datetime.now(dt.timezone.utc) - launched.astimezone(dt.timezone.utc)).total_seconds() > 7200
                             and wrapper_is_gone):
                         # Some older launches wrote the state before spawning and
