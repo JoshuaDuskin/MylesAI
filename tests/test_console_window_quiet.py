@@ -52,6 +52,22 @@ class QuietConsoleTests(unittest.TestCase):
         self.assertNotIn("Users",str(result))
         self.assertNotIn("pid",str(result).lower())
 
+    def test_ancestry_classification_uses_safe_parent_category(self):
+        stamp=dt.datetime(2026,10,14,18,0,0)
+        data=(
+          f"[{stamp.isoformat()}] pid=123 ppid=4 name=python.exe "
+          "myles_owned=True hidden_windows=1 command='opaque' "
+          "ancestry='root<- 7:cmd.exe:opaque<- 8:python.exe:opaque'\n"
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            p=Path(tmp)/"console.log"
+            p.write_text(data,encoding="utf-8")
+            result=audit.recent_summary(stamp+dt.timedelta(minutes=4),path=p)
+        self.assertEqual(result["status"],"events_observed")
+        self.assertEqual(result["last_source_category"],"shell_parent")
+        self.assertNotIn("opaque",str(result))
+        self.assertNotIn("root",str(result))
+
     def test_no_log_and_stale_events_never_claim_window_was_seen(self):
         now=dt.datetime(2026,10,14,22,0,0)
         with tempfile.TemporaryDirectory() as tmp:

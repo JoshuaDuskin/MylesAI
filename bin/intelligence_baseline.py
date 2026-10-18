@@ -299,13 +299,32 @@ def launch_if_due() -> str:
         if prior.get("status")=="completed":
             return "already_completed"
         if prior.get("status")=="running":
-            # Never create duplicate tests. A crashed worker remains unverified
-            # and is not silently represented as a completed benchmark.
-            return "already_launched"
+            # Never duplicate a live worker; permit one recovery of a dead one.
+            try:
+                stamp = dt.datetime.fromisoformat(str(prior["checked_at"]))
+                age = (now() - stamp.astimezone(dt.timezone.utc)).total_seconds()
+                pid = int(prior["worker_pid"])
+                if age < 600 or pid <= 0:
+                    return "already_launched"
+                import psutil
+                try:
+                    worker = psutil.Process(pid)
+                    cmd = " ".join(worker.cmdline()).lower()
+                    if "intelligence_baseline.py" in cmd and "--run" in cmd:
+                        return "already_launched"
+                except psutil.NoSuchProcess:
+                    pass
+                if int(prior.get("recovery_attempts") or 0) >= 1:
+                    return "stale_worker_unverified"
+            except Exception:
+                return "already_launched"
     if not is_windows() or not PYTHONW.is_file():
         return "missing_python_runtime"
     stamp=now().isoformat()
-    write_json(STATE,{"installed_commit":sha,"status":"running","checked_at":stamp})
+    recoveries = int(prior.get("recovery_attempts") or 0) + int(
+        prior.get("installed_commit")==sha and prior.get("status")=="running")
+    write_json(STATE,{"installed_commit":sha,"status":"running","checked_at":stamp,
+                      "recovery_attempts":recoveries})
     try:
         kwargs={"cwd":str(ROOT),"stdin":subprocess.DEVNULL,"stdout":subprocess.DEVNULL,
                 "stderr":subprocess.DEVNULL,"creationflags":NO_WINDOW,"close_fds":True}
@@ -316,7 +335,7 @@ def launch_if_due() -> str:
             kwargs["startupinfo"]=si
         p=subprocess.Popen([str(PYTHONW),str(SCRIPT),"--run"],**kwargs)
         write_json(STATE,{"installed_commit":sha,"status":"running",
-                          "checked_at":stamp,"worker_pid":int(p.pid)})
+                          "checked_at":stamp,"worker_pid":int(p.pid),"recovery_attempts":recoveries})
     except OSError:
         write_json(STATE,{"installed_commit":sha,"status":"launch_failed",
                           "checked_at":now().isoformat()})
