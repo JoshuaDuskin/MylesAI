@@ -106,6 +106,39 @@ def messages() -> dict:
                 "messages": rows[-MAX_HISTORY:]}
 
 
+def public_send(text: str, history=None) -> tuple[int, dict]:
+    """Anonymous stateless text only, no private state or owner-side effects."""
+    prompt = str(text or "").strip()
+    if not prompt or len(prompt)>MAX_TEXT:
+        return 400, {"ok":False,"error":"Message must be 1–2500 characters"}
+    if history is not None and not isinstance(history,list):
+        return 400, {"ok":False,"error":"Invalid context"}
+    from myles_game_guard import game_is_active
+    if game_is_active():
+        return 503, {"ok":False,"error":"Chat is paused during gaming"}
+    context=[{"role":"system","content":
+        "You are Myles, a general text conversation assistant for a public visitor. "
+        "You have no tools, no access to the owner's files, account, desktop, tasks, "
+        "messages, trading, memory or settings. Never claim access or disclose any "
+        "owner information. You cannot perform computer actions."}]
+    for row in (history or [])[-12:]:
+        if not isinstance(row,dict) or row.get("role") not in {"user","assistant"} or not isinstance(row.get("content"),str) or len(row["content"])>MAX_TEXT:
+            return 400, {"ok":False,"error":"Invalid context"}
+        context.append({"role":row["role"],"content":row["content"]})
+    context.append({"role":"user","content":prompt})
+    try:
+        from myles_common import load_config
+        from myles_model_runtime import model_chat
+        from myles_conversation import unfinished_model_reply
+        answer=model_chat(load_config(),context,tools=None,temperature=0.3,timeout=70)
+        text=str((answer.get("message") or {}).get("content") or "").strip()
+        if not text or unfinished_model_reply(answer,text):
+            return 503, {"ok":False,"error":"Local model response was incomplete"}
+        return 200, {"ok":True,"role":"public_chat_only","reply":text[:MAX_TEXT]}
+    except Exception:
+        return 503, {"ok":False,"error":"Local model unavailable"}
+
+
 def send(text: str) -> tuple[int, dict]:
     prompt = str(text or "").strip()
     if not prompt or len(prompt) > MAX_TEXT:
