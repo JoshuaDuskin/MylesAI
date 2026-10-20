@@ -1,4 +1,7 @@
 {
   "schema": 1,
-  "action": "idle"
+  "action": "update",
+  "request_id": "repair_20261020_233049",
+  "target_sha": "405b2cb0916b7fd1835cff5dc0e5c79a61ef20a6",
+  "requested_at": "2026-10-20T23:30:49Z"
 }
