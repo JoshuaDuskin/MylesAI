@@ -62,6 +62,9 @@ jobs:
       - name: Verify two-user full-access dashboard safety
         run: python -m unittest discover -s tests -p test_two_owner_dashboard_101511.py -v
 
+      - name: Verify owner phone onboarding and reconnect
+        run: python -m unittest discover -s tests -p test_phone_trust_101512.py -v
+
       - name: Test household guest permission isolation
         run: python -m unittest discover -s tests -p test_guest_chat_permissions.py -v
 
