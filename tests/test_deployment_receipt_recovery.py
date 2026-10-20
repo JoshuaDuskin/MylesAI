@@ -128,7 +128,7 @@ class ReceiptRecoveryTests(unittest.TestCase):
             write=s.enter_context(patch.object(agent,"write_json"))
             self.assertEqual(agent.poll(),0)
         self.assertEqual(write.call_args.args[1]["status"],"failed_unverified")
-        self.assertEqual(write.call_args.args[1]["reason"],"receipt missing after two hours")
+        self.assertEqual(write.call_args.args[1]["reason"],"receipt missing after wrapper exited")
 
     def test_reporter_keeps_missing_receipt_explicit(self):
         with patch.object(issue,"git",side_effect=lambda *args:
