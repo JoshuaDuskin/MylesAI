@@ -195,6 +195,8 @@ def snapshot(timestamp=None):
             "last_state":last if last in ALLOWED_STATES else "none_recorded",
             "target_commit":target if SHA.fullmatch(target) else None,
             "verified_local_receipt_matches_installed":receipt_matches,
+            "update_state_reason":str(state.get("reason") or state.get("deferred_reason") or state.get("auto_candidate_reason") or "")[:90] or None,
+            "update_launched_at":str(state.get("started_at") or "")[:35] or None,
             "verified_after_restart":bool(
                 last=="installed_verified_post_restart"
                 and state.get("post_restart_health_verified") is True
