@@ -64,6 +64,32 @@ def report():
                 messages.append("Authentication boundary: challenge enforced")
             elif code == 200:
                 messages.append("Authentication boundary: RECHECK PUBLIC HEALTH ENDPOINT")
+    # The dashboard already publishes a limited *read-only* status token.
+    # Use it solely to verify the live gateway's current runtime version;
+    # neither log the token nor ever use the full-control owner credential.
+    if info:
+        try:
+            read_key = str(json.loads((ROOT / "bridge.json").read_text(encoding="utf-8")).get("read_token") or "")
+            if not read_key or len(read_key) < 24:
+                messages.append("Live tower version: read-only credential unavailable")
+            else:
+                read_req = urllib.request.Request(
+                    endpoint + "/dashboard/health",
+                    headers={"User-Agent": "MylesExternalHealth/1", "X-Myles-Read": read_key})
+                with urllib.request.urlopen(read_req, timeout=12) as response:
+                    data = json.load(response)
+                myles = data.get("myles") if isinstance(data.get("myles"), dict) else {}
+                model = myles.get("data") if isinstance(myles.get("data"), dict) else {}
+                live_version = str(model.get("version") or "")[:40]
+                bridge = data.get("bridge") if isinstance(data.get("bridge"), dict) else {}
+                messages.append("Live read-only gateway: HTTP 200")
+                messages.append("Live bridge: " + ("healthy" if bridge.get("ok") is True else "unverified"))
+                messages.append("Live Myles core: " + ("healthy" if myles.get("ok") is True else "unverified"))
+                messages.append("Live Myles version: " + (live_version if live_version else "not reported"))
+        except urllib.error.HTTPError as exc:
+            messages.append("Live read-only gateway: HTTP " + str(exc.code))
+        except Exception as exc:
+            messages.append("Live read-only gateway: unavailable (" + type(exc).__name__ + ")")
     try:
         issue = fetch_json(API)
         body = str(issue.get("body") or "")
