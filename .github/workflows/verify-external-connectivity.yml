@@ -1,0 +1,25 @@
+name: Verify Myles External Connectivity
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - bridge.json
+      - .github/workflows/verify-external-connectivity.yml
+      - bin/check_external_connectivity.py
+  schedule:
+    - cron: "17 */6 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: read
+
+jobs:
+  external-check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+      - name: Test dashboard endpoint from outside the tailnet
+        run: python bin/check_external_connectivity.py
