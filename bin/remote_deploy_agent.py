@@ -476,7 +476,7 @@ def poll() -> int:
                     launched = dt.datetime.fromisoformat(str(state["started_at"]))
                     wrapper_pid = state.get("wrapper_pid")
                     wrapper_is_gone = (not wrapper_pid or not wrapper_process_running(wrapper_pid))
-                    if ((dt.datetime.now(dt.timezone.utc) - launched.astimezone(dt.timezone.utc)).total_seconds() > 7200
+                    if ((dt.datetime.now(dt.timezone.utc) - launched.astimezone(dt.timezone.utc)).total_seconds() > 900
                             and wrapper_is_gone):
                         # Some older launches wrote the state before spawning and
                         # never persisted wrapper_pid. Do not call that success;
