@@ -68,6 +68,9 @@ jobs:
       - name: Check phone password manager recovery contract
         run: python -m unittest discover -s tests -p test_password_manager_101513.py -v
 
+      - name: Test explicit phone bridge endpoint priority
+        run: python -m unittest discover -s tests -p test_bridge_url_priority_101514.py -v
+
       - name: Test household guest permission isolation
         run: python -m unittest discover -s tests -p test_guest_chat_permissions.py -v
 
