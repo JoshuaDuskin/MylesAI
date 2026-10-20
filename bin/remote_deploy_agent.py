@@ -482,8 +482,8 @@ def poll() -> int:
                         # never persisted wrapper_pid. Do not call that success;
                         # release the permanent "launched" deadlock explicitly.
                         write_json(STATE, {**state, "status": "failed_unverified",
-                                           "finished_at": now(), "reason": "receipt missing after two hours"})
-                        log("remote update timed out without a verified receipt")
+                                           "finished_at": now(), "reason": "receipt missing after wrapper exited"})
+                        log("orphaned update wrapper exited; receipt missing; marking unverified")
                 except (KeyError, ValueError, TypeError, OverflowError):
                     pass
             return 0
