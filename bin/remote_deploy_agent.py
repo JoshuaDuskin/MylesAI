@@ -202,6 +202,18 @@ def wrapper_process_running(pid: int) -> bool:
 
 
 def idle_gate() -> str:
+    # Check the *actual* running game processes, not only the 2-second watcher
+    # state. A game starting between watcher ticks must block update launches.
+    # Fail closed when the game detector cannot be imported or examined.
+    try:
+        try:
+            from bin.game_mode_watch import detect_game
+        except ImportError:
+            from game_mode_watch import detect_game
+        if detect_game() is not None:
+            return "game process running"
+    except Exception:
+        return "game detection unavailable"
     if read_json(DATA / "config.json").get("light_mode") is True:
         return "light mode"
     if read_json(DATA / "game_mode_state.json").get("active") is True:
