@@ -837,7 +837,7 @@ html,body{max-width:100%;overflow-x:clip}
       <label class="field"><span>Bridge URL</span><input id="bridgeUrlInput" type="url" placeholder="https://…trycloudflare.com" /></label>
       <label class="field"><span>Saved tower pair code</span><input id="bridgeTokenInput" type="text" inputmode="text" maxlength="8" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="8-character code" /></label>
       <div id="pairResult" class="pair-result"></div>
-      <section class="guest-owner-invite"><p class="muted">Anyone with the normal dashboard link can chat without an invite. Owner controls remain paired only.</p><div class="modal-actions"><button id="makeGuestInvite" class="secondary-btn" type="button">Legacy guest invite</button><button id="revokeGuestChat" class="secondary-btn" type="button">Revoke guest</button></div><div id="guestInviteResult" class="pair-result" style="white-space:pre-wrap"></div></section>
+      <section class="guest-owner-invite"><p class="muted">The regular dashboard link is for both authorized household members. Pair each phone once for full access; the phone remembers its permission.</p><div class="modal-actions"><button id="makeGuestInvite" class="secondary-btn" type="button">Legacy guest invite</button><button id="revokeGuestChat" class="secondary-btn" type="button">Revoke guest</button></div><div id="guestInviteResult" class="pair-result" style="white-space:pre-wrap"></div></section>
       <div class="modal-actions"><button id="clearPairing" class="secondary-btn">Clear</button><button id="testPairing" class="secondary-btn">Test</button><button id="savePairing" class="primary-btn">Save</button></div>
     </div>
   </div>
@@ -1292,9 +1292,9 @@ function renderResearchTournament(m){
   document.addEventListener('DOMContentLoaded',()=>{const box=$('chatMessages'),jump=$('chatJumpLatest');if(box)box.addEventListener('scroll',updateChatJump,{passive:true});if(jump)jump.addEventListener('click',jumpChatLatest);});
   document.addEventListener('DOMContentLoaded',init);
 
-  const isGuestPage = new URLSearchParams(location.search).get('guest') === '1' ||
-    (new URLSearchParams(location.search).get('owner') !== '1' &&
-     !localStorage.getItem('myles_bridge_token') && !cookieGet('myles_bridge_token'));
+  // The ordinary URL is the full dashboard for both authorized household users.
+  // A saved browser token restores full access without a second pairing prompt.
+  const isGuestPage = new URLSearchParams(location.search).get('guest') === '1';
   const guest = {endpoint:'',token:'',busy:false};
   function guestUrl(){return location.origin+(location.pathname||'/')+'?guest=1';}
   async function loadGuestEndpoint(){
@@ -1328,10 +1328,10 @@ function renderResearchTournament(m){
   async function initGuestChat(){
     document.body.classList.add('guest-chat-mode');
     $('guestPairBox').classList.add('hidden');
-    $('guestStatus').textContent='Public chat · No code needed';
+    $('guestStatus').textContent='Limited legacy chat';
     document.querySelector('.guest-header p').textContent='General conversation only. Owner computer controls stay private.';
     const ownerLink=document.createElement('a');
-    ownerLink.href='?owner=1';ownerLink.textContent='Owner dashboard';
+    ownerLink.href=location.pathname||'/';ownerLink.textContent='Full-access dashboard';
     ownerLink.style.color='#9bb2ff';
     document.querySelector('.guest-header').appendChild(ownerLink);
     let conversation=[];
@@ -1362,6 +1362,7 @@ function renderResearchTournament(m){
       }catch(e){conversation.pop();$('guestStatus').textContent=String(e.message||e);}
       finally{renderGuestMessages(conversation);guest.busy=false;$('guestSubmit').disabled=false;}
     });
+    // Legacy ?guest=1 is deliberately limited; normal link is full-owner dashboard.
     try{await loadGuestEndpoint();}catch(e){$('guestStatus').textContent='Tower offline: '+String(e.message||e);}
     return;
     guest.token=localStorage.getItem('myles_guest_chat_token')||'';
