@@ -333,7 +333,7 @@ class Handler(BaseHTTPRequestHandler):
     def proxy_guest(self):
         """Only two exact guest routes; guest tokens never grant owner proxy."""
         path = self.path.split("?",1)[0]
-        if path not in {"/dashboard/guest/pair","/dashboard/guest/messages","/dashboard/public-chat/messages"}:
+        if path not in {"/dashboard/guest/pair","/dashboard/guest/messages"}:
             return self.send_json(404,{"ok":False,"error":"Unknown guest route"})
         if self.command not in {"GET","POST"} or (path.endswith("/pair") and self.command!="POST"):
             return self.send_json(405,{"ok":False,"error":"Guest method not allowed"})
@@ -344,7 +344,7 @@ class Handler(BaseHTTPRequestHandler):
             size = int(self.headers.get("Content-Length","0"))
         except ValueError:
             size = -1
-        if size < 0 or size > (30000 if path == "/dashboard/public-chat/messages" else 4096):
+        if size < 0 or size > 4096:
             return self.send_json(400,{"ok":False,"error":"Guest request too large"})
         body = self.rfile.read(size) if size else None
         forwarded = {"X-Myles-Guest":token} if token else {}
@@ -380,7 +380,7 @@ class Handler(BaseHTTPRequestHandler):
         return self.proxy()
 
     def do_POST(self):
-        if self.path.split("?",1)[0] in {"/dashboard/guest/pair","/dashboard/guest/messages","/dashboard/public-chat/messages"}:
+        if self.path.split("?",1)[0] in {"/dashboard/guest/pair","/dashboard/guest/messages"}:
             return self.proxy_guest()
         return self.proxy()
 
