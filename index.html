@@ -953,7 +953,22 @@ html,body{max-width:100%;overflow-x:clip}
       const compactStatus=objOr(first(h,['status'],{}),{}),coreHealth=objOr(first(h,['myles.data'],{}),{});
       if(Object.keys(compactStatus).length){state.healthStatus=compactStatus;state.status=compactStatus;state.statusSource='LIVE TOWER';state.statusError=null;}
       else if(bool(first(h,['myles.ok'],false))||bool(first(coreHealth,['ok'],false))){state.healthStatus={schema_version:4,generated_at:first(coreHealth,['time'],new Date().toISOString()),myles:{online:true,version:first(coreHealth,['version'],null)},status:first(coreHealth,['status'],'online')};if(!state.status){state.status=state.healthStatus;state.statusSource='LIVE HEALTH';}}
-      if(state.bridge.token){try{await fetchJson(`${url}/dashboard/messages`,{headers:bridgeHeaders()},8000);state.bridge.healthy=true;state.bridge.error='';}catch(e){if((e.status===401||e.status===403)&&state.bridge.recoveryCode&&await exchangePair(false)){try{await fetchJson(`${url}/dashboard/messages`,{headers:bridgeHeaders()},8000);state.bridge.healthy=true;state.bridge.error='';}catch(_){state.bridge.healthy=false;}}else state.bridge.healthy=false;}}
+      if(state.bridge.token){
+        // Owner authorization must be checked independently of the model/core
+        // message service. A transient 502 means chat is offline, not unpaired.
+        try{
+          await fetchJson(`${url}/dashboard/quant/config`,{headers:bridgeHeaders()},8000);
+          state.bridge.healthy=true;state.bridge.error='';
+        }catch(e){
+          if((e.status===401||e.status===403)&&state.bridge.recoveryCode&&await exchangePair(false)){
+            try{await fetchJson(`${url}/dashboard/quant/config`,{headers:bridgeHeaders()},8000);state.bridge.healthy=true;state.bridge.error='';}
+            catch(err){state.bridge.healthy=false;state.bridge.error=String(err.message||err);}
+          }else{
+            state.bridge.healthy=false;
+            state.bridge.error=(e.status===401||e.status===403)?'This phone needs owner pairing':'Tower connection unavailable; your saved authorization was not cleared';
+          }
+        }
+      }
       else state.bridge.healthy=false;
       if(show){$('pairResult').textContent=state.bridge.healthy?`Connected${h?.myles?.data?.version?` · Myles ${h.myles.data.version}`:''}.`:'Tower is online. Enter the saved recovery code once; this phone will retain it.';$('pairResult').className=state.bridge.healthy?'pair-result ok':'pair-result bad';}
       renderBridge();return state.bridge.reachable;
@@ -1287,7 +1302,7 @@ function renderResearchTournament(m){
   function bindChartRangeRefresh(){document.addEventListener('click',e=>{const b=e.target.closest('[data-trade-range],[data-bot-range]');if(!b)return;if(b.dataset.tradeRange){state.tradeRange=b.dataset.tradeRange;refreshFundChart('trade');}if(b.dataset.botRange){state.botChart.range=b.dataset.botRange;refreshFundChart('bot');}});}
   function scheduleStatusPoll(){clearTimeout(state.refreshTimer);const ms=document.hidden?30000:(state.view==='trading'?5000:REFRESH_MS);state.refreshTimer=setTimeout(async()=>{await fetchStatus();scheduleStatusPoll();},ms);}
   function scheduleChatPoll(){clearTimeout(state.chatTimer);const ms=document.hidden?30000:(state.view==='chat'?CHAT_POLL_MS:5000);state.chatTimer=setTimeout(async()=>{if(state.bridge.healthy&&state.view==='chat')await pollMessages();scheduleChatPoll();},ms);}
-  async function init(){if(isGuestPage){await initGuestChat();return;}loadPairing();const savedWalletMode=localStorage.getItem('myles_wallet_connection_mode');if(savedWalletMode&&$('walletConnectionMode'))$('walletConnectionMode').value=savedWalletMode;bind();renderAll();await discoverBridge();if(!state.bridge.url&&state.bridge.discovered)$('bridgeUrlInput').value=state.bridge.discovered;if(bridgeUrl())await testBridge(false);await fetchStatus();if(state.bridge.healthy){await pollMessages();await quantGet().catch(()=>{});await liveGet().catch(()=>{});}scheduleStatusPoll();scheduleChatPoll();state.chart.timer=setInterval(()=>{if(!document.hidden&&state.view==='trading'&&state.tradeTab==='tradeManual'&&state.bridge.healthy)loadMarketChart();},20000);state.liveTimer=setInterval(()=>{if(!document.hidden&&state.bridge.healthy&&state.view==='trading')liveGet().catch(()=>{});},20000);document.addEventListener('visibilitychange',()=>{scheduleStatusPoll();scheduleChatPoll();});}
+  async function init(){if(isGuestPage){await initGuestChat();return;}loadPairing();const savedWalletMode=localStorage.getItem('myles_wallet_connection_mode');if(savedWalletMode&&$('walletConnectionMode'))$('walletConnectionMode').value=savedWalletMode;bind();renderAll();await discoverBridge();if(!state.bridge.url&&state.bridge.discovered)$('bridgeUrlInput').value=state.bridge.discovered;if(bridgeUrl())await testBridge(false);if(!state.bridge.token&&!state.bridge.recoveryCode){showView('chat');openPairModal();$('pairResult').textContent='New phone: enter the tower pairing code once to unlock full Myles access. This browser will remember it.';}await fetchStatus();if(state.bridge.healthy){await pollMessages();await quantGet().catch(()=>{});await liveGet().catch(()=>{});}scheduleStatusPoll();scheduleChatPoll();state.chart.timer=setInterval(()=>{if(!document.hidden&&state.view==='trading'&&state.tradeTab==='tradeManual'&&state.bridge.healthy)loadMarketChart();},20000);state.liveTimer=setInterval(()=>{if(!document.hidden&&state.bridge.healthy&&state.view==='trading')liveGet().catch(()=>{});},20000);document.addEventListener('visibilitychange',()=>{scheduleStatusPoll();scheduleChatPoll();});}
 
   document.addEventListener('DOMContentLoaded',()=>{const box=$('chatMessages'),jump=$('chatJumpLatest');if(box)box.addEventListener('scroll',updateChatJump,{passive:true});if(jump)jump.addEventListener('click',jumpChatLatest);});
   document.addEventListener('DOMContentLoaded',init);
