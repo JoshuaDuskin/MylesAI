@@ -59,6 +59,9 @@ jobs:
           ! grep -q "Launching the single owner console automatically" UPDATE_TOWER.ps1
           echo "durable startup and recovery contract OK"
 
+      - name: Test public chat isolation
+        run: python -m unittest discover -s tests -p test_public_chat_101510.py -v
+
       - name: Test household guest permission isolation
         run: python -m unittest discover -s tests -p test_guest_chat_permissions.py -v
 
