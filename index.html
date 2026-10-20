@@ -837,7 +837,7 @@ html,body{max-width:100%;overflow-x:clip}
       <label class="field"><span>Bridge URL</span><input id="bridgeUrlInput" type="url" placeholder="https://…trycloudflare.com" /></label>
       <label class="field"><span>Saved tower pair code</span><input id="bridgeTokenInput" type="text" inputmode="text" maxlength="8" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="8-character code" /></label>
       <div id="pairResult" class="pair-result"></div>
-      <section class="guest-owner-invite"><p class="muted">Share chat-only access without your owner controls, files or trading.</p><div class="modal-actions"><button id="makeGuestInvite" class="secondary-btn" type="button">Create family chat invite</button><button id="revokeGuestChat" class="secondary-btn" type="button">Revoke guest</button></div><div id="guestInviteResult" class="pair-result" style="white-space:pre-wrap"></div></section>
+      <section class="guest-owner-invite"><p class="muted">Anyone with the normal dashboard link can chat without an invite. Owner controls remain paired only.</p><div class="modal-actions"><button id="makeGuestInvite" class="secondary-btn" type="button">Legacy guest invite</button><button id="revokeGuestChat" class="secondary-btn" type="button">Revoke guest</button></div><div id="guestInviteResult" class="pair-result" style="white-space:pre-wrap"></div></section>
       <div class="modal-actions"><button id="clearPairing" class="secondary-btn">Clear</button><button id="testPairing" class="secondary-btn">Test</button><button id="savePairing" class="primary-btn">Save</button></div>
     </div>
   </div>
@@ -860,7 +860,7 @@ html,body{max-width:100%;overflow-x:clip}
   </style>
   <section id="guestShell" aria-label="Chat-only Myles guest access">
     <header class="guest-header"><small>MYLES · GUEST CHAT</small><h1>Talk with Myles</h1><p>General conversation only. No owner tasks, files, trading, or computer controls.</p></header>
-    <div id="guestPairBox" class="guest-box"><label for="guestInviteCode">One-time 8-character invitation</label><input id="guestInviteCode" autocomplete="off" autocapitalize="characters" maxlength="8" placeholder="Enter invitation code" /><button id="guestPairBtn" class="primary-btn" style="margin-top:12px" type="button">Connect chat</button></div>
+    <div id="guestPairBox" class="guest-box hidden"><label for="guestInviteCode">Legacy 8-character invitation</label><input id="guestInviteCode" autocomplete="off" autocapitalize="characters" maxlength="8" placeholder="Enter invitation code" /><button id="guestPairBtn" class="primary-btn" style="margin-top:12px" type="button">Connect chat</button></div>
     <div id="guestConversation" class="guest-box" role="log" aria-live="polite"></div>
     <form id="guestForm"><textarea id="guestText" maxlength="2500" placeholder="Ask Myles anything…" aria-label="Guest message"></textarea><button id="guestSubmit" type="submit">Send</button></form>
     <div id="guestStatus" role="status"></div>
@@ -940,8 +940,8 @@ html,body{max-width:100%;overflow-x:clip}
       try{
         h=await fetchJson(`${url}/dashboard/health`,{headers:bridgeStatusHeaders()},8000);
       }catch(primaryError){
-        if(!state.bridge.token||!state.bridge.readToken)throw primaryError;
-        h=await fetchJson(`${url}/dashboard/health`,{headers:{Accept:'application/json','X-Myles-Read':state.bridge.readToken}},8000);
+        if(!state.bridge.token&&!state.bridge.readToken)throw primaryError;
+        h=await fetchJson(`${url}/dashboard/health`,{headers:state.bridge.readToken?{Accept:'application/json','X-Myles-Read':state.bridge.readToken}:{Accept:'application/json'}},8000);
         const rejected=primaryError?.status===401||primaryError?.status===403;
         if(rejected){
           const repaired=state.bridge.recoveryCode?await exchangePair(false):false;
@@ -953,7 +953,7 @@ html,body{max-width:100%;overflow-x:clip}
       const compactStatus=objOr(first(h,['status'],{}),{}),coreHealth=objOr(first(h,['myles.data'],{}),{});
       if(Object.keys(compactStatus).length){state.healthStatus=compactStatus;state.status=compactStatus;state.statusSource='LIVE TOWER';state.statusError=null;}
       else if(bool(first(h,['myles.ok'],false))||bool(first(coreHealth,['ok'],false))){state.healthStatus={schema_version:4,generated_at:first(coreHealth,['time'],new Date().toISOString()),myles:{online:true,version:first(coreHealth,['version'],null)},status:first(coreHealth,['status'],'online')};if(!state.status){state.status=state.healthStatus;state.statusSource='LIVE HEALTH';}}
-      if(state.bridge.token){try{await fetchJson(`${url}/dashboard/messages`,{headers:bridgeHeaders()},8000);state.bridge.healthy=true;state.bridge.error='';}catch(_){state.bridge.healthy=false;}}
+      if(state.bridge.token){try{await fetchJson(`${url}/dashboard/messages`,{headers:bridgeHeaders()},8000);state.bridge.healthy=true;state.bridge.error='';}catch(e){if((e.status===401||e.status===403)&&state.bridge.recoveryCode&&await exchangePair(false)){try{await fetchJson(`${url}/dashboard/messages`,{headers:bridgeHeaders()},8000);state.bridge.healthy=true;state.bridge.error='';}catch(_){state.bridge.healthy=false;}}else state.bridge.healthy=false;}}
       else state.bridge.healthy=false;
       if(show){$('pairResult').textContent=state.bridge.healthy?`Connected${h?.myles?.data?.version?` · Myles ${h.myles.data.version}`:''}.`:'Tower is online. Enter the saved recovery code once; this phone will retain it.';$('pairResult').className=state.bridge.healthy?'pair-result ok':'pair-result bad';}
       renderBridge();return state.bridge.reachable;
@@ -1292,7 +1292,9 @@ function renderResearchTournament(m){
   document.addEventListener('DOMContentLoaded',()=>{const box=$('chatMessages'),jump=$('chatJumpLatest');if(box)box.addEventListener('scroll',updateChatJump,{passive:true});if(jump)jump.addEventListener('click',jumpChatLatest);});
   document.addEventListener('DOMContentLoaded',init);
 
-  const isGuestPage = new URLSearchParams(location.search).get('guest') === '1';
+  const isGuestPage = new URLSearchParams(location.search).get('guest') === '1' ||
+    (new URLSearchParams(location.search).get('owner') !== '1' &&
+     !localStorage.getItem('myles_bridge_token') && !cookieGet('myles_bridge_token'));
   const guest = {endpoint:'',token:'',busy:false};
   function guestUrl(){return location.origin+(location.pathname||'/')+'?guest=1';}
   async function loadGuestEndpoint(){
@@ -1325,6 +1327,43 @@ function renderResearchTournament(m){
   }
   async function initGuestChat(){
     document.body.classList.add('guest-chat-mode');
+    $('guestPairBox').classList.add('hidden');
+    $('guestStatus').textContent='Public chat · No code needed';
+    document.querySelector('.guest-header p').textContent='General conversation only. Owner computer controls stay private.';
+    const ownerLink=document.createElement('a');
+    ownerLink.href='?owner=1';ownerLink.textContent='Owner dashboard';
+    ownerLink.style.color='#9bb2ff';
+    document.querySelector('.guest-header').appendChild(ownerLink);
+    let conversation=[];
+    try{const saved=JSON.parse(sessionStorage.getItem('myles_public_chat_history')||'[]');
+      if(Array.isArray(saved))conversation=saved.slice(-12).filter(x=>x&&['user','assistant'].includes(x.role)&&typeof x.content==='string');
+    }catch(_){}
+    renderGuestMessages(conversation);
+    $('guestForm').addEventListener('submit',async event=>{
+      event.preventDefault();
+      const message=String($('guestText').value||'').trim();
+      if(guest.busy||!message)return;
+      guest.busy=true;$('guestSubmit').disabled=true;
+      const previous=conversation.slice(-12);
+      conversation.push({role:'user',content:message});
+      renderGuestMessages(conversation);
+      $('guestStatus').textContent='Myles is responding…';
+      try{
+        if(!guest.endpoint)await loadGuestEndpoint();
+        const out=await fetchJson(guest.endpoint+'/dashboard/public-chat/messages',{
+          method:'POST',headers:{'Content-Type':'application/json'},
+          body:JSON.stringify({message,history:previous})},90000);
+        if(!out.ok||!out.reply)throw new Error('No response from Myles');
+        conversation.push({role:'assistant',content:out.reply});
+        conversation=conversation.slice(-12);
+        sessionStorage.setItem('myles_public_chat_history',JSON.stringify(conversation));
+        $('guestText').value='';
+        $('guestStatus').textContent='Public chat · Chat only';
+      }catch(e){conversation.pop();$('guestStatus').textContent=String(e.message||e);}
+      finally{renderGuestMessages(conversation);guest.busy=false;$('guestSubmit').disabled=false;}
+    });
+    try{await loadGuestEndpoint();}catch(e){$('guestStatus').textContent='Tower offline: '+String(e.message||e);}
+    return;
     guest.token=localStorage.getItem('myles_guest_chat_token')||'';
     const status=$('guestStatus');
     try{await loadGuestEndpoint();}

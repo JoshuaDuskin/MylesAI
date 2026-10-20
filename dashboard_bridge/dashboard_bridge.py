@@ -1061,7 +1061,7 @@ class Handler(BaseHTTPRequestHandler):
         path = self.path.split("?", 1)[0]
         # Guest pairing/chat is a wholly separate capability from owner pairing.
         # No guest request is allowed to reach jobs, computer, settings or trading.
-        if path in {"/dashboard/guest/pair","/dashboard/guest/messages"}:
+        if path in {"/dashboard/guest/pair","/dashboard/guest/messages","/dashboard/public-chat/messages"}:
             origin = self.headers.get("Origin","")
             if (origin and origin not in ALLOWED_ORIGINS
                     and not origin.startswith("http://127.0.0.1:")
@@ -1078,7 +1078,7 @@ class Handler(BaseHTTPRequestHandler):
                 size = int(self.headers.get("Content-Length","0"))
             except ValueError:
                 size = 0
-            if not 0 < size <= 4096:
+            if not 0 < size <= (30000 if path == "/dashboard/public-chat/messages" else 4096):
                 return self.deny(400,"Invalid guest request body")
             try:
                 body = json.loads(self.rfile.read(size).decode("utf-8"))
@@ -1087,6 +1087,9 @@ class Handler(BaseHTTPRequestHandler):
             if not isinstance(body,dict):
                 return self.deny(400,"Guest request must be an object")
             from dashboard_bridge import guest_chat
+            if path == "/dashboard/public-chat/messages":
+                status,response=guest_chat.public_send(body.get("message") or "",body.get("history"))
+                return self.json_response(status,response)
             if path == "/dashboard/guest/pair":
                 pair = guest_chat.exchange(str(body.get("code") or ""))
                 if pair is None:
