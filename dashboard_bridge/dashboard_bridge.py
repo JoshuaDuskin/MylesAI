@@ -291,6 +291,7 @@ LIVE_STATUS = ROOT / "data" / "gmx_live_status.json"
 COPY_SCRIPT = QUANT_DIR / "copy_trader_service.mjs"
 COPY_STATUS = ROOT / "data" / "copy_trader_status.json"
 COPY_CONFIG = ROOT / "data" / "copy_trader_config.json"
+POLYMARKET_STATUS = ROOT / "data" / "polymarket_paper_status.json"
 QUANT_MARKETS = ["BTC/USD", "ETH/USD", "SOL/USD", "XRP/USD", "TAO/USD"]
 QUANT_PERIODS = ["1m", "5m", "15m", "1h", "4h", "1d"]
 
@@ -593,6 +594,13 @@ def copy_status() -> dict[str, Any]:
     auth = live.get("copy_trading") if isinstance(live.get("copy_trading"), dict) else {}
     active = bool(cfg.get("live_copy_enabled") and live.get("armed") and auth.get("enabled") and float(auth.get("authorized_until") or 0) > time.time())
     return {**out, "config": cfg, "live_copy_enabled": active, "mode": "owner_authorized_live_copy" if active else "paper_shadow_copy"}
+
+
+def polymarket_status() -> dict[str, Any]:
+    cached = load_json(POLYMARKET_STATUS)
+    if isinstance(cached, dict):
+        return cached
+    return {"ok": True, "version": "0.1.0-paper-only", "mode": "paper_watchlist", "live_locked": True, "markets": [], "signals": [], "safety_note": "Read-only paper monitor; no orders or funds."}
 
 
 def live_status() -> dict[str, Any]:
@@ -1042,6 +1050,9 @@ class Handler(BaseHTTPRequestHandler):
             return
         if path == "/dashboard/quant/copy/status":
             self.json_response(200, copy_status())
+            return
+        if path == "/dashboard/polymarket/status":
+            self.json_response(200, polymarket_status())
             return
         if path == "/dashboard/quant/candles":
             try:
