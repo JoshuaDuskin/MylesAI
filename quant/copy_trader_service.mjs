@@ -3,12 +3,14 @@ import path from 'node:path';
 import os from 'node:os';
 import { spawnSync } from 'node:child_process';
 import { createRequire } from 'node:module';
+import { runDriftCopyCycle } from './drift_copy_adapter.mjs';
 const require = createRequire(import.meta.url);
 const { GmxApiSdk } = require('@gmx-io/sdk/v2');
 
 const ROOT = process.env.LOCALAPPDATA ? path.join(process.env.LOCALAPPDATA, 'MylesAI') : path.join(os.homedir(), 'AppData', 'Local', 'MylesAI');
 const DATA = path.join(ROOT, 'data');
 const QUANT = path.join(ROOT, 'quant');
+const QUANT_CONFIG_FILE = path.join(QUANT, 'quant_config.json');
 const CONFIG_FILE = path.join(DATA, 'copy_trader_config.json');
 const STATUS_FILE = path.join(DATA, 'copy_trader_status.json');
 const QUANT_STATUS_FILE = path.join(DATA, 'trading_status.json');
@@ -27,9 +29,10 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
 const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, Number(v)));
 const readJson = (file, fallback = null) => { try { return JSON.parse(fs.readFileSync(file, 'utf8')); } catch { return fallback; } };
 function writeJson(file, value) { fs.mkdirSync(path.dirname(file), { recursive: true }); const tmp = `${file}.tmp-${process.pid}`; fs.writeFileSync(tmp, JSON.stringify(value, null, 2)); fs.renameSync(tmp, file); }
-function address(value) { const s = String(value || '').toLowerCase(); return /^0x[0-9a-f]{40}$/.test(s) ? s : null; }
+function driftVenue() { const q = readJson(QUANT_CONFIG_FILE, {}); return String(q?.venue || '').toLowerCase() === 'drift' || String(q?.chain_id || '').toLowerCase() === 'solana'; }
+function address(value) { const raw = String(value || '').trim(); if (driftVenue()) return /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(raw) ? raw : null; const s = raw.toLowerCase(); return /^0x[0-9a-f]{40}$/.test(s) ? s : null; }
 function usd30(value) { try { return Number(BigInt(String(value || 0))) / 1e30; } catch { return Number(value || 0); } }
-function defaults() { return { version: VERSION, enabled: true, auto_discovery: true, auto_select: true, shadow_copy_enabled: true, live_copy_enabled: false, discovery_period_days: 30, validation_period_days: 90, discovery_interval_seconds: 900, max_candidates: 20, max_selected_traders: 3, min_closed_trades: 12, min_win_rate_pct: 52, min_score: 55, max_copy_positions: 2, copy_margin_usd: 25, copy_leverage: 1.25, stop_loss_pct: 1.0, take_profit_pct: 2.0, poll_seconds: 60, selected_accounts: [] }; }
+function defaults() { return { version: VERSION, venue: driftVenue() ? 'Drift' : 'GMX', enabled: true, auto_discovery: true, auto_select: true, shadow_copy_enabled: true, live_copy_enabled: false, discovery_period_days: 30, validation_period_days: 90, discovery_interval_seconds: 900, max_candidates: 20, max_selected_traders: 3, min_closed_trades: 12, min_win_rate_pct: 52, min_score: 55, max_copy_positions: 2, copy_margin_usd: 25, copy_leverage: 1.25, stop_loss_pct: 1.0, take_profit_pct: 2.0, poll_seconds: 60, selected_accounts: [] }; }
 function config() { const d = defaults(), x = readJson(CONFIG_FILE, {}); return { ...d, ...x, selected_accounts: Array.isArray(x.selected_accounts) ? x.selected_accounts.map(address).filter(Boolean) : [] }; }
 function saveConfig(input) {
   const old = config(), x = input?.config && typeof input.config === 'object' ? input.config : input;
@@ -149,5 +152,51 @@ async function cycle(forceDiscovery = false) {
   const generated=iso(),status = { ok: true, version: VERSION, generated_at: generated, discovery_at: didDiscover ? generated : previous.discovery_at, next_discovery_at: new Date(Date.now() + cfg.discovery_interval_seconds * 1000).toISOString(), data_source: 'GMX official API and SDK', source_health: { gmx_api: { available: true, endpoint: API, updated_at: generated }, gmx_sdk: { available: true, updated_at: generated } }, research_findings: { candidates: discovery.candidates?.length || 0, qualified: discovery.qualified?.length || 0, consensus_signals: signals.length, shadow_actions: actions.length, live_actions: liveActions.length, statement: signals.length ? `${signals.length} current GMX trader-consensus signal(s) are being shadow-tested.` : 'No qualified trader consensus is present; no paper copy entry is manufactured.' }, mode: liveActive ? 'owner_authorized_live_copy' : 'paper_shadow_copy', live_copy_enabled: liveActive, safety_note: liveActive ? 'REAL GMX copying is active only for the owner-signed trader list and risk envelope. Manual positions are never adopted or closed by copy trading.' : 'Live copy is off. Paper shadow-copy may continue independently.', config: cfg, selected_accounts: selected, candidates: discovery.candidates || [], qualified: discovery.qualified || [], source_positions: positions, signals, recent_actions: actions, recent_live_actions: liveActions };
   writeJson(STATUS_FILE, status); return status;
 }
-async function main() { const args = process.argv.slice(2), payload = flag => { const i = args.indexOf(flag); return i >= 0 ? JSON.parse(args[i + 1] || '{}') : null; }; try { if (args.includes('--status')) { console.log(JSON.stringify(readJson(STATUS_FILE, { ok: true, version: VERSION, generated_at: null, candidates: [], signals: [] }))); return; } const p = payload('--config'); if (p) { const c = saveConfig(p); console.log(JSON.stringify({ ok: true, config: c })); return; } if (args.includes('--discover')) { console.log(JSON.stringify(await cycle(true))); return; } if (args.includes('--once')) { console.log(JSON.stringify(await cycle(false))); return; } if (args.includes('--daemon')) { for (;;) { try { await cycle(false); } catch (e) { writeJson(STATUS_FILE, { ...readJson(STATUS_FILE, {}), ok: false, generated_at: iso(), error: String(e?.message || e) }); } await sleep(config().poll_seconds * 1000); } } console.log(JSON.stringify({ ok: true, version: VERSION })); } catch (e) { console.error(JSON.stringify({ ok: false, error: String(e?.message || e) })); process.exit(2); } }
+async function driftMain(args, payload) {
+  if (args.includes('--status')) {
+    console.log(JSON.stringify(readJson(STATUS_FILE, { ok: true, version: '0.10.0-drift-paper-copy', data_source: 'Drift/Velocity public Data API', candidates: [], qualified: [], signals: [] })));
+    return true;
+  }
+  if (payload('--config')) {
+    const c = saveConfig(payload('--config'));
+    console.log(JSON.stringify({ ok: true, config: c }));
+    return true;
+  }
+  const run = async force => {
+    const cfg = config();
+    const previous = readJson(STATUS_FILE, {});
+    const result = await runDriftCopyCycle({ config: cfg, previous, forceDiscovery: force, configFile: CONFIG_FILE, shadowCopy, liveCopy });
+    writeJson(STATUS_FILE, result);
+    return result;
+  };
+  if (args.includes('--discover')) { console.log(JSON.stringify(await run(true))); return true; }
+  if (args.includes('--once')) { console.log(JSON.stringify(await run(false))); return true; }
+  if (args.includes('--daemon')) {
+    for (;;) { try { await run(false); } catch (error) { writeJson(STATUS_FILE, { ...readJson(STATUS_FILE, {}), ok: false, generated_at: iso(), error: String(error?.message || error) }); } await sleep(config().poll_seconds * 1000); }
+  }
+  return false;
+}
+async function main() {
+  const args = process.argv.slice(2);
+  const payload = flag => { const i = args.indexOf(flag); return i >= 0 ? JSON.parse(args[i + 1] || '{}') : null; };
+  try {
+    if (driftVenue() && await driftMain(args, payload)) return;
+    if (args.includes('--status')) { console.log(JSON.stringify(readJson(STATUS_FILE, { ok: true, version: VERSION, generated_at: null, candidates: [], signals: [] }))); return; }
+    const p = payload('--config');
+    if (p) { const c = saveConfig(p); console.log(JSON.stringify({ ok: true, config: c })); return; }
+    if (args.includes('--discover')) { console.log(JSON.stringify(await cycle(true))); return; }
+    if (args.includes('--once')) { console.log(JSON.stringify(await cycle(false))); return; }
+    if (args.includes('--daemon')) {
+      for (;;) {
+        try { await cycle(false); }
+        catch (e) { writeJson(STATUS_FILE, { ...readJson(STATUS_FILE, {}), ok: false, generated_at: iso(), error: String(e?.message || e) }); }
+        await sleep(config().poll_seconds * 1000);
+      }
+    }
+    console.log(JSON.stringify({ ok: true, version: VERSION }));
+  } catch (e) {
+    console.error(JSON.stringify({ ok: false, error: String(e?.message || e) }));
+    process.exit(2);
+  }
+}
 main();
