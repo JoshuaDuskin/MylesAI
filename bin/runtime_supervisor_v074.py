@@ -659,6 +659,7 @@ def start_quant() -> None:
     quant_script = QUANT / "quant_service.mjs"
     gmx_script = QUANT / "gmx_live.mjs"
     copy_script = QUANT / "copy_trader_service.mjs"
+    polymarket_script = QUANT / "polymarket_paper_service.mjs"
     if quant_script.exists() and not keep_one_process(r"quant_service\.mjs", "Quant worker"):
         hidden_popen([node, quant_script], cwd=QUANT, stdout_path=LOGS / "quant_startup.out.log", stderr_path=LOGS / "quant_startup.err.log", low_priority=True)
         log("quant restart requested")
@@ -668,6 +669,9 @@ def start_quant() -> None:
     if copy_script.exists() and not keep_one_process(r"copy_trader_service\.mjs.*--daemon", "copy research daemon"):
         hidden_popen([node, copy_script, "--daemon"], cwd=QUANT, stdout_path=LOGS / "copy_trader_startup.out.log", stderr_path=LOGS / "copy_trader_startup.err.log", low_priority=True)
         log("copy research restart requested")
+    if polymarket_script.exists() and not keep_one_process(r"polymarket_paper_service\.mjs.*--daemon", "Polymarket paper monitor"):
+        hidden_popen([node, polymarket_script, "--daemon"], cwd=QUANT, stdout_path=LOGS / "polymarket_startup.out.log", stderr_path=LOGS / "polymarket_startup.err.log", low_priority=True)
+        log("Polymarket paper monitor restart requested")
 
 
 def start_services(owner: str, read: str) -> None:
