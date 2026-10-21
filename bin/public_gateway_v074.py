@@ -140,7 +140,8 @@ def local_trading_snapshot():
         max_age = 300.0
         engine = value.get("engine") if isinstance(value.get("engine"), dict) else {}
         engine_ok = str(engine.get("status") or "").lower() in {"running", "degraded"}
-        source_ok = "gmx" in str(engine.get("data_source") or "").lower()
+        source_text = str(engine.get("data_source") or "").lower()
+        source_ok = any(marker in source_text for marker in ("gmx", "drift", "velocity"))
         if age > max_age or file_age > max_age or not engine_ok or not source_ok:
             return None, {
                 "status": "stale_or_unverified",
