@@ -96,7 +96,7 @@ async function sourcePositions(selected, candidateMap) {
   return output;
 }
 
-function consensus(rows) {
+function consensus(rows, minSources = 2) {
   const grouped = new Map();
   for (const row of rows.filter(x => x.symbol && x.side && x.account)) {
     const item = grouped.get(row.symbol) || { long: 0, short: 0, longAccounts: [], shortAccounts: [] };
@@ -111,6 +111,7 @@ function consensus(rows) {
     const confidence = Math.max(item.long, item.short) / total;
     if (confidence < 0.6) return [];
     const accounts = [...new Set(item[`${side}Accounts`])];
+    if (accounts.length < Math.max(1, Math.trunc(n(minSources, 2)))) return [];
     return [{ symbol, side, confidence: Number((confidence * 100).toFixed(1)), source_count: accounts.length, accounts }];
   });
 }
@@ -127,7 +128,7 @@ export async function runDriftCopyCycle({ config, previous = {}, forceDiscovery 
   const selected = cfg.selected_accounts?.length ? cfg.selected_accounts : discovery.selected_accounts || [];
   const map = new Map((discovery.candidates || []).map(x => [x.account, x]));
   const positions = await sourcePositions(selected, map);
-  const signals = consensus(positions);
+  const signals = consensus(positions, cfg.min_copy_sources);
   const actions = cfg.shadow_copy_enabled ? shadowCopy(cfg, signals) : [];
   const liveActions = cfg.live_copy_enabled ? liveCopy(cfg, signals) : [];
   const liveActive = false;
