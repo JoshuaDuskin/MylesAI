@@ -300,7 +300,7 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
 
     def public_status(self):
-        if not (public_read_ok(self.headers) or owner_read_ok(self.headers)):
+        if not (public_read_ok(self.headers) or public_authorized(self.headers) or owner_read_ok(self.headers)):
             self.send_json(401, {"ok": False, "error": "read token required"})
             return
 
