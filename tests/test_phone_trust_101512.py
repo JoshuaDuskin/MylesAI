@@ -10,7 +10,7 @@ class PhoneTrust(unittest.TestCase):
   self.assertIn("state.bridge.recoveryCode&&await exchangePair(false)",s)
  def test_new_browser_prompts_for_first_pair_and_preserves_trust(self):
   s=(ROOT/"index.html").read_text(encoding="utf-8")
-  self.assertIn("if(!state.bridge.token&&!state.bridge.recoveryCode){showView('chat');openPairModal();",s)
+  self.assertIn("if(!recovered&&!state.bridge.token&&!state.bridge.recoveryCode){showView('chat');openPairModal();",s)
   self.assertIn("localStorage.setItem('myles_bridge_token'",s)
   self.assertIn("localStorage.setItem('myles_bridge_pair_code'",s)
 if __name__=="__main__":unittest.main()
