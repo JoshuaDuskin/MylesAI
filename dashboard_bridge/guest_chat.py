@@ -25,6 +25,47 @@ LOCK = threading.RLock()
 ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
 MAX_TEXT = 2500
 MAX_HISTORY = 60
+PUBLIC_APPS = {
+    "notepad": "Notepad", "calculator": "Calculator", "calc": "Calculator",
+    "paint": "Paint", "microsoft paint": "Paint",
+    "chrome": "Google Chrome", "google chrome": "Google Chrome",
+    "edge": "Microsoft Edge", "microsoft edge": "Microsoft Edge",
+    "spotify": "Spotify",
+}
+PUBLIC_LAUNCH_LOCK = threading.Lock()
+
+
+def public_app_reply(prompt: str) -> tuple[int, dict] | None:
+    """Only exact approved app names reach the launcher; never pass user arguments."""
+    from myles_runtime_v9 import app_launch_target
+    target = app_launch_target(prompt.rstrip(".!?"))
+    if not target:
+        return None
+    app = PUBLIC_APPS.get(target.casefold())
+    if not app:
+        reply = "Public chat can open Notepad, Calculator, Paint, Chrome, Edge, or Spotify. Other computer actions require owner access."
+    else:
+        from myles_windows import launch_app_verified
+        if not PUBLIC_LAUNCH_LOCK.acquire(blocking=False):
+            return 429, {"ok": False, "error": "An app is opening. Please try again shortly."}
+        try:
+            result = launch_app_verified(app, timeout_seconds=20)
+        except Exception:
+            result = ""
+        finally:
+            PUBLIC_LAUNCH_LOCK.release()
+        if result.startswith("DESKTOP_APP_LAUNCH_VERIFIED:"):
+            reply = f"{app} is open on the tower."
+        else:
+            reply = f"I couldn't verify that {app} opened on the tower. It may not be installed or the desktop may be locked."
+    stamp = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+    with LOCK:
+        updated = (public_messages()["messages"] + [
+            {"role": "user", "content": prompt, "at": stamp},
+            {"role": "assistant", "content": reply, "at": stamp},
+        ])[-MAX_HISTORY:]
+        save(PUBLIC_HISTORY, {"messages": updated})
+    return 200, {"ok": True, "role": "public_basic_apps", "reply": reply, "messages": updated}
 
 
 def read(path: Path) -> dict:
@@ -118,7 +159,7 @@ def public_messages() -> dict:
 
 
 def public_send(text: str, history=None) -> tuple[int, dict]:
-    """Append to one shared public conversation, without owner-side effects."""
+    """Shared conversation with owner-approved, fixed basic app launches."""
     prompt = str(text or "").strip()
     if not prompt or len(prompt)>MAX_TEXT:
         return 400, {"ok":False,"error":"Message must be 1–2500 characters"}
@@ -133,13 +174,18 @@ def public_send(text: str, history=None) -> tuple[int, dict]:
     from myles_game_guard import game_is_active
     if game_is_active():
         return 503, {"ok":False,"error":"Chat is paused during gaming"}
+    app_reply = public_app_reply(prompt)
+    if app_reply is not None:
+        return app_reply
     with LOCK:
         existing = public_messages()["messages"]
     context=[{"role":"system","content":
         "You are Myles, a general text conversation assistant for a public visitor. "
         "You have no tools, no access to the owner's files, account, desktop, tasks, "
         "messages, trading, memory or settings. Never claim access or disclose any "
-        "owner information. You cannot perform computer actions."}]
+        "owner information. The public page can open only Notepad, Calculator, Paint, Chrome, Edge, "
+        "or Spotify when explicitly requested; the server performs and verifies these launches. "
+        "You cannot perform other computer actions or claim an app opened without a verified server result."}]
     # The server is authoritative so every visitor sees the same conversation.
     for row in existing[-12:]:
         if not isinstance(row,dict) or row.get("role") not in {"user","assistant"} or not isinstance(row.get("content"),str) or len(row["content"])>MAX_TEXT:
