@@ -892,6 +892,17 @@ def authorized(handler: BaseHTTPRequestHandler) -> bool:
     return bool(supplied) and constant_time_equal(supplied, TOKEN)
 
 
+def local_pair_request(handler: BaseHTTPRequestHandler) -> bool:
+    """Allow the already trusted tower computer to enroll itself without a code.
+
+    This endpoint is intentionally loopback-only. A phone or another computer
+    must still use its saved credential; the owner token is never exposed over
+    the public tunnel or written to the published dashboard.
+    """
+    host = str(handler.client_address[0] or "").strip().lower()
+    return host in {"127.0.0.1", "::1", "::ffff:127.0.0.1"}
+
+
 def constant_time_equal(a: str, b: str) -> bool:
     if len(a) != len(b):
         return False
@@ -1107,6 +1118,19 @@ class Handler(BaseHTTPRequestHandler):
             status,response = guest_chat.send(body.get("message") or body.get("text") or "")
             return self.json_response(status,response)
 
+        if path == "/dashboard/local-pair":
+            origin = self.headers.get("Origin", "")
+            if origin and origin not in ALLOWED_ORIGINS and not origin.startswith("http://127.0.0.1:") and not origin.startswith("http://localhost:"):
+                self.deny(403, "Origin not allowed")
+                return
+            if not local_pair_request(self):
+                self.deny(403, "Local pairing is only available on the tower computer")
+                return
+            if not rate_ok(self.client_address[0] + ":local-pair", True):
+                self.deny(429, "Too many local pairing attempts")
+                return
+            self.json_response(200, {"ok": True, "token": TOKEN, "paired_at": now_iso(), "mode": "local_loopback"})
+            return
         if path == "/dashboard/pair":
             refresh_pair_state()
             origin = self.headers.get("Origin", "")

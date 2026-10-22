@@ -1216,6 +1216,21 @@ html,body{max-width:100%;overflow-x:clip}
       return !!(ok&&state.bridge.healthy);
     }catch(_){return false;}
   }
+  async function recoverLocalPairing(show=false){
+    const endpoints=['http://127.0.0.1:8790/dashboard/local-pair','http://localhost:8790/dashboard/local-pair'];
+    for(const endpoint of endpoints){
+      try{
+        const d=await fetchJson(endpoint,{method:'POST',headers:{Accept:'application/json','Content-Type':'application/json'},body:'{}'},3500);
+        const token=String(d?.token||'').trim();
+        const url=bridgeUrl();
+        if(!token||token.length<20||!url)continue;
+        storeBridgeTrust(url,token);
+        const ok=await testBridge(show);
+        if(ok&&state.bridge.healthy){if(show){$('pairResult').textContent='This computer is connected to the tower.';$('pairResult').className='pair-result ok';}return true;}
+      }catch(_){/* A phone or remote computer will use its saved credential path. */}
+    }
+    return false;
+  }
   async function exchangePair(show=false){const url=bridgeUrl();const code=(state.bridge.recoveryCode||state.bridge.token||'').trim().toUpperCase();if(!url||!/^[A-Z0-9]{8}$/.test(code))return false;try{const d=await fetchJson(`${url}/dashboard/pair`,{method:'POST',headers:{Accept:'application/json','Content-Type':'application/json'},body:JSON.stringify({code})},8000);const token=d?.token||d?.access_token;if(!token||String(token).length<20)throw new Error('Pairing response did not include a token');state.bridge.recoveryCode=code;localStorage.setItem('myles_bridge_pair_code',code);state.bridge.token=String(token);storeBridgeTrust(url,state.bridge.token);await savePairingCredential(code);if($('bridgeTokenInput'))$('bridgeTokenInput').value='';if(show){$('pairResult').textContent='Paired. This browser can recover from its saved password after site data is cleared.';$('pairResult').className='pair-result ok';}return true;}catch(e){if(show){$('pairResult').textContent=`Pairing failed: ${e.message||e}`;$('pairResult').className='pair-result bad';}return false;}}
   function adoptEnteredCredential(){const entered=String($('bridgeTokenInput')?.value||'').trim().toUpperCase();if(entered){state.bridge.token=entered;if(/^[A-Z0-9]{8}$/.test(entered)){state.bridge.recoveryCode=entered;localStorage.setItem('myles_bridge_pair_code',entered);}}}
   async function testBridge(show=false){
@@ -1588,10 +1603,12 @@ function renderResearchTournament(m){
   async function submitPairCode(closeOnSuccess){
     let code=$('bridgeTokenInput').value.trim().toUpperCase();
     if(!code){
+      const local=await recoverLocalPairing(true);
+      if(local){await fetchStatus();await pollMessages();await quantGet().catch(()=>{});if(closeOnSuccess)setTimeout(closePairModal,400);return;}
       const recovered=await recoverSavedPairing(true);
       if(recovered){await fetchStatus();await pollMessages();await quantGet().catch(()=>{});if(closeOnSuccess)setTimeout(closePairModal,400);return;}
     }
-    if(!/^[A-Z0-9]{8}$/.test(code)){$('pairResult').textContent='This phone has no saved owner credential yet. Open the dashboard on the already authorized owner device to finish setup.';$('pairResult').className='pair-result bad';return;}
+    if(!/^[A-Z0-9]{8}$/.test(code)){$('pairResult').textContent='This computer could not find the tower locally. Start Myles on the tower computer and tap reconnect again.';$('pairResult').className='pair-result bad';return;}
     state.bridge.url=normalizeUrl($('bridgeUrlInput').value);state.bridge.token=code;const ok=await testBridge(true);if(ok&&state.bridge.healthy){await fetchStatus();await pollMessages();await quantGet().catch(()=>{});if(closeOnSuccess)setTimeout(closePairModal,400);}
   }
   function bindPairCodeOnly(){
@@ -1606,7 +1623,7 @@ function renderResearchTournament(m){
   function bindChartRangeRefresh(){document.addEventListener('click',e=>{const b=e.target.closest('[data-trade-range],[data-bot-range]');if(!b)return;if(b.dataset.tradeRange){state.tradeRange=b.dataset.tradeRange;refreshFundChart('trade');}if(b.dataset.botRange){state.botChart.range=b.dataset.botRange;refreshFundChart('bot');}});}
   function scheduleStatusPoll(){clearTimeout(state.refreshTimer);const ms=document.hidden?30000:(state.view==='trading'?5000:REFRESH_MS);state.refreshTimer=setTimeout(async()=>{await fetchStatus();scheduleStatusPoll();},ms);}
   function scheduleChatPoll(){clearTimeout(state.chatTimer);const ms=document.hidden?30000:(state.view==='chat'?CHAT_POLL_MS:5000);state.chatTimer=setTimeout(async()=>{if(state.bridge.healthy&&state.view==='chat')await pollMessages();scheduleChatPoll();},ms);}
-  async function init(){if(isGuestPage){await initGuestChat();return;}loadPairing();const savedWalletMode=localStorage.getItem('myles_wallet_connection_mode');if(savedWalletMode&&$('walletConnectionMode'))$('walletConnectionMode').value=savedWalletMode;bind();renderAll();await discoverBridge();if(!state.bridge.url&&state.bridge.discovered)$('bridgeUrlInput').value=state.bridge.discovered;if(bridgeUrl()&&(state.bridge.token||state.bridge.recoveryCode))await testBridge(false);let recovered=false;if(!state.bridge.token&&!state.bridge.recoveryCode&&bridgeUrl())recovered=await recoverSavedPairing(false);if(!recovered&&!state.bridge.token&&!state.bridge.recoveryCode){showView('chat');openPairModal();$('pairResult').textContent='Your phone will reconnect from its saved secure credential.';}await fetchStatus();if(state.bridge.healthy){await pollMessages();await quantGet().catch(()=>{});await liveGet().catch(()=>{});}scheduleStatusPoll();scheduleChatPoll();state.chart.timer=setInterval(()=>{if(!document.hidden&&state.view==='trading'&&state.tradeTab==='tradeManual'&&state.bridge.healthy)loadMarketChart();},20000);state.liveTimer=setInterval(()=>{if(!document.hidden&&state.bridge.healthy&&state.view==='trading')liveGet().catch(()=>{});},20000);document.addEventListener('visibilitychange',()=>{scheduleStatusPoll();scheduleChatPoll();});}
+  async function init(){if(isGuestPage){await initGuestChat();return;}loadPairing();const savedWalletMode=localStorage.getItem('myles_wallet_connection_mode');if(savedWalletMode&&$('walletConnectionMode'))$('walletConnectionMode').value=savedWalletMode;bind();renderAll();await discoverBridge();if(!state.bridge.url&&state.bridge.discovered)$('bridgeUrlInput').value=state.bridge.discovered;if(bridgeUrl()&&(state.bridge.token||state.bridge.recoveryCode))await testBridge(false);let recovered=false;if(!state.bridge.token&&!state.bridge.recoveryCode&&bridgeUrl())recovered=await recoverLocalPairing(false);if(!recovered&&!state.bridge.token&&!state.bridge.recoveryCode&&bridgeUrl())recovered=await recoverSavedPairing(false);if(!recovered&&!state.bridge.token&&!state.bridge.recoveryCode){showView('chat');openPairModal();$('pairResult').textContent='Tap reconnect to connect this computer or restore its saved credential.';}await fetchStatus();if(state.bridge.healthy){await pollMessages();await quantGet().catch(()=>{});await liveGet().catch(()=>{});}scheduleStatusPoll();scheduleChatPoll();state.chart.timer=setInterval(()=>{if(!document.hidden&&state.view==='trading'&&state.tradeTab==='tradeManual'&&state.bridge.healthy)loadMarketChart();},20000);state.liveTimer=setInterval(()=>{if(!document.hidden&&state.bridge.healthy&&state.view==='trading')liveGet().catch(()=>{});},20000);document.addEventListener('visibilitychange',()=>{scheduleStatusPoll();scheduleChatPoll();});}
 
   document.addEventListener('DOMContentLoaded',()=>{const box=$('chatMessages'),jump=$('chatJumpLatest');if(box)box.addEventListener('scroll',updateChatJump,{passive:true});if(jump)jump.addEventListener('click',jumpChatLatest);});
   document.addEventListener('DOMContentLoaded',init);

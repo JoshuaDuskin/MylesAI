@@ -33,7 +33,8 @@ _WEATHER_MARKERS = (
 _PUBLIC_LOOKUP_MARKERS = (
     "latest", "current", "today", "tomorrow", "news", "score", "scores",
     "price", "prices", "weather", "forecast", "look up", "lookup",
-    "search for", "google", "find out",
+    "search for", "google", "find out", "find ", "movie", "film",
+    "where can i watch", "streaming", "showtimes",
 )
 
 
