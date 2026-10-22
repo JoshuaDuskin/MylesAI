@@ -9,6 +9,7 @@ import hashlib
 import hmac
 import json
 import os
+import re
 import secrets
 import sys
 import threading
@@ -40,23 +41,33 @@ PUBLIC_LAUNCH_LOCK = threading.Lock()
 def public_app_reply(prompt: str) -> tuple[int, dict] | None:
     """Only exact approved app names reach the launcher; never pass user arguments."""
     from myles_runtime_v9 import app_launch_target
-    target = app_launch_target(prompt.rstrip(".!?"))
+    closing = bool(re.fullmatch(
+        r"(?i)(?:(?:can|could|would) you\s+)?(?:please\s+)?(?:close|exit|quit)\s+(?:the\s+)?xbox(?:\s+app(?:lication)?)?(?:\s+(?:please|for me|on the tower))?[.!?]*",
+        prompt.strip()))
+    target = "xbox" if closing else app_launch_target(prompt.rstrip(".!?"))
     if not target:
         return None
     app = PUBLIC_APPS.get(target.casefold())
     if not app:
         reply = "Public chat can open Notepad, Calculator, Paint, Chrome, Edge, Spotify, PowerShell, or Xbox. Other computer actions require owner access."
     else:
-        from myles_windows import launch_app_verified
+        from myles_windows import launch_app_verified, close_xbox_verified
         if not PUBLIC_LAUNCH_LOCK.acquire(blocking=False):
-            return 429, {"ok": False, "error": "An app is opening. Please try again shortly."}
+            return 429, {"ok": False, "error": "An app action is in progress. Please try again shortly."}
         try:
-            result = launch_app_verified(app, timeout_seconds=20)
+            result = close_xbox_verified(timeout_seconds=10) if closing else launch_app_verified(app, timeout_seconds=20)
         except Exception:
             result = ""
         finally:
             PUBLIC_LAUNCH_LOCK.release()
-        if result.startswith("DESKTOP_APP_LAUNCH_VERIFIED:"):
+        if closing:
+            if result.startswith("DESKTOP_APP_CLOSE_VERIFIED:"):
+                reply = "Xbox is closed on the tower."
+            elif result.startswith("DESKTOP_APP_CLOSE_ALREADY_CLOSED:"):
+                reply = "Xbox has no open app window on the tower."
+            else:
+                reply = "I couldn't verify that Xbox closed on the tower. Its window may still be open."
+        elif result.startswith("DESKTOP_APP_LAUNCH_VERIFIED:"):
             reply = f"{app} is open on the tower."
         else:
             reply = f"I couldn't verify that {app} opened on the tower. It may not be installed or the desktop may be locked."
@@ -187,7 +198,8 @@ def public_send(text: str, history=None) -> tuple[int, dict]:
         "messages, trading, memory or settings. Never claim access or disclose any "
         "owner information. The public page can open only Notepad, Calculator, Paint, Chrome, Edge, "
         "Spotify, PowerShell, or Xbox when explicitly requested; the server performs and verifies these launches. "
-        "You cannot perform other computer actions or claim an app opened without a verified server result."}]
+        "You can also close the Xbox app when explicitly requested; the server verifies its window closed. "
+        "You cannot perform other computer actions or claim an app opened or closed without a verified server result."}]
     # The server is authoritative so every visitor sees the same conversation.
     for row in existing[-12:]:
         if not isinstance(row,dict) or row.get("role") not in {"user","assistant"} or not isinstance(row.get("content"),str) or len(row["content"])>MAX_TEXT:

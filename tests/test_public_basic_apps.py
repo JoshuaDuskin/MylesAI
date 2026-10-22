@@ -74,6 +74,34 @@ class PublicBasicApps(unittest.TestCase):
              patch("myles_windows.time.sleep"):
             self.assertTrue(launch_app_verified("Xbox").startswith("DESKTOP_APP_LAUNCH_NOT_VERIFIED:"))
 
+    def test_close_xbox_uses_verified_server_action(self):
+        for prompt in ("Close Xbox", "Close Xbox app", "Can you close the Xbox app please?"):
+            with self.subTest(prompt=prompt), patch("myles_windows.close_xbox_verified", return_value="DESKTOP_APP_CLOSE_VERIFIED: closed") as close, patch("myles_windows.launch_app_verified") as launch:
+                _, out = guest_chat.public_app_reply(prompt)
+                self.assertEqual(out["reply"], "Xbox is closed on the tower.")
+                close.assert_called_once_with(timeout_seconds=10)
+                launch.assert_not_called()
+
+    def test_close_failure_and_already_closed_are_honest(self):
+        for result, expected in (("DESKTOP_APP_CLOSE_NOT_VERIFIED: still open", "couldn't verify"), ("DESKTOP_APP_CLOSE_ALREADY_CLOSED: absent", "no open app window")):
+            with patch("myles_windows.close_xbox_verified", return_value=result):
+                self.assertIn(expected, guest_chat.public_app_reply("Close Xbox")[1]["reply"])
+
+    def test_close_extra_commands_never_execute(self):
+        with patch("myles_windows.close_xbox_verified") as close:
+            for prompt in ("Close Xbox and delete files", "Close Xbox; calc", "Close PowerShell"):
+                self.assertIsNone(guest_chat.public_app_reply(prompt))
+            close.assert_not_called()
+
+    def test_close_waits_for_xbox_window_to_disappear(self):
+        import myles_windows as w
+        from types import SimpleNamespace
+        from unittest.mock import Mock
+        post = Mock()
+        with patch.object(w.os, "name", "nt"), patch.object(w.ctypes, "windll", SimpleNamespace(user32=SimpleNamespace(PostMessageW=post)), create=True), patch.object(w, "_matching_visible_windows", side_effect=[[{"Handle": 42}], []]):
+            self.assertTrue(w.close_xbox_verified().startswith("DESKTOP_APP_CLOSE_VERIFIED:"))
+            post.assert_called_once_with(42, 0x0010, 0, 0)
+
     def test_game_mode_prevents_public_launch(self):
         with patch("myles_game_guard.game_is_active", return_value=True), \
              patch("myles_windows.launch_app_verified") as launch:

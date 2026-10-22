@@ -370,6 +370,27 @@ def launch_app_verified(app_name: str, timeout_seconds: int = 20) -> str:
     return f"DESKTOP_APP_LAUNCH_NOT_VERIFIED: Windows received the launch request for {requested!r} ({launch_evidence}), but no matching visible application window appeared. MYLES must inspect the screen or report the blocker; it must not claim success."
 
 
+def close_xbox_verified(timeout_seconds: int = 10) -> str:
+    """Close only Xbox app windows normally; leave games and tray processes alone."""
+    if os.name != "nt":
+        return "DESKTOP_APP_CLOSE_UNAVAILABLE: Windows is required."
+    windows = _matching_visible_windows("Xbox")
+    if not windows:
+        return "DESKTOP_APP_CLOSE_ALREADY_CLOSED: Xbox has no visible app window."
+    user32 = ctypes.windll.user32
+    user32.PostMessageW.argtypes = [wintypes.HWND, wintypes.UINT, wintypes.WPARAM, wintypes.LPARAM]
+    for row in windows:
+        hwnd = int(row.get("Handle") or 0)
+        if hwnd:
+            user32.PostMessageW(hwnd, 0x0010, 0, 0)
+    deadline = time.time() + max(1, min(int(timeout_seconds), 20))
+    while time.time() < deadline:
+        if not _matching_visible_windows("Xbox"):
+            return "DESKTOP_APP_CLOSE_VERIFIED: Xbox app windows closed."
+        time.sleep(0.25)
+    return "DESKTOP_APP_CLOSE_NOT_VERIFIED: Xbox still has a visible app window."
+
+
 def _fortnite_visible() -> dict[str, object] | None:
     actual_names = {"fortniteclient-win64-shipping.exe", "fortniteclient-win64-shipping_be.exe"}
     for row in visible_windows():
