@@ -961,7 +961,10 @@ class Handler(BaseHTTPRequestHandler):
 
     def cors(self) -> None:
         origin = self.headers.get("Origin", "")
-        if origin in ALLOWED_ORIGINS or origin.startswith("http://127.0.0.1:") or origin.startswith("http://localhost:"):
+        # A dashboard opened directly from the trusted tower's local file
+        # system sends the browser's opaque `null` origin. Allow that origin
+        # only on this loopback bridge; the public gateway remains unchanged.
+        if origin == "null" or origin in ALLOWED_ORIGINS or origin.startswith("http://127.0.0.1:") or origin.startswith("http://localhost:"):
             self.send_header("Access-Control-Allow-Origin", origin)
             self.send_header("Vary", "Origin")
         self.send_header("Access-Control-Allow-Headers", "Authorization, X-Myles-Token, X-Myles-Guest, Content-Type")
@@ -989,7 +992,7 @@ class Handler(BaseHTTPRequestHandler):
 
     def preflight(self, is_post: bool = False) -> bool:
         origin = self.headers.get("Origin", "")
-        if origin and origin not in ALLOWED_ORIGINS and not origin.startswith("http://127.0.0.1:") and not origin.startswith("http://localhost:"):
+        if origin and origin != "null" and origin not in ALLOWED_ORIGINS and not origin.startswith("http://127.0.0.1:") and not origin.startswith("http://localhost:"):
             self.deny(403, "Origin not allowed")
             return False
         auth = self.headers.get("Authorization", "")
@@ -1120,7 +1123,7 @@ class Handler(BaseHTTPRequestHandler):
 
         if path == "/dashboard/local-pair":
             origin = self.headers.get("Origin", "")
-            if origin and origin not in ALLOWED_ORIGINS and not origin.startswith("http://127.0.0.1:") and not origin.startswith("http://localhost:"):
+            if origin and origin != "null" and origin not in ALLOWED_ORIGINS and not origin.startswith("http://127.0.0.1:") and not origin.startswith("http://localhost:"):
                 self.deny(403, "Origin not allowed")
                 return
             if not local_pair_request(self):
@@ -1134,7 +1137,7 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/dashboard/pair":
             refresh_pair_state()
             origin = self.headers.get("Origin", "")
-            if origin and origin not in ALLOWED_ORIGINS and not origin.startswith("http://127.0.0.1:") and not origin.startswith("http://localhost:"):
+            if origin and origin != "null" and origin not in ALLOWED_ORIGINS and not origin.startswith("http://127.0.0.1:") and not origin.startswith("http://localhost:"):
                 self.deny(403, "Origin not allowed")
                 return
             if not rate_ok(self.client_address[0] + ":pair", True):

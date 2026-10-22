@@ -1310,7 +1310,11 @@ html,body{max-width:100%;overflow-x:clip}
       try{
         const d=await fetchJson(endpoint,{method:'POST',headers:{Accept:'application/json','Content-Type':'application/json'},body:'{}'},3500);
         const token=String(d?.token||'').trim();
-        const url=bridgeUrl();
+        // A dashboard opened from the tower as a local file must use the
+        // loopback bridge that just issued this credential. The published
+        // Tailscale URL is only a read-only discovery fallback for remote
+        // devices and cannot carry the local pairing token.
+        const url=endpoint.replace(/\/dashboard\/local-pair$/,'');
         if(!token||token.length<20||!url)continue;
         storeBridgeTrust(url,token);
         const ok=await testBridge(show);
