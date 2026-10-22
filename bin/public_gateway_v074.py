@@ -354,6 +354,22 @@ class Handler(BaseHTTPRequestHandler):
         status,response_headers,raw = request_local(path,self.command,body,forwarded,85)
         return self.send_json(status,raw,response_headers.get("Content-Type","application/json"))
 
+    def proxy_public_chat(self):
+        """Anonymous chat-only route; never forwards owner credentials."""
+        path = self.path.split("?", 1)[0]
+        if path != "/dashboard/public-chat/messages" or self.command != "POST":
+            return self.send_json(405, {"ok": False, "error": "Public chat method not allowed"})
+        try:
+            size = int(self.headers.get("Content-Length", "0"))
+        except ValueError:
+            size = -1
+        if size < 0 or size > 4096:
+            return self.send_json(400, {"ok": False, "error": "Public chat request too large"})
+        body = self.rfile.read(size) if size else b""
+        forwarded = {"Content-Type": "application/json"}
+        status, response_headers, raw = request_local(path, "POST", body, forwarded, 85)
+        return self.send_json(status, raw, response_headers.get("Content-Type", "application/json"))
+
     def proxy(self):
         # The public URL is read-only by default. Pairing is protected by the
         # bridge's one-time code; every other private route needs the owner token.
@@ -381,6 +397,8 @@ class Handler(BaseHTTPRequestHandler):
         return self.proxy()
 
     def do_POST(self):
+        if self.path.split("?", 1)[0] == "/dashboard/public-chat/messages":
+            return self.proxy_public_chat()
         if self.path.split("?",1)[0] in {"/dashboard/guest/pair","/dashboard/guest/messages"}:
             return self.proxy_guest()
         return self.proxy()

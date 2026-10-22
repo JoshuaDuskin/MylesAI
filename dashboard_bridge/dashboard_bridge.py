@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import importlib.util
 import json
 import os
 import re
@@ -46,6 +47,22 @@ PAIR_CODE = ""
 PAIR_EXPIRES = 0.0
 PAIR_PINNED = False
 PAIR_CODE_FILE: Path | None = None
+_GUEST_CHAT_MODULE = None
+
+
+def guest_chat_module():
+    """Load the sibling guest-chat module without colliding with this script name."""
+    global _GUEST_CHAT_MODULE
+    if _GUEST_CHAT_MODULE is not None:
+        return _GUEST_CHAT_MODULE
+    path = Path(__file__).with_name("guest_chat.py")
+    spec = importlib.util.spec_from_file_location("myles_guest_chat", path)
+    if spec is None or spec.loader is None:
+        raise ImportError("guest chat module is unavailable")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    _GUEST_CHAT_MODULE = module
+    return module
 
 
 def refresh_pair_state() -> None:
@@ -861,7 +878,7 @@ def build_status() -> dict[str, Any]:
 
 def guest_credentials(handler: BaseHTTPRequestHandler) -> bool:
     """Separate credential namespace; never treat guest as Myles owner."""
-    from dashboard_bridge import guest_chat
+    guest_chat = guest_chat_module()
     token = handler.headers.get("X-Myles-Guest", "").strip()
     return guest_chat.is_guest(token)
 
@@ -1011,6 +1028,16 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_GET(self) -> None:  # noqa: N802
         path = urlparse(self.path).path
+        if path == "/dashboard/public-chat/messages":
+            # Public chat is deliberately anonymous and text-only. It never
+            # enters the owner conversation, job queue, desktop, wallet, or
+            # trading routes.
+            origin = self.headers.get("Origin", "")
+            if (origin and origin != "null" and origin not in ALLOWED_ORIGINS
+                    and not origin.startswith("http://127.0.0.1:")
+                    and not origin.startswith("http://localhost:")):
+                return self.deny(403, "Origin not allowed")
+            return self.deny(405, "Public chat requires POST")
         if path == "/dashboard/guest/messages":
             origin = self.headers.get("Origin","")
             if (origin and origin not in ALLOWED_ORIGINS
@@ -1021,7 +1048,7 @@ class Handler(BaseHTTPRequestHandler):
                 return self.deny(401,"Guest chat pairing required")
             if not guest_request_rate(self, False):
                 return self.deny(429,"Guest chat rate limit")
-            from dashboard_bridge import guest_chat
+            guest_chat = guest_chat_module()
             return self.json_response(200,guest_chat.messages())
         if not self.preflight(False):
             return
@@ -1084,6 +1111,32 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_POST(self) -> None:  # noqa: N802
         path = self.path.split("?", 1)[0]
+        if path == "/dashboard/public-chat/messages":
+            origin = self.headers.get("Origin", "")
+            if (origin and origin != "null" and origin not in ALLOWED_ORIGINS
+                    and not origin.startswith("http://127.0.0.1:")
+                    and not origin.startswith("http://localhost:")):
+                return self.deny(403, "Origin not allowed")
+            if not guest_request_rate(self, True):
+                return self.deny(429, "Public chat rate limit")
+            try:
+                size = int(self.headers.get("Content-Length", "0"))
+            except ValueError:
+                size = 0
+            if not 0 < size <= 4096:
+                return self.deny(400, "Invalid public chat request body")
+            try:
+                body = json.loads(self.rfile.read(size).decode("utf-8"))
+            except (ValueError, UnicodeDecodeError):
+                return self.deny(400, "Invalid public chat JSON")
+            if not isinstance(body, dict):
+                return self.deny(400, "Public chat request must be an object")
+            guest_chat = guest_chat_module()
+            status, response = guest_chat.public_send(
+                body.get("message") or body.get("text") or "",
+                body.get("history"),
+            )
+            return self.json_response(status, response)
         # Guest pairing/chat is a wholly separate capability from owner pairing.
         # No guest request is allowed to reach jobs, computer, settings or trading.
         if path in {"/dashboard/guest/pair","/dashboard/guest/messages"}:
@@ -1111,7 +1164,7 @@ class Handler(BaseHTTPRequestHandler):
                 return self.deny(400,"Invalid guest JSON")
             if not isinstance(body,dict):
                 return self.deny(400,"Guest request must be an object")
-            from dashboard_bridge import guest_chat
+            guest_chat = guest_chat_module()
             if path == "/dashboard/guest/pair":
                 pair = guest_chat.exchange(str(body.get("code") or ""))
                 if pair is None:
@@ -1187,10 +1240,10 @@ class Handler(BaseHTTPRequestHandler):
             return
 
         if path == "/dashboard/guest/invite":
-            from dashboard_bridge import guest_chat
+            guest_chat = guest_chat_module()
             return self.json_response(200,guest_chat.make_invite())
         if path == "/dashboard/guest/revoke":
-            from dashboard_bridge import guest_chat
+            guest_chat = guest_chat_module()
             return self.json_response(200,guest_chat.revoke())
         if path == "/dashboard/control/game-mode":
             enabled = bool(payload.get("enabled"))

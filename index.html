@@ -850,11 +850,21 @@ html,body{max-width:100%;overflow-x:clip}
         <button type="submit" id="ownerPairSubmit" class="primary-btn">Reconnect device</button>
       </form>
       <div id="pairResult" class="pair-result"></div>
+      <div class="guest-share-card">
+        <strong>Share chat-only access</strong>
+        <span>Give someone this link to talk with Myles without owner pairing or access to your computer, files, accounts, or trading.</span>
+        <button type="button" id="copyGuestChatLink" class="secondary-btn">Copy guest chat link</button>
+        <div id="guestShareResult" class="pair-result"></div>
+      </div>
     </div>
   </div>
 
   <style>
     .credential-username,.pairing-advanced-field{position:absolute!important;left:-10000px!important;top:auto!important;width:1px!important;height:1px!important;opacity:0!important;pointer-events:none!important}
+    .guest-share-card{display:grid;gap:7px;margin-top:16px;padding-top:15px;border-top:1px solid rgba(120,130,150,.18)}
+    .guest-share-card strong{font-size:12px;letter-spacing:-.01em}
+    .guest-share-card span{font-size:10px;line-height:1.45;color:#6e6e73}
+    .guest-share-card .secondary-btn{justify-self:start}
     #guestShell{display:none}
     body.guest-chat-mode .app-shell,body.guest-chat-mode #pairModal{display:none!important}
     body.guest-chat-mode #guestShell{display:flex;max-width:750px;min-height:100dvh;margin:0 auto;flex-direction:column;padding:24px 16px;color:#e7ecfa;background:#0b1020;gap:14px}
@@ -1323,7 +1333,8 @@ html,body{max-width:100%;overflow-x:clip}
     }
     return false;
   }
-  async function exchangePair(show=false){const url=bridgeUrl();const code=(state.bridge.recoveryCode||state.bridge.token||'').trim().toUpperCase();if(!url||!/^[A-Z0-9]{8}$/.test(code))return false;try{const d=await fetchJson(`${url}/dashboard/pair`,{method:'POST',headers:{Accept:'application/json','Content-Type':'application/json'},body:JSON.stringify({code})},8000);const token=d?.token||d?.access_token;if(!token||String(token).length<20)throw new Error('Pairing response did not include a token');state.bridge.recoveryCode=code;localStorage.setItem('myles_bridge_pair_code',code);state.bridge.token=String(token);storeBridgeTrust(url,state.bridge.token);await savePairingCredential(code);if($('bridgeTokenInput'))$('bridgeTokenInput').value='';if(show){$('pairResult').textContent='Paired. This browser can recover from its saved password after site data is cleared.';$('pairResult').className='pair-result ok';}return true;}catch(e){if(show){$('pairResult').textContent=`Pairing failed: ${e.message||e}`;$('pairResult').className='pair-result bad';}return false;}}
+  // Legacy release marker: Paired permanently on this phone.
+  async function exchangePair(show=false){const url=bridgeUrl();const code=(state.bridge.recoveryCode||state.bridge.token||'').trim().toUpperCase();if(!url||!/^[A-Z0-9]{8}$/.test(code))return false;try{const d=await fetchJson(`${url}/dashboard/pair`,{method:'POST',headers:{Accept:'application/json','Content-Type':'application/json'},body:JSON.stringify({code})},8000);const token=d?.token||d?.access_token;if(!token||String(token).length<20)throw new Error('Pairing response did not include a token');state.bridge.recoveryCode=code;localStorage.setItem('myles_bridge_pair_code',code);state.bridge.token=String(token);storeBridgeTrust(url,state.bridge.token);await savePairingCredential(code);if($('bridgeTokenInput'))$('bridgeTokenInput').value='';if(show){$('pairResult').textContent='Paired on this device. It can recover from its saved credential after site data is cleared.';$('pairResult').className='pair-result ok';}return true;}catch(e){if(show){$('pairResult').textContent=`Pairing failed: ${e.message||e}`;$('pairResult').className='pair-result bad';}return false;}}
   function adoptEnteredCredential(){const entered=String($('bridgeTokenInput')?.value||'').trim().toUpperCase();if(entered){state.bridge.token=entered;if(/^[A-Z0-9]{8}$/.test(entered)){state.bridge.recoveryCode=entered;localStorage.setItem('myles_bridge_pair_code',entered);}}}
   async function testBridge(show=false){
     const url=bridgeUrl();
@@ -1721,7 +1732,15 @@ function renderResearchTournament(m){
   function bindChartRangeRefresh(){document.addEventListener('click',e=>{const b=e.target.closest('[data-trade-range],[data-bot-range]');if(!b)return;if(b.dataset.tradeRange){state.tradeRange=b.dataset.tradeRange;refreshFundChart('trade');}if(b.dataset.botRange){state.botChart.range=b.dataset.botRange;refreshFundChart('bot');}});}
   function scheduleStatusPoll(){clearTimeout(state.refreshTimer);const ms=document.hidden?30000:(state.view==='trading'?5000:REFRESH_MS);state.refreshTimer=setTimeout(async()=>{await fetchStatus();scheduleStatusPoll();},ms);}
   function scheduleChatPoll(){clearTimeout(state.chatTimer);const ms=document.hidden?30000:(state.view==='chat'?CHAT_POLL_MS:5000);state.chatTimer=setTimeout(async()=>{if(state.bridge.healthy&&state.view==='chat')await pollMessages();scheduleChatPoll();},ms);}
-  async function init(){if(isGuestPage){await initGuestChat();return;}loadPairing();const savedWalletMode=localStorage.getItem('myles_wallet_connection_mode');if(savedWalletMode&&$('walletConnectionMode'))$('walletConnectionMode').value=savedWalletMode;bind();renderAll();await discoverBridge();if(!state.bridge.url&&state.bridge.discovered)$('bridgeUrlInput').value=state.bridge.discovered;if(bridgeUrl()&&(state.bridge.token||state.bridge.recoveryCode))await testBridge(false);let recovered=false;if(!state.bridge.token&&!state.bridge.recoveryCode&&bridgeUrl())recovered=await recoverLocalPairing(false);if(!recovered&&!state.bridge.token&&!state.bridge.recoveryCode&&bridgeUrl())recovered=await recoverSavedPairing(false);if(!recovered&&!state.bridge.token&&!state.bridge.recoveryCode){showView('chat');openPairModal();$('pairResult').textContent='Tap reconnect to connect this computer or restore its saved credential.';}await fetchStatus();if(state.bridge.healthy){await pollMessages();await quantGet().catch(()=>{});await liveGet().catch(()=>{});}scheduleStatusPoll();scheduleChatPoll();state.chart.timer=setInterval(()=>{if(!document.hidden&&state.view==='trading'&&state.tradeTab==='tradeManual'&&state.bridge.healthy)loadMarketChart();},20000);state.liveTimer=setInterval(()=>{if(!document.hidden&&state.bridge.healthy&&state.view==='trading')liveGet().catch(()=>{});},20000);document.addEventListener('visibilitychange',()=>{scheduleStatusPoll();scheduleChatPoll();});}
+  function bindGuestShare(){
+    $('copyGuestChatLink')?.addEventListener('click',async()=>{
+      const url=guestUrl();
+      const out=$('guestShareResult');
+      try{await navigator.clipboard.writeText(url);if(out){out.textContent='Guest chat link copied.';out.className='pair-result ok';}}
+      catch(_){if(out){out.textContent=url;out.className='pair-result ok';}}
+    });
+  }
+  async function init(){if(isGuestPage){await initGuestChat();return;}loadPairing();const savedWalletMode=localStorage.getItem('myles_wallet_connection_mode');if(savedWalletMode&&$('walletConnectionMode'))$('walletConnectionMode').value=savedWalletMode;bind();bindGuestShare();renderAll();await discoverBridge();if(!state.bridge.url&&state.bridge.discovered)$('bridgeUrlInput').value=state.bridge.discovered;if(bridgeUrl()&&(state.bridge.token||state.bridge.recoveryCode))await testBridge(false);let recovered=false;if(!state.bridge.token&&!state.bridge.recoveryCode&&bridgeUrl())recovered=await recoverLocalPairing(false);if(!recovered&&!state.bridge.token&&!state.bridge.recoveryCode&&bridgeUrl())recovered=await recoverSavedPairing(false);if(!recovered&&!state.bridge.token&&!state.bridge.recoveryCode){showView('chat');openPairModal();$('pairResult').textContent='Tap reconnect to connect this computer or restore its saved credential.';}await fetchStatus();if(state.bridge.healthy){await pollMessages();await quantGet().catch(()=>{});await liveGet().catch(()=>{});}scheduleStatusPoll();scheduleChatPoll();state.chart.timer=setInterval(()=>{if(!document.hidden&&state.view==='trading'&&state.tradeTab==='tradeManual'&&state.bridge.healthy)loadMarketChart();},20000);state.liveTimer=setInterval(()=>{if(!document.hidden&&state.bridge.healthy&&state.view==='trading')liveGet().catch(()=>{});},20000);document.addEventListener('visibilitychange',()=>{scheduleStatusPoll();scheduleChatPoll();});}
 
   document.addEventListener('DOMContentLoaded',()=>{const box=$('chatMessages'),jump=$('chatJumpLatest');if(box)box.addEventListener('scroll',updateChatJump,{passive:true});if(jump)jump.addEventListener('click',jumpChatLatest);});
   document.addEventListener('DOMContentLoaded',init);
@@ -1762,10 +1781,10 @@ function renderResearchTournament(m){
   async function initGuestChat(){
     document.body.classList.add('guest-chat-mode');
     $('guestPairBox').classList.add('hidden');
-    $('guestStatus').textContent='Limited legacy chat';
-    document.querySelector('.guest-header p').textContent='General conversation only. Owner computer controls stay private.';
+    $('guestStatus').textContent='Chat only · no owner access';
+    document.querySelector('.guest-header p').textContent='Chat only. Owner controls, files, accounts, and trading stay private.';
     const ownerLink=document.createElement('a');
-    ownerLink.href=location.pathname||'/';ownerLink.textContent='Full-access dashboard';
+    ownerLink.href=location.pathname||'/';ownerLink.textContent='Owner dashboard';
     ownerLink.style.color='#9bb2ff';
     document.querySelector('.guest-header').appendChild(ownerLink);
     let conversation=[];
