@@ -841,13 +841,13 @@ html,body{max-width:100%;overflow-x:clip}
   <div id="pairModal" class="modal hidden" role="dialog" aria-modal="true">
     <div class="modal-backdrop" data-close-modal></div>
     <div class="modal-panel">
-      <div class="modal-head"><div><span class="eyebrow">PHONE CONNECTION</span><h2>Trusted phone connection</h2></div><button class="icon-btn" data-close-modal>×</button></div>
-      <p class="muted">This phone reconnects automatically using its saved secure credential. Tap reconnect only if the browser needs to wake the connection.</p>
+      <div class="modal-head"><div><span class="eyebrow">DEVICE CONNECTION</span><h2>Trusted device connection</h2></div><button class="icon-btn" data-close-modal>×</button></div>
+      <p class="muted">This device reconnects automatically using its saved secure credential. Tap reconnect only if the browser needs to wake the connection.</p>
       <label class="field pairing-advanced-field"><span>Bridge URL</span><input id="bridgeUrlInput" type="url" placeholder="https://…trycloudflare.com" /></label>
       <form id="ownerPairForm" autocomplete="on" method="post" action="" onsubmit="return false">
         <input type="text" name="username" autocomplete="username" value="Myles household owner" readonly tabindex="-1" aria-hidden="true" class="credential-username" />
         <label class="field pairing-advanced-field"><span>Saved phone credential</span><input id="bridgeTokenInput" name="password" type="password" maxlength="8" autocomplete="current-password" autocapitalize="characters" spellcheck="false" placeholder="Saved securely on this phone" /></label>
-        <button type="submit" id="ownerPairSubmit" class="primary-btn">Reconnect phone</button>
+        <button type="submit" id="ownerPairSubmit" class="primary-btn">Reconnect device</button>
       </form>
       <div id="pairResult" class="pair-result"></div>
     </div>
@@ -1131,6 +1131,79 @@ html,body{max-width:100%;overflow-x:clip}
       .topbar{width:100vw!important;max-width:100vw!important;margin:0!important;padding-left:16px!important;padding-right:16px!important}
       .main-area{padding-bottom:calc(104px + env(safe-area-inset-bottom))!important}
       html{scroll-padding-bottom:calc(104px + env(safe-area-inset-bottom))!important}
+    }
+
+    /* Keep the tower view visually identical to the phone view: light iOS glass,
+       translucent surfaces, rounded controls, and one shared blue accent. */
+    @media(min-width:781px){
+      :root{
+        color-scheme:light;
+        --bg:#eef2f8!important;--bg2:#f6f8fc!important;--panel:rgba(255,255,255,.64)!important;
+        --panel2:rgba(255,255,255,.56)!important;--line:rgba(255,255,255,.82)!important;
+        --line2:rgba(209,213,223,.9)!important;--text:#1c1c1e!important;--muted:#6e6e73!important;
+        --muted2:#8e8e93!important;--blue:#007aff!important;--cyan:#32ade6!important;
+        --green:#34c759!important;--amber:#ff9500!important;--red:#ff3b30!important;--violet:#5856d6!important;
+      }
+      html,body{background:#eef2f8!important;color:#1c1c1e!important}
+      body{background:
+        radial-gradient(90% 56% at -8% -10%,rgba(0,122,255,.16),transparent 58%),
+        radial-gradient(75% 54% at 108% 108%,rgba(175,82,222,.12),transparent 60%),
+        linear-gradient(145deg,#f8f9fc 0%,#f3f6fb 50%,#e8eef8 100%)!important;
+        background-attachment:fixed!important}
+      .ambient{display:none!important}
+      .app-shell{background:transparent!important}
+      .sidebar{background:rgba(255,255,255,.52)!important;border-right:1px solid rgba(255,255,255,.8)!important;box-shadow:12px 0 34px rgba(48,56,76,.07)!important;backdrop-filter:blur(28px) saturate(1.25)!important;-webkit-backdrop-filter:blur(28px) saturate(1.25)!important}
+      .brand-block strong{color:#1c1c1e!important}.brand-block span{color:#8e8e93!important}
+      .brand-mark{background:linear-gradient(145deg,#007aff,#5856d6)!important;box-shadow:0 10px 24px rgba(0,122,255,.22)!important}
+      .nav-btn{color:#6e6e73!important;border-radius:15px!important}
+      .nav-btn:hover{background:rgba(255,255,255,.6)!important;color:#1c1c1e!important}
+      .nav-btn.active{background:rgba(0,122,255,.10)!important;color:#007aff!important;border:1px solid rgba(0,122,255,.16)!important}
+      .nav-icon{color:#8e8e93!important}.nav-btn.active .nav-icon{color:#007aff!important}
+      .tower-status-row{background:rgba(255,255,255,.48)!important;border-color:rgba(255,255,255,.8)!important;box-shadow:0 8px 22px rgba(48,56,76,.06)!important}
+      .tower-status-row strong{color:#1c1c1e!important}.tower-status-row small{color:#6e6e73!important}
+      .main-area{padding:0 34px 60px!important}
+      .topbar{background:rgba(248,249,252,.68)!important;border-bottom:1px solid rgba(255,255,255,.76)!important;backdrop-filter:blur(26px) saturate(1.35)!important;-webkit-backdrop-filter:blur(26px) saturate(1.35)!important}
+      .top-title h1{color:#1c1c1e!important}.top-title span,.eyebrow{color:#8e8e93!important}
+      .source-pill{background:rgba(255,255,255,.62)!important;border-color:rgba(255,255,255,.86)!important;color:#6e6e73!important;box-shadow:0 6px 18px rgba(48,56,76,.06)!important}
+      .icon-btn{background:rgba(255,255,255,.68)!important;border-color:rgba(255,255,255,.88)!important;color:#1c1c1e!important;box-shadow:0 5px 16px rgba(48,56,76,.08)!important}
+      .panel,.metric-card,.task-card,.current-task-panel,.trade-panel,.research-note,.config-card,.service-card,.capability-card,
+      .bot-command-card,.market-chart-card,.trade-ticket,.bot-decision-panel,.activity-console,.chart-wrap,.candle-wrap,.simple-account,
+      .mini-card,.live-wallet-strip,.wallet-readiness,.advanced-drawer,.polymarket-card,.quant-banner,.strategy-card,.market-card,
+      .task-list-item,.completion-card,.overview-chat-preview,.trading-mode-box,.control-card,.task-meta-grid>div,.mini-metrics>div,
+      .task-facts>div,.strategy-stats div,.chat-panel,.chat-messages,.chat-composer,.chat-header,.chat-side{
+        background:rgba(255,255,255,.56)!important;color:#1c1c1e!important;border-color:rgba(255,255,255,.84)!important;
+        box-shadow:0 16px 38px rgba(48,56,76,.11),0 1px 0 rgba(255,255,255,.96) inset!important;
+        backdrop-filter:blur(26px) saturate(1.28)!important;-webkit-backdrop-filter:blur(26px) saturate(1.28)!important}
+      .panel,.current-task-panel,.chat-panel{border-radius:26px!important}
+      h1,h2,h3,h4,h5,strong,.panel-heading h3,.section-heading h2,.section-heading h3,.current-task-panel h2,.config-card h4,
+      .metric-card strong,.bot-command-title strong,.chart-price,.trade-ticket h3,.market-chart-card h3,.live-status-card strong,
+      .fact-list strong,.wallet-balance strong,.mini-card strong,.ticket-summary strong,.service-card strong,.market-card strong,
+      .strategy-card h4,.task-list-item strong,.completion-card strong,.task-facts strong,.task-meta-grid strong,.mini-metrics strong,
+      .activity-main strong{color:#1c1c1e!important}
+      p,small,.muted,.subtle,.helper,.metric-card span,.chart-context-line,.chart-overlay-note,.source-detail,.research-note span,
+      .task-card small,.service-card small,.wallet-readiness p,.live-note,.table-empty,.empty-row,.task-meta-grid small,.mini-metrics small,
+      .task-facts small,.strategy-stats small,.trading-mode-box small,.trading-mode-box span,.market-card small,.activity-main small,
+      .activity-time,.fact-list span,.step-list span,.funding-lock p,.chat-system,.msg-meta,.chart-empty{color:#6e6e73!important}
+      a,.text-action{color:#007aff!important}
+      input,select,textarea,.field input,.field select,.field textarea,.ticket-field input,.control-field input,.quant-control-field input,
+      .wallet-field input,.wallet-field select,.chat-composer textarea,#chatInput,#manualMargin,#manualStop,#manualTake{
+        background:rgba(242,242,247,.84)!important;color:#1c1c1e!important;border:1px solid #d1d1d6!important;box-shadow:none!important}
+      input::placeholder,textarea::placeholder{color:#8e8e93!important}
+      button,.primary-btn,.secondary-btn,.danger-btn,.wallet-action,.place-trade-btn,.auto-toggle-btn,.live-arm,.live-auto-btn,.nav-btn,
+      .trade-tab,.side-btn,.asset-btn,.tf-btn,.quick-amounts button,.chart-control-group button,.simple-chart-controls button,.icon-btn,.mini-btn,
+      .segmented button{border-color:#d1d1d6!important;box-shadow:0 3px 10px rgba(60,60,67,.08)!important}
+      .primary-btn,.place-trade-btn,.auto-toggle-btn,.live-arm.armed{background:#007aff!important;color:#fff!important;border-color:#007aff!important;box-shadow:0 8px 18px rgba(0,122,255,.22)!important}
+      .secondary-btn,.danger-btn,.wallet-action,.live-auto-btn,.trade-tab,.mini-btn,.segmented button{background:rgba(255,255,255,.72)!important;color:#1c1c1e!important}
+      .danger-btn,.danger-btn:hover{color:#ff3b30!important;border-color:#ff3b30!important}
+      .status-chip,.status-chip.paper,.status-chip.neutral,.status-chip.live,.status-chip.danger,.owner-lock-badge,.live-table-badge,.inline-status{
+        background:rgba(242,242,247,.82)!important;color:#6e6e73!important;border-color:#d1d1d6!important}
+      .status-chip.live,.status-chip.paper{color:#007aff!important}
+      .chat-panel,.chat-messages,.chat-composer,.chat-header,.chat-side{background:rgba(255,255,255,.46)!important}
+      .chat-header{border-bottom:1px solid rgba(255,255,255,.7)!important}.chat-composer{border-top:1px solid rgba(255,255,255,.7)!important}
+      .msg.owner .msg-bubble,.chat-bubble.user{background:#007aff!important;color:#fff!important;border-color:#007aff!important}
+      .msg.myles .msg-bubble,.chat-bubble.myles{background:rgba(242,242,247,.86)!important;color:#1c1c1e!important;border-color:#e5e5ea!important}
+      .modal-panel{background:rgba(255,255,255,.78)!important;color:#1c1c1e!important;border-color:#d1d1d6!important;backdrop-filter:blur(28px) saturate(1.25)!important;-webkit-backdrop-filter:blur(28px) saturate(1.25)!important;box-shadow:0 16px 44px rgba(0,0,0,.18)!important}
+      .modal-backdrop{background:rgba(30,41,59,.22)!important}
     }
   </style>
   <section id="guestShell" aria-label="Chat-only Myles guest access">
