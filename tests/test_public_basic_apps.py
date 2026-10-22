@@ -102,6 +102,26 @@ class PublicBasicApps(unittest.TestCase):
             self.assertTrue(w.close_xbox_verified().startswith("DESKTOP_APP_CLOSE_VERIFIED:"))
             post.assert_called_once_with(42, 0x0010, 0, 0)
 
+    def test_fortnite_uses_epic_and_verified_game_result(self):
+        for prompt in ("Launch Fortnite", "Open Fortnite", "Can you start Fortnite please?"):
+            with self.subTest(prompt=prompt), patch("myles_game_guard.game_is_active", return_value=False), patch("myles_windows.launch_fortnite_verified", return_value="FORTNITE_RUNNING: game window") as launch, patch("myles_windows.launch_app_verified") as generic, patch("myles_model_runtime.model_chat") as model:
+                _, out = guest_chat.public_send(prompt)
+                self.assertEqual(out["reply"], "Fortnite is running on the tower.")
+                launch.assert_called_once_with(timeout_seconds=40)
+                generic.assert_not_called()
+                model.assert_not_called()
+
+    def test_epic_launcher_alone_is_not_game_success(self):
+        with patch("myles_windows.launch_fortnite_verified", return_value="FORTNITE_NOT_VERIFIED: launcher only"):
+            reply = guest_chat.public_app_reply("Launch Fortnite")[1]["reply"]
+            self.assertIn("haven't verified", reply)
+            self.assertNotIn("Fortnite is running", reply)
+
+    def test_fortnite_arguments_never_reach_launcher(self):
+        with patch("myles_windows.launch_fortnite_verified") as launch:
+            guest_chat.public_app_reply("Launch Fortnite --extra-argument")
+            launch.assert_not_called()
+
     def test_game_mode_prevents_public_launch(self):
         with patch("myles_game_guard.game_is_active", return_value=True), \
              patch("myles_windows.launch_app_verified") as launch:

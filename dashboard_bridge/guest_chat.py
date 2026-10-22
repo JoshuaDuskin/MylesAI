@@ -33,7 +33,7 @@ PUBLIC_APPS = {
     "edge": "Microsoft Edge", "microsoft edge": "Microsoft Edge",
     "spotify": "Spotify",
     "powershell": "Windows PowerShell", "windows powershell": "Windows PowerShell",
-    "xbox": "Xbox",
+    "xbox": "Xbox", "fortnite": "Fortnite",
 }
 PUBLIC_LAUNCH_LOCK = threading.Lock()
 
@@ -49,13 +49,18 @@ def public_app_reply(prompt: str) -> tuple[int, dict] | None:
         return None
     app = PUBLIC_APPS.get(target.casefold())
     if not app:
-        reply = "Public chat can open Notepad, Calculator, Paint, Chrome, Edge, Spotify, PowerShell, or Xbox. Other computer actions require owner access."
+        reply = "Public chat can open Notepad, Calculator, Paint, Chrome, Edge, Spotify, PowerShell, Xbox, or Fortnite. Other computer actions require owner access."
     else:
-        from myles_windows import launch_app_verified, close_xbox_verified
+        from myles_windows import launch_app_verified, close_xbox_verified, launch_fortnite_verified
         if not PUBLIC_LAUNCH_LOCK.acquire(blocking=False):
             return 429, {"ok": False, "error": "An app action is in progress. Please try again shortly."}
         try:
-            result = close_xbox_verified(timeout_seconds=10) if closing else launch_app_verified(app, timeout_seconds=20)
+            if closing:
+                result = close_xbox_verified(timeout_seconds=10)
+            elif app == "Fortnite":
+                result = launch_fortnite_verified(timeout_seconds=40)
+            else:
+                result = launch_app_verified(app, timeout_seconds=20)
         except Exception:
             result = ""
         finally:
@@ -67,6 +72,13 @@ def public_app_reply(prompt: str) -> tuple[int, dict] | None:
                 reply = "Xbox has no open app window on the tower."
             else:
                 reply = "I couldn't verify that Xbox closed on the tower. Its window may still be open."
+        elif app == "Fortnite":
+            if result.startswith("FORTNITE_RUNNING:"):
+                reply = "Fortnite is running on the tower."
+            elif result.startswith("FORTNITE_NOT_VERIFIED:"):
+                reply = "I sent the Fortnite launch request to Epic, but haven't verified a game window yet. It may still be loading or need attention in the Epic launcher."
+            else:
+                reply = "I couldn't launch Fortnite on the tower. Epic Games Launcher may need to be installed or signed in."
         elif result.startswith("DESKTOP_APP_LAUNCH_VERIFIED:"):
             reply = f"{app} is open on the tower."
         else:
@@ -197,7 +209,7 @@ def public_send(text: str, history=None) -> tuple[int, dict]:
         "You have no tools, no access to the owner's files, account, desktop, tasks, "
         "messages, trading, memory or settings. Never claim access or disclose any "
         "owner information. The public page can open only Notepad, Calculator, Paint, Chrome, Edge, "
-        "Spotify, PowerShell, or Xbox when explicitly requested; the server performs and verifies these launches. "
+        "Spotify, PowerShell, Xbox, or Fortnite when explicitly requested; the server performs and verifies these launches. "
         "You can also close the Xbox app when explicitly requested; the server verifies its window closed. "
         "You cannot perform other computer actions or claim an app opened or closed without a verified server result."}]
     # The server is authoritative so every visitor sees the same conversation.
