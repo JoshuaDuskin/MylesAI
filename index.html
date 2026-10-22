@@ -1099,6 +1099,28 @@ html,body{max-width:100%;overflow-x:clip}
       .modal-panel{background:rgba(255,255,255,.78)!important;color:#1c1c1e!important;border-color:#d1d1d6!important;backdrop-filter:blur(28px) saturate(1.25)!important;-webkit-backdrop-filter:blur(28px) saturate(1.25)!important;box-shadow:0 16px 44px rgba(0,0,0,.18)!important}
       .modal-backdrop{background:rgba(0,0,0,.22)!important}
     }
+    @media(max-width:780px){
+      html,body{background:#eef1f8!important}
+      body{background:
+        radial-gradient(145% 58% at -8% -8%,rgba(0,122,255,.16),transparent 54%),
+        radial-gradient(120% 54% at 108% 108%,rgba(175,82,222,.14),transparent 56%),
+        linear-gradient(145deg,#f8f9fc 0%,#f3f6fb 48%,#e9eef8 100%)!important;
+        background-attachment:fixed!important}
+      .app-shell,.main-area,.view,.content-grid,.hero-layout,.chat-layout{background:transparent!important}
+      .topbar{background:rgba(248,249,252,.66)!important;border-bottom-color:rgba(255,255,255,.78)!important;backdrop-filter:blur(26px) saturate(1.35)!important;-webkit-backdrop-filter:blur(26px) saturate(1.35)!important}
+      .panel,.metric-card,.task-card,.current-task-panel,.trade-panel,.research-note,.config-card,.service-card,
+      .capability-card,.bot-command-card,.market-chart-card,.trade-ticket,.bot-decision-panel,.activity-console,
+      .chart-wrap,.candle-wrap,.simple-account,.mini-card,.live-wallet-strip,.wallet-readiness,.advanced-drawer,
+      .polymarket-card,.quant-banner,.strategy-card,.market-card,.task-list-item,.completion-card,.overview-chat-preview,
+      .trading-mode-box,.control-card,.task-meta-grid>div,.mini-metrics>div,.task-facts>div,.strategy-stats div,
+      .chat-panel,.chat-messages,.chat-composer,.chat-header,.chat-side{
+        background:rgba(255,255,255,.52)!important;border-color:rgba(255,255,255,.82)!important;
+        backdrop-filter:blur(26px) saturate(1.28)!important;-webkit-backdrop-filter:blur(26px) saturate(1.28)!important;
+        box-shadow:0 16px 38px rgba(48,56,76,.12),0 1px 0 rgba(255,255,255,.94) inset!important}
+      .panel,.current-task-panel,.chat-panel{border-radius:26px!important}
+      .task-meta-grid>div,.mini-metrics>div,.task-facts>div,.strategy-stats div{background:rgba(255,255,255,.60)!important;border-radius:18px!important}
+      .section-heading{background:transparent!important}
+    }
   </style>
   <section id="guestShell" aria-label="Chat-only Myles guest access">
     <header class="guest-header"><small>MYLES · GUEST CHAT</small><h1>Talk with Myles</h1><p>General conversation only. No owner tasks, files, trading, or computer controls.</p></header>
