@@ -31,6 +31,8 @@ PUBLIC_APPS = {
     "chrome": "Google Chrome", "google chrome": "Google Chrome",
     "edge": "Microsoft Edge", "microsoft edge": "Microsoft Edge",
     "spotify": "Spotify",
+    "powershell": "Windows PowerShell", "windows powershell": "Windows PowerShell",
+    "xbox": "Xbox",
 }
 PUBLIC_LAUNCH_LOCK = threading.Lock()
 
@@ -43,7 +45,7 @@ def public_app_reply(prompt: str) -> tuple[int, dict] | None:
         return None
     app = PUBLIC_APPS.get(target.casefold())
     if not app:
-        reply = "Public chat can open Notepad, Calculator, Paint, Chrome, Edge, or Spotify. Other computer actions require owner access."
+        reply = "Public chat can open Notepad, Calculator, Paint, Chrome, Edge, Spotify, PowerShell, or Xbox. Other computer actions require owner access."
     else:
         from myles_windows import launch_app_verified
         if not PUBLIC_LAUNCH_LOCK.acquire(blocking=False):
@@ -184,7 +186,7 @@ def public_send(text: str, history=None) -> tuple[int, dict]:
         "You have no tools, no access to the owner's files, account, desktop, tasks, "
         "messages, trading, memory or settings. Never claim access or disclose any "
         "owner information. The public page can open only Notepad, Calculator, Paint, Chrome, Edge, "
-        "or Spotify when explicitly requested; the server performs and verifies these launches. "
+        "Spotify, PowerShell, or Xbox when explicitly requested; the server performs and verifies these launches. "
         "You cannot perform other computer actions or claim an app opened without a verified server result."}]
     # The server is authoritative so every visitor sees the same conversation.
     for row in existing[-12:]:

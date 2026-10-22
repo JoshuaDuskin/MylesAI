@@ -880,6 +880,23 @@ html,body{max-width:100%;overflow-x:clip}
     #guestSubmit{border:0;border-radius:14px;padding:12px 18px;background:#6763ed;color:white;font-weight:650}
     #guestInviteCode{width:100%;padding:12px;background:#111a2e;border:1px solid #3e4a66;border-radius:12px;color:#fff;text-transform:uppercase}
     #guestStatus{color:#bdc8dd;min-height:22px}
+
+    /* Shared chat follows the dashboard appearance instead of a separate navy theme. */
+    body.guest-chat-mode #guestShell{background:#f2f3f7;color:#1c1c1e}
+    .guest-header{border-color:#d1d1d6}
+    .guest-header small,#guestStatus{color:#6e6e73}
+    .guest-box{background:#fff;border-color:#d1d1d6}
+    .guest-bubble{background:#f2f2f7;color:#1c1c1e;border-color:#e5e5ea}
+    .guest-bubble.mine{background:#e5e5ea;color:#1c1c1e;border-color:#d1d1d6}
+    #guestText,#guestInviteCode{background:#fff;color:#1c1c1e;border-color:#d1d1d6}
+    #guestSubmit{background:#343434;color:#fff}
+    body.theme-dark.guest-chat-mode{background:#000!important}
+    body.theme-dark.guest-chat-mode #guestShell{background:#000;color:#f5f5f7}
+    body.theme-dark .guest-box{background:#1c1c1e;border-color:#38383a}
+    body.theme-dark .guest-bubble{background:#2c2c2e;color:#f5f5f7;border-color:#38383a}
+    body.theme-dark .guest-bubble.mine{background:#3a3a3c;border-color:#545458}
+    body.theme-dark .guest-header{border-color:#38383a}
+    body.theme-dark .guest-header small,body.theme-dark #guestStatus{color:#a1a1a6}
     .ios-tabbar{display:none}
     .disabled-live-panel{display:none!important}
     @media(max-width:780px){

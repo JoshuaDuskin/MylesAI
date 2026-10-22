@@ -29,12 +29,21 @@ class PublicBasicApps(unittest.TestCase):
 
     def test_unapproved_apps_and_arguments_never_reach_launcher(self):
         with patch("myles_windows.launch_app_verified") as launch:
-            for text in ("Open PowerShell", "Open cmd", "Open Notepad & calc", "Open Chrome --remote-debugging-port=9222", "Open Notepad and delete my files", "Open https://example.com", "Open C:/private/file.txt"):
+            for text in ("Open PowerShell -Command calc", "Open cmd", "Open Notepad & calc", "Open Chrome --remote-debugging-port=9222", "Open Notepad and delete my files", "Open https://example.com", "Open C:/private/file.txt"):
                 with self.subTest(text=text):
                     result = guest_chat.public_app_reply(text)
                     if result is not None:
                         self.assertIn("Other computer actions require owner access", result[1]["reply"])
             launch.assert_not_called()
+
+    def test_requested_powershell_and_xbox_launches(self):
+        with patch("myles_windows.launch_app_verified", return_value="DESKTOP_APP_LAUNCH_VERIFIED: private title") as launch:
+            for prompt, app in (("Open PowerShell", "Windows PowerShell"), ("Open Xbox app", "Xbox")):
+                with self.subTest(prompt=prompt):
+                    status, out = guest_chat.public_app_reply(prompt)
+                    self.assertEqual(status, 200)
+                    self.assertEqual(out["reply"], f"{app} is open on the tower.")
+                    launch.assert_called_with(app, timeout_seconds=20)
 
     def test_unverified_launch_does_not_claim_success_or_disclose_error(self):
         with patch("myles_windows.launch_app_verified", return_value="DESKTOP_APP_LAUNCH_ERROR: C:/private/path"):
