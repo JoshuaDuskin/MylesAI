@@ -847,7 +847,7 @@ html,body{max-width:100%;overflow-x:clip}
       <form id="ownerPairForm" autocomplete="on" method="post" action="" onsubmit="return false">
         <input type="text" name="username" autocomplete="username" value="Myles household owner" readonly tabindex="-1" aria-hidden="true" class="credential-username" />
         <label class="field"><span>Owner phone sign-in</span><input id="bridgeTokenInput" name="password" type="password" maxlength="8" autocomplete="current-password" autocapitalize="characters" spellcheck="false" placeholder="8-character code or saved password" /></label>
-        <p class="muted">After pairing once, choose Save Password in your phone's password manager. When website data is cleared, use its saved-password autofill to reconnect—no tower lookup required. Clearing saved passwords will remove this recovery method.</p>
+        <p class="muted">After pairing once, Myles saves a recovery credential to this phone's password manager. If website data is cleared later, the dashboard silently restores access from that saved credential. Clearing saved passwords removes this recovery method.</p>
         <button type="submit" id="ownerPairSubmit" class="secondary-btn">Connect using saved password</button>
       </form>
       <div id="pairResult" class="pair-result"></div>
