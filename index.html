@@ -488,6 +488,7 @@ html,body{max-width:100%;overflow-x:clip}
         <div class="top-title"><span id="pageEyebrow">OWNER VIEW</span><h1 id="pageTitle">Overview</h1></div>
         <div class="top-actions">
           <div id="sourcePill" class="source-pill"><span class="pulse"></span><span id="sourceText">Connecting</span></div>
+          <button id="themeToggle" class="icon-btn" type="button" aria-label="Switch to dark mode" title="Switch appearance"><span id="themeToggleIcon" aria-hidden="true">◐</span></button>
           <button id="refreshBtn" class="icon-btn" aria-label="Refresh">↻</button>
         </div>
       </header>
@@ -1230,6 +1231,36 @@ html,body{max-width:100%;overflow-x:clip}
       .control-card{min-height:88px!important;padding:14px 16px!important;border-radius:22px!important}
       .control-card small{font-size:9px!important;letter-spacing:.08em!important}.control-card strong{font-size:13px!important;margin-top:6px!important}
     }
+
+    /* Keep every dashboard view scrollable above the floating controls. */
+    html,body{height:auto!important;min-height:100%!important;overflow-y:auto!important}
+    .app-shell{height:auto!important;min-height:100dvh!important}
+    .main-area{padding-bottom:calc(132px + env(safe-area-inset-bottom))!important}
+    .view.active{height:auto!important;min-height:0!important;overflow:visible!important}
+    body.chat-active{overflow-y:auto!important}
+    .view[data-view-panel="chat"].active{height:auto!important;min-height:calc(100dvh - 120px)!important;overflow:visible!important}
+    .chat-panel{height:auto!important;min-height:calc(100dvh - 150px)!important;overflow:visible!important}
+    .chat-messages{max-height:calc(100dvh - 270px)!important;overflow-y:auto!important}
+
+    /* Apple-style appearance toggle. */
+    body.theme-dark{background:linear-gradient(145deg,#0b0c10 0%,#15161b 55%,#202126 100%)!important;color:#f5f5f7!important;color-scheme:dark!important}
+    body.theme-dark .app-shell,body.theme-dark .main-area,body.theme-dark .view{background:transparent!important;color:#f5f5f7!important}
+    body.theme-dark .topbar{background:rgba(18,18,20,.78)!important;border-color:rgba(84,84,88,.45)!important}
+    body.theme-dark .top-title h1,body.theme-dark .top-title span,body.theme-dark .eyebrow,body.theme-dark h1,body.theme-dark h2,body.theme-dark h3,body.theme-dark h4,body.theme-dark strong{color:#f5f5f7!important}
+    body.theme-dark p,body.theme-dark small,body.theme-dark .muted,body.theme-dark .subtle,body.theme-dark .eyebrow,body.theme-dark .chat-system,body.theme-dark .msg-meta{color:#a1a1a6!important}
+    body.theme-dark .sidebar{background:rgba(28,28,30,.78)!important;border-color:rgba(84,84,88,.5)!important;color:#f5f5f7!important}
+    body.theme-dark .brand-block strong,body.theme-dark .nav-btn,body.theme-dark .tower-status-row strong{color:#f5f5f7!important}
+    body.theme-dark .brand-block span,body.theme-dark .tower-status-row small,body.theme-dark .nav-icon{color:#a1a1a6!important}
+    body.theme-dark .nav-btn:hover,body.theme-dark .nav-btn.active{background:rgba(10,132,255,.22)!important;color:#64b5ff!important;border-color:rgba(10,132,255,.35)!important}
+    body.theme-dark .panel,body.theme-dark .metric-card,body.theme-dark .task-card,body.theme-dark .current-task-panel,body.theme-dark .trade-panel,body.theme-dark .research-note,body.theme-dark .config-card,body.theme-dark .service-card,body.theme-dark .capability-card,body.theme-dark .bot-command-card,body.theme-dark .market-chart-card,body.theme-dark .trade-ticket,body.theme-dark .activity-console,body.theme-dark .chart-wrap,body.theme-dark .candle-wrap,body.theme-dark .simple-account,body.theme-dark .mini-card,body.theme-dark .live-wallet-strip,body.theme-dark .wallet-readiness,body.theme-dark .advanced-drawer,body.theme-dark .polymarket-card,body.theme-dark .quant-banner,body.theme-dark .strategy-card,body.theme-dark .market-card,body.theme-dark .task-list-item,body.theme-dark .completion-card,body.theme-dark .overview-chat-preview,body.theme-dark .trading-mode-box,body.theme-dark .control-card,body.theme-dark .task-meta-grid>div,body.theme-dark .mini-metrics>div,body.theme-dark .task-facts>div,body.theme-dark .strategy-stats div{background:rgba(28,28,30,.78)!important;color:#f5f5f7!important;border-color:rgba(84,84,88,.5)!important;box-shadow:0 12px 30px rgba(0,0,0,.24)!important}
+    body.theme-dark input,body.theme-dark select,body.theme-dark textarea,body.theme-dark .chat-composer textarea{background:#1c1c1e!important;color:#f5f5f7!important;border-color:#545458!important}
+    body.theme-dark button,body.theme-dark .secondary-btn,body.theme-dark .mini-btn,body.theme-dark .icon-btn,body.theme-dark .trade-tab,body.theme-dark .segmented button{background:rgba(44,44,46,.82)!important;color:#f5f5f7!important;border-color:#545458!important}
+    body.theme-dark .primary-btn,body.theme-dark .send-btn{background:linear-gradient(180deg,#0a84ff,#007aff)!important;color:#fff!important;border-color:#007aff!important}
+    body.theme-dark .chat-panel,body.theme-dark .chat-messages,body.theme-dark .chat-composer,body.theme-dark .chat-header,body.theme-dark .chat-side{background:rgba(28,28,30,.82)!important;border-color:rgba(84,84,88,.5)!important}
+    body.theme-dark .msg.myles .msg-bubble{background:#2c2c2e!important;color:#f5f5f7!important;border-color:#545458!important}
+    body.theme-dark .ios-tabbar{background:rgba(28,28,30,.88)!important;border-color:#545458!important}
+    body.theme-dark .ios-tabbar button{color:#a1a1a6!important}.theme-dark .ios-tabbar button.active{color:#0a84ff!important}
+    @media(max-width:780px){body.theme-dark .topbar{background:rgba(28,28,30,.74)!important}.main-area{padding-bottom:calc(132px + env(safe-area-inset-bottom))!important}.chat-panel{min-height:calc(100dvh - 150px)!important}.chat-messages{max-height:calc(100dvh - 270px)!important}}
   </style>
   <section id="guestShell" aria-label="Myles shared chat">
     <header class="guest-header"><small>MYLES · SHARED CHAT</small><h1>Talk with Myles</h1><p>One shared conversation. Everyone with this link sees the same messages.</p></header>
@@ -1696,6 +1727,7 @@ function renderResearchTournament(m){
   function botChartPayload(m){const mode=state.botChart?.mode||'research',range=state.botChart?.range||'6h';if(mode==='research'){const start=num(m.researchPaper?.starting_equity)||10000;const dedicated=firstArray(m.researchPaper,['equity_curve']);const fallback=dedicated.length?dedicated:firstArray(m.researchTournament,['equity_curve']);const raw=fallback.map(x=>({timestamp:first(x,['timestamp','time','ts'],null),value:(num(first(x,['equity','value'],null))??start)-start}));const rows=filterChartRange(raw,range);return{rows,title:'Paper research performance',context:rows.length>1?'Simulated research book · live GMX marks':'Waiting for fresh simulated research marks.',format:'money',label:'Paper research P&L',headline:num(m.researchPaper?.pnl)!==null?money(m.researchPaper.pnl):'—'};}if(mode==='main'){const rows=filterChartRange(m.series,range);const halted=bool(first(m.risk,['halted'],false));return{rows,title:'Paper trading performance',context:halted?'Paper bot HALTED · '+safe(first(m.risk,['halt_reason'],'risk limit')):'Validated-strategy paper account',format:'money',label:'Paper trading equity',headline:m.pnl!==null?money(m.pnl):'—'};}const rows=filterChartRange(familyHistorySeries(m,mode),range),fp=m.familyProgress?.[mode]||{};return{rows,title:familyName(mode)+' research',context:'Best stressed return across rolling candidate research passes',format:'percent',label:familyName(mode)+' best stress return',headline:num(fp.best_stress_return_pct)!==null?pctPoints(fp.best_stress_return_pct):'—'};}
 
 
+  function applyTheme(mode){const dark=mode==='dark';document.body.classList.toggle('theme-dark',dark);document.documentElement.style.colorScheme=dark?'dark':'light';localStorage.setItem('myles_theme',dark?'dark':'light');const button=$('themeToggle'),icon=$('themeToggleIcon');if(button)button.setAttribute('aria-label',dark?'Switch to light mode':'Switch to dark mode');if(icon)icon.textContent=dark?'☼':'◐';}
   function saveLiveRisk(){return Promise.resolve();}
   function renderAll(){renderSource();renderBridge();renderOverview();renderTrading();renderTasks();renderSystems();renderActivity();renderChatContext();ensureChartFundsControls('trade');ensureChartFundsControls('bot');refreshFundChart('trade');refreshFundChart('bot');}
 
@@ -1770,6 +1802,7 @@ function renderResearchTournament(m){
   async function init(){const params=new URLSearchParams(location.search);const hasOwnerTrust=!!(localStorage.getItem('myles_bridge_token')||localStorage.getItem('myles_bridge_pair_code'));if(params.get('owner')!=='1'||!hasOwnerTrust){await initPublicApp();return;}loadPairing();const savedWalletMode=localStorage.getItem('myles_wallet_connection_mode');if(savedWalletMode&&$('walletConnectionMode'))$('walletConnectionMode').value=savedWalletMode;bind();bindGuestShare();renderAll();await discoverBridge();if(!state.bridge.url&&state.bridge.discovered)$('bridgeUrlInput').value=state.bridge.discovered;if(bridgeUrl()&&(state.bridge.token||state.bridge.recoveryCode))await testBridge(false);let recovered=false;if(!state.bridge.token&&!state.bridge.recoveryCode&&bridgeUrl())recovered=await recoverLocalPairing(false);if(!recovered&&!state.bridge.token&&!state.bridge.recoveryCode&&bridgeUrl())recovered=await recoverSavedPairing(false);if(!recovered&&!state.bridge.token&&!state.bridge.recoveryCode){showView('chat');openPairModal();$('pairResult').textContent='Owner controls are available only in the explicit owner view.';}await fetchStatus();if(state.bridge.healthy){await pollMessages();await quantGet().catch(()=>{});await liveGet().catch(()=>{});}scheduleStatusPoll();scheduleChatPoll();state.chart.timer=setInterval(()=>{if(!document.hidden&&state.view==='trading'&&state.tradeTab==='tradeManual'&&state.bridge.healthy)loadMarketChart();},20000);state.liveTimer=setInterval(()=>{if(!document.hidden&&state.bridge.healthy&&state.view==='trading')liveGet().catch(()=>{});},20000);document.addEventListener('visibilitychange',()=>{scheduleStatusPoll();scheduleChatPoll();});}
 
   document.addEventListener('DOMContentLoaded',()=>{const box=$('chatMessages'),jump=$('chatJumpLatest');if(box)box.addEventListener('scroll',updateChatJump,{passive:true});if(jump)jump.addEventListener('click',jumpChatLatest);});
+  document.addEventListener('DOMContentLoaded',()=>{applyTheme(localStorage.getItem('myles_theme')||'light');$('themeToggle')?.addEventListener('click',()=>applyTheme(document.body.classList.contains('theme-dark')?'light':'dark'));});
   document.addEventListener('DOMContentLoaded',init);
 
   // The shared URL is the common conversation. Private controls require the explicit owner view.
