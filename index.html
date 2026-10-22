@@ -1260,7 +1260,16 @@ html,body{max-width:100%;overflow-x:clip}
     body.theme-dark .msg.myles .msg-bubble{background:#2c2c2e!important;color:#f5f5f7!important;border-color:#545458!important}
     body.theme-dark .ios-tabbar{background:rgba(28,28,30,.88)!important;border-color:#545458!important}
     body.theme-dark .ios-tabbar button{color:#a1a1a6!important}.theme-dark .ios-tabbar button.active{color:#0a84ff!important}
-    @media(max-width:780px){body.theme-dark .topbar{background:rgba(28,28,30,.74)!important}.main-area{padding-bottom:calc(132px + env(safe-area-inset-bottom))!important}.chat-panel{min-height:calc(100dvh - 150px)!important}.chat-messages{max-height:calc(100dvh - 270px)!important}}
+    @media(max-width:780px){
+      .topbar{display:flex!important;align-items:center!important}
+      .top-title{position:static!important;transform:none!important;flex:1 1 auto!important;min-width:0!important;text-align:center!important;overflow:hidden!important}
+      .top-title h1{max-width:100%!important;overflow:hidden!important;text-overflow:ellipsis!important;white-space:nowrap!important}
+      .top-actions{display:flex!important;flex:0 0 auto!important;align-items:center!important}
+      body.theme-dark .topbar{background:rgba(28,28,30,.74)!important}
+      .main-area{padding-bottom:calc(132px + env(safe-area-inset-bottom))!important}
+      .chat-panel{min-height:calc(100dvh - 150px)!important}
+      .chat-messages{max-height:calc(100dvh - 270px)!important}
+    }
   </style>
   <section id="guestShell" aria-label="Myles shared chat">
     <header class="guest-header"><small>MYLES · SHARED CHAT</small><h1>Talk with Myles</h1><p>One shared conversation. Everyone with this link sees the same messages.</p></header>
