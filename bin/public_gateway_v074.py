@@ -223,6 +223,23 @@ def compact_status():
         recent = trading.get("recent_trades")
         if isinstance(recent, list):
             compact["recent_trades"] = recent[-20:]
+        # Research is rendered on the same phone dashboard as the paper account.
+        # Keep its telemetry while bounding histories so missing fields cannot
+        # masquerade as a stopped bot or a zero-P&L research book.
+        for key in ("research_lab", "research_paper", "research_tournament",
+                    "research_pipeline", "market_intel", "family_progress", "validation"):
+            section = trading.get(key)
+            if isinstance(section, dict):
+                section = dict(section)
+                for field, limit in (("equity_curve", 180), ("recent_trades", 20),
+                                     ("books", 60), ("forward_test_details", 60),
+                                     ("top_hypotheses", 12), ("evaluation_errors", 12)):
+                    if isinstance(section.get(field), list):
+                        section[field] = section[field][-limit:]
+                compact[key] = section
+        for key in ("strategies", "backtests", "activity_feed"):
+            if isinstance(trading.get(key), list):
+                compact[key] = trading[key][-60:]
         payload["trading"] = scrub(compact)
     else:
         payload.pop("trading", None)
