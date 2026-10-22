@@ -853,7 +853,7 @@ html,body{max-width:100%;overflow-x:clip}
       <div class="guest-share-card">
         <strong>Share chat-only access</strong>
         <span>Give someone this link to talk with Myles without owner pairing or access to your computer, files, accounts, or trading.</span>
-        <div class="guest-share-actions"><button type="button" id="openGuestChat" class="primary-btn">Open guest chat</button><button type="button" id="copyGuestChatLink" class="secondary-btn">Copy guest chat link</button></div>
+        <div class="guest-share-actions"><button type="button" id="openGuestChat" class="primary-btn">Open shared chat</button><button type="button" id="copyGuestChatLink" class="secondary-btn">Copy shared chat link</button></div>
         <div id="guestShareResult" class="pair-result"></div>
       </div>
     </div>
@@ -1231,11 +1231,11 @@ html,body{max-width:100%;overflow-x:clip}
       .control-card small{font-size:9px!important;letter-spacing:.08em!important}.control-card strong{font-size:13px!important;margin-top:6px!important}
     }
   </style>
-  <section id="guestShell" aria-label="Chat-only Myles guest access">
-    <header class="guest-header"><small>MYLES · GUEST CHAT</small><h1>Talk with Myles</h1><p>General conversation only. No owner tasks, files, trading, or computer controls.</p></header>
+  <section id="guestShell" aria-label="Myles shared chat">
+    <header class="guest-header"><small>MYLES · SHARED CHAT</small><h1>Talk with Myles</h1><p>One shared conversation. Everyone with this link sees the same messages.</p></header>
     <div id="guestPairBox" class="guest-box hidden"><label for="guestInviteCode">Legacy 8-character invitation</label><input id="guestInviteCode" autocomplete="off" autocapitalize="characters" maxlength="8" placeholder="Enter invitation code" /><button id="guestPairBtn" class="primary-btn" style="margin-top:12px" type="button">Connect chat</button></div>
     <div id="guestConversation" class="guest-box" role="log" aria-live="polite"></div>
-    <form id="guestForm"><textarea id="guestText" maxlength="2500" placeholder="Ask Myles anything…" aria-label="Guest message"></textarea><button id="guestSubmit" type="submit">Send</button></form>
+    <form id="guestForm"><textarea id="guestText" maxlength="2500" placeholder="Ask Myles anything…" aria-label="Message Myles"></textarea><button id="guestSubmit" type="submit">Send</button></form>
     <div id="guestStatus" role="status"></div>
   </section>
 
@@ -1783,10 +1783,10 @@ function renderResearchTournament(m){
   async function initGuestChat(){
     document.body.classList.add('guest-chat-mode');
     $('guestPairBox').classList.add('hidden');
-    $('guestStatus').textContent='Shared chat · no owner access';
+    $('guestStatus').textContent='Shared chat · owner controls stay private';
     document.querySelector('.guest-header p').textContent='One shared conversation. Everyone with this link sees the same messages.';
     const ownerLink=document.createElement('a');
-    ownerLink.href=(location.pathname||'/')+'?owner=1';ownerLink.textContent='Owner dashboard';
+    ownerLink.href=(location.pathname||'/')+'?owner=1';ownerLink.textContent='Owner controls';
     ownerLink.style.color='#9bb2ff';
     document.querySelector('.guest-header').appendChild(ownerLink);
     let conversation=[];
