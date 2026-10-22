@@ -41,31 +41,39 @@ PUBLIC_LAUNCH_LOCK = threading.Lock()
 def public_app_reply(prompt: str) -> tuple[int, dict] | None:
     """Only exact approved app names reach the launcher; never pass user arguments."""
     from myles_runtime_v9 import app_launch_target
-    closing = bool(re.fullmatch(
-        r"(?i)(?:(?:can|could|would) you\s+)?(?:please\s+)?(?:close|exit|quit)\s+(?:the\s+)?xbox(?:\s+app(?:lication)?)?(?:\s+(?:please|for me|on the tower))?[.!?]*",
-        prompt.strip()))
-    target = "xbox" if closing else app_launch_target(prompt.rstrip(".!?"))
+    close_match = re.fullmatch(
+        r"(?i)(?:(?:can|could|would) you\s+)?(?:please\s+)?(?:close|exit|quit)\s+(?:the\s+)?(xbox|fortnite)(?:\s+app(?:lication)?)?(?:\s+(?:please|for me|on the tower))?[.!?]*",
+        prompt.strip())
+    closing = bool(close_match)
+    target = close_match.group(1).casefold() if closing else app_launch_target(prompt.rstrip(".!?"))
     if not target:
         return None
     app = PUBLIC_APPS.get(target.casefold())
     if not app:
         reply = "Public chat can open Notepad, Calculator, Paint, Chrome, Edge, Spotify, PowerShell, Xbox, or Fortnite. Other computer actions require owner access."
     else:
-        from myles_windows import launch_app_verified, close_xbox_verified, launch_fortnite_verified
+        from myles_windows import launch_app_verified, close_xbox_verified, launch_fortnite_verified, close_fortnite_verified
         if not PUBLIC_LAUNCH_LOCK.acquire(blocking=False):
             return 429, {"ok": False, "error": "An app action is in progress. Please try again shortly."}
         try:
             if closing:
-                result = close_xbox_verified(timeout_seconds=10)
+                result = close_fortnite_verified(timeout_seconds=12) if app == "Fortnite" else close_xbox_verified(timeout_seconds=10)
             elif app == "Fortnite":
-                result = launch_fortnite_verified(timeout_seconds=40)
+                result = launch_fortnite_verified(timeout_seconds=70)
             else:
                 result = launch_app_verified(app, timeout_seconds=20)
         except Exception:
             result = ""
         finally:
             PUBLIC_LAUNCH_LOCK.release()
-        if closing:
+        if closing and app == "Fortnite":
+            if result.startswith("FORTNITE_CLOSED_VERIFIED:"):
+                reply = "Fortnite is closed on the tower."
+            elif result.startswith("FORTNITE_NOT_RUNNING:"):
+                reply = "Fortnite is not running on the tower."
+            else:
+                reply = "I couldn't verify that Fortnite closed on the tower. The game may still be running."
+        elif closing:
             if result.startswith("DESKTOP_APP_CLOSE_VERIFIED:"):
                 reply = "Xbox is closed on the tower."
             elif result.startswith("DESKTOP_APP_CLOSE_ALREADY_CLOSED:"):
@@ -196,6 +204,12 @@ def public_send(text: str, history=None) -> tuple[int, dict]:
                     or not isinstance(row.get("content"), str)
                     or len(row["content"]) > MAX_TEXT):
                 return 400, {"ok":False,"error":"Invalid context"}
+    # These fixed game controls must remain reachable while inference is paused.
+    from myles_runtime_v9 import app_launch_target
+    game_close = re.fullmatch(
+        r"(?i)(?:(?:can|could|would) you\s+)?(?:please\s+)?(?:close|exit|quit)\s+(?:the\s+)?fortnite(?:\s+app(?:lication)?)?(?:\s+(?:please|for me|on the tower))?[.!?]*", prompt)
+    if game_close or app_launch_target(prompt.rstrip(".!?")).casefold() == "fortnite":
+        return public_app_reply(prompt)
     from myles_game_guard import game_is_active
     if game_is_active():
         return 503, {"ok":False,"error":"Chat is paused during gaming"}
@@ -210,7 +224,7 @@ def public_send(text: str, history=None) -> tuple[int, dict]:
         "messages, trading, memory or settings. Never claim access or disclose any "
         "owner information. The public page can open only Notepad, Calculator, Paint, Chrome, Edge, "
         "Spotify, PowerShell, Xbox, or Fortnite when explicitly requested; the server performs and verifies these launches. "
-        "You can also close the Xbox app when explicitly requested; the server verifies its window closed. "
+        "You can also close Xbox or Fortnite when explicitly requested; the server verifies its window closed. "
         "You cannot perform other computer actions or claim an app opened or closed without a verified server result."}]
     # The server is authoritative so every visitor sees the same conversation.
     for row in existing[-12:]:

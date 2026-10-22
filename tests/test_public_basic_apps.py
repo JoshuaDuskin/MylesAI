@@ -107,7 +107,7 @@ class PublicBasicApps(unittest.TestCase):
             with self.subTest(prompt=prompt), patch("myles_game_guard.game_is_active", return_value=False), patch("myles_windows.launch_fortnite_verified", return_value="FORTNITE_RUNNING: game window") as launch, patch("myles_windows.launch_app_verified") as generic, patch("myles_model_runtime.model_chat") as model:
                 _, out = guest_chat.public_send(prompt)
                 self.assertEqual(out["reply"], "Fortnite is running on the tower.")
-                launch.assert_called_once_with(timeout_seconds=40)
+                launch.assert_called_once_with(timeout_seconds=70)
                 generic.assert_not_called()
                 model.assert_not_called()
 
@@ -124,9 +124,26 @@ class PublicBasicApps(unittest.TestCase):
 
     def test_fortnite_launches_installed_windows_edition(self):
         import myles_windows as w
-        with patch.object(w.os, "name", "nt"), patch.object(w, "_fortnite_visible", side_effect=[None, {"ProcessName": "FortniteClient-Win64-Shipping.exe"}]), patch.object(w, "_best_start_app", return_value={"name": "Fortnite", "app_id": "InstalledFortnite!Game"}), patch.object(w, "_shell_open", return_value=(True, "sent")) as shell, patch.object(w, "epic_launcher_executable", return_value=None):
+        with patch.object(w.os, "name", "nt"), patch.object(w, "_fortnite_visible", side_effect=[None, {"ProcessName": "FortniteClient-Win64-Shipping.exe"}]), patch.object(w, "_best_start_app", return_value={"name": "Fortnite", "app_id": "InstalledFortnite!Game"}), patch.object(w, "_shell_open", return_value=(True, "sent")) as shell, patch.object(w, "epic_launcher_executable", return_value=None), patch.object(w, "_activate_window", return_value=True):
             self.assertTrue(w.launch_fortnite_verified().startswith("FORTNITE_RUNNING:"))
             shell.assert_called_once_with("shell:AppsFolder\\InstalledFortnite!Game")
+
+    def test_fortnite_controls_work_during_game_mode_without_model(self):
+        with patch("myles_game_guard.game_is_active", return_value=True), patch("myles_windows.close_fortnite_verified", return_value="FORTNITE_CLOSED_VERIFIED: exited") as close, patch("myles_windows.launch_fortnite_verified", return_value="FORTNITE_RUNNING: foreground") as launch, patch("myles_model_runtime.model_chat") as model:
+            self.assertEqual(guest_chat.public_send("Close Fortnite")[1]["reply"], "Fortnite is closed on the tower.")
+            self.assertEqual(guest_chat.public_send("Launch Fortnite")[1]["reply"], "Fortnite is running on the tower.")
+            close.assert_called_once_with(timeout_seconds=12)
+            launch.assert_called_once_with(timeout_seconds=70)
+            model.assert_not_called()
+
+    def test_fortnite_close_failure_never_claims_success(self):
+        with patch("myles_windows.close_fortnite_verified", return_value="FORTNITE_CLOSE_NOT_VERIFIED: still running"):
+            self.assertIn("couldn't verify", guest_chat.public_send("Close Fortnite")[1]["reply"])
+
+    def test_fortnite_close_arguments_do_not_bypass_game_mode(self):
+        with patch("myles_game_guard.game_is_active", return_value=True), patch("myles_windows.close_fortnite_verified") as close:
+            self.assertEqual(guest_chat.public_send("Close Fortnite and Xbox")[0], 503)
+            close.assert_not_called()
 
     def test_game_mode_prevents_public_launch(self):
         with patch("myles_game_guard.game_is_active", return_value=True), \

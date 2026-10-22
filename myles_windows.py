@@ -497,11 +497,11 @@ def close_fortnite_verified(timeout_seconds: int = 12) -> str:
     return "FORTNITE_CLOSE_NOT_VERIFIED: Fortnite is still running or Windows denied closing its verified game process."
 
 def launch_fortnite_verified(timeout_seconds: int = 40) -> str:
-    """Request Fortnite through Epic, but succeed only on a visible game client."""
+    """Launch the installed Fortnite edition and verify its foreground game window."""
     if os.name != "nt":
         return "FORTNITE_LAUNCH_UNAVAILABLE: Windows launch is only supported on the tower."
     current = _fortnite_visible()
-    if current:
+    if current and _activate_window(current):
         return f"FORTNITE_RUNNING: Visible Fortnite game window verified; process={current.get('ProcessName')}."
     uri = "com.epicgames.launcher://apps/Fortnite?action=launch&silent=true"
     installed = _best_start_app("Fortnite")
@@ -514,11 +514,11 @@ def launch_fortnite_verified(timeout_seconds: int = 40) -> str:
         requested, evidence = _shell_open(str(launcher), uri)
     if not requested:
         return f"FORTNITE_LAUNCH_ERROR: Windows could not open the Epic Fortnite handler ({evidence})."
-    deadline = time.time() + max(12, min(int(timeout_seconds), 55))
+    deadline = time.time() + max(12, min(int(timeout_seconds), 75))
     resent = False
     while time.time() < deadline:
         current = _fortnite_visible()
-        if current:
+        if current and _activate_window(current):
             return f"FORTNITE_RUNNING: Visible Fortnite game window verified; process={current.get('ProcessName')}."
         if not resent and process_running("epicgameslauncher.exe"):
             time.sleep(2)
