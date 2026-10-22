@@ -1797,6 +1797,7 @@ function renderResearchTournament(m){
     bind();
     renderAll();
     try{
+      await discoverBridge();
       await loadGuestEndpoint();
       state.publicEndpoint=guest.endpoint;
       await pollMessages();
