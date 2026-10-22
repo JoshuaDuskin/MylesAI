@@ -355,10 +355,13 @@ class Handler(BaseHTTPRequestHandler):
         return self.send_json(status,raw,response_headers.get("Content-Type","application/json"))
 
     def proxy_public_chat(self):
-        """Anonymous chat-only route; never forwards owner credentials."""
+        """Anonymous shared chat route; never forwards owner credentials."""
         path = self.path.split("?", 1)[0]
-        if path != "/dashboard/public-chat/messages" or self.command != "POST":
+        if path != "/dashboard/public-chat/messages" or self.command not in {"GET", "POST"}:
             return self.send_json(405, {"ok": False, "error": "Public chat method not allowed"})
+        if self.command == "GET":
+            status, response_headers, raw = request_local(path, "GET", None, {"Accept": "application/json"}, 20)
+            return self.send_json(status, raw, response_headers.get("Content-Type", "application/json"))
         try:
             size = int(self.headers.get("Content-Length", "0"))
         except ValueError:
@@ -390,6 +393,8 @@ class Handler(BaseHTTPRequestHandler):
         self.send_json(status, raw, response_headers.get("Content-Type", "application/json"))
 
     def do_GET(self):
+        if self.path.split("?",1)[0] == "/dashboard/public-chat/messages":
+            return self.proxy_public_chat()
         if self.path.split("?",1)[0] == "/dashboard/guest/messages":
             return self.proxy_guest()
         if self.path.startswith("/dashboard/health") or self.path.startswith("/dashboard/status") or self.path.startswith("/api/public-status"):

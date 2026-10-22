@@ -55,6 +55,10 @@ def guest_chat_module():
     global _GUEST_CHAT_MODULE
     if _GUEST_CHAT_MODULE is not None:
         return _GUEST_CHAT_MODULE
+    package_module = sys.modules.get("dashboard_bridge.guest_chat")
+    if package_module is not None:
+        _GUEST_CHAT_MODULE = package_module
+        return package_module
     path = Path(__file__).with_name("guest_chat.py")
     spec = importlib.util.spec_from_file_location("myles_guest_chat", path)
     if spec is None or spec.loader is None:
@@ -1029,15 +1033,18 @@ class Handler(BaseHTTPRequestHandler):
     def do_GET(self) -> None:  # noqa: N802
         path = urlparse(self.path).path
         if path == "/dashboard/public-chat/messages":
-            # Public chat is deliberately anonymous and text-only. It never
-            # enters the owner conversation, job queue, desktop, wallet, or
-            # trading routes.
+            # Public chat is anonymous and shared, but remains text-only. It
+            # never enters the owner conversation, job queue, desktop, wallet,
+            # or trading routes.
             origin = self.headers.get("Origin", "")
             if (origin and origin != "null" and origin not in ALLOWED_ORIGINS
                     and not origin.startswith("http://127.0.0.1:")
                     and not origin.startswith("http://localhost:")):
                 return self.deny(403, "Origin not allowed")
-            return self.deny(405, "Public chat requires POST")
+            if not guest_request_rate(self, False):
+                return self.deny(429, "Public chat rate limit")
+            guest_chat = guest_chat_module()
+            return self.json_response(200, guest_chat.public_messages())
         if path == "/dashboard/guest/messages":
             origin = self.headers.get("Origin","")
             if (origin and origin not in ALLOWED_ORIGINS

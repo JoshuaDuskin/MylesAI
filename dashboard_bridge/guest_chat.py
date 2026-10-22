@@ -20,6 +20,7 @@ ROOT = Path(os.environ.get("LOCALAPPDATA") or (Path.home() / "AppData" / "Local"
 DATA = ROOT / "data"
 AUTH = DATA / "guest_chat_auth.json"
 HISTORY = DATA / "guest_chat_history.json"
+PUBLIC_HISTORY = DATA / "public_chat_history.json"
 LOCK = threading.RLock()
 ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
 MAX_TEXT = 2500
@@ -106,22 +107,41 @@ def messages() -> dict:
                 "messages": rows[-MAX_HISTORY:]}
 
 
+def public_messages() -> dict:
+    """Return the one shared conversation shown to every public visitor."""
+    with LOCK:
+        rows = read(PUBLIC_HISTORY).get("messages") or []
+        if not isinstance(rows, list):
+            rows = []
+        return {"ok": True, "role": "public_shared_chat",
+                "messages": rows[-MAX_HISTORY:]}
+
+
 def public_send(text: str, history=None) -> tuple[int, dict]:
-    """Anonymous stateless text only, no private state or owner-side effects."""
+    """Append to one shared public conversation, without owner-side effects."""
     prompt = str(text or "").strip()
     if not prompt or len(prompt)>MAX_TEXT:
         return 400, {"ok":False,"error":"Message must be 1–2500 characters"}
     if history is not None and not isinstance(history,list):
         return 400, {"ok":False,"error":"Invalid context"}
+    if history is not None:
+        for row in history[-12:]:
+            if (not isinstance(row, dict) or row.get("role") not in {"user", "assistant"}
+                    or not isinstance(row.get("content"), str)
+                    or len(row["content"]) > MAX_TEXT):
+                return 400, {"ok":False,"error":"Invalid context"}
     from myles_game_guard import game_is_active
     if game_is_active():
         return 503, {"ok":False,"error":"Chat is paused during gaming"}
+    with LOCK:
+        existing = public_messages()["messages"]
     context=[{"role":"system","content":
         "You are Myles, a general text conversation assistant for a public visitor. "
         "You have no tools, no access to the owner's files, account, desktop, tasks, "
         "messages, trading, memory or settings. Never claim access or disclose any "
         "owner information. You cannot perform computer actions."}]
-    for row in (history or [])[-12:]:
+    # The server is authoritative so every visitor sees the same conversation.
+    for row in existing[-12:]:
         if not isinstance(row,dict) or row.get("role") not in {"user","assistant"} or not isinstance(row.get("content"),str) or len(row["content"])>MAX_TEXT:
             return 400, {"ok":False,"error":"Invalid context"}
         context.append({"role":row["role"],"content":row["content"]})
@@ -134,7 +154,20 @@ def public_send(text: str, history=None) -> tuple[int, dict]:
         text=str((answer.get("message") or {}).get("content") or "").strip()
         if not text or unfinished_model_reply(answer,text):
             return 503, {"ok":False,"error":"Local model response was incomplete"}
-        return 200, {"ok":True,"role":"public_chat_only","reply":text[:MAX_TEXT]}
+        stamp = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+        updated = (existing + [
+            {"role": "user", "content": prompt, "at": stamp},
+            {"role": "assistant", "content": text[:MAX_TEXT], "at": stamp},
+        ])[-MAX_HISTORY:]
+        try:
+            with LOCK:
+                save(PUBLIC_HISTORY, {"messages": updated})
+        except OSError:
+            # A read-only test/runtime directory should not turn a valid
+            # chat response into a dropped connection; normal tower data
+            # directories remain durable.
+            pass
+        return 200, {"ok":True,"role":"public_chat_only","reply":text[:MAX_TEXT],"messages":updated}
     except Exception:
         return 503, {"ok":False,"error":"Local model unavailable"}
 

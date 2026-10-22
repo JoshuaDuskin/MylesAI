@@ -1741,6 +1741,7 @@ function renderResearchTournament(m){
       catch(_){if(out){out.textContent=url;out.className='pair-result ok';}}
     });
   }
+  // A visitor without owner trust stays in the shared chat unless owner mode is explicit: params.get('owner') !== '1'.
   async function init(){if(isGuestPage){await initGuestChat();return;}const params=new URLSearchParams(location.search);const hasOwnerTrust=!!(localStorage.getItem('myles_bridge_token')||localStorage.getItem('myles_bridge_pair_code')||localStorage.getItem('myles_bridge_url'));if(location.protocol==='https:'&&params.get('owner')!=='1'&&!hasOwnerTrust){location.replace(guestUrl());return;}loadPairing();const savedWalletMode=localStorage.getItem('myles_wallet_connection_mode');if(savedWalletMode&&$('walletConnectionMode'))$('walletConnectionMode').value=savedWalletMode;bind();bindGuestShare();renderAll();await discoverBridge();if(!state.bridge.url&&state.bridge.discovered)$('bridgeUrlInput').value=state.bridge.discovered;if(bridgeUrl()&&(state.bridge.token||state.bridge.recoveryCode))await testBridge(false);let recovered=false;if(!state.bridge.token&&!state.bridge.recoveryCode&&bridgeUrl())recovered=await recoverLocalPairing(false);if(!recovered&&!state.bridge.token&&!state.bridge.recoveryCode&&bridgeUrl())recovered=await recoverSavedPairing(false);if(!recovered&&!state.bridge.token&&!state.bridge.recoveryCode){showView('chat');openPairModal();$('pairResult').textContent='Owner access is optional. Use Open guest chat for chat-only access.';}await fetchStatus();if(state.bridge.healthy){await pollMessages();await quantGet().catch(()=>{});await liveGet().catch(()=>{});}scheduleStatusPoll();scheduleChatPoll();state.chart.timer=setInterval(()=>{if(!document.hidden&&state.view==='trading'&&state.tradeTab==='tradeManual'&&state.bridge.healthy)loadMarketChart();},20000);state.liveTimer=setInterval(()=>{if(!document.hidden&&state.bridge.healthy&&state.view==='trading')liveGet().catch(()=>{});},20000);document.addEventListener('visibilitychange',()=>{scheduleStatusPoll();scheduleChatPoll();});}
 
   document.addEventListener('DOMContentLoaded',()=>{const box=$('chatMessages'),jump=$('chatJumpLatest');if(box)box.addEventListener('scroll',updateChatJump,{passive:true});if(jump)jump.addEventListener('click',jumpChatLatest);});
@@ -1763,7 +1764,7 @@ function renderResearchTournament(m){
   }
   function renderGuestMessages(rows){
     const box=$('guestConversation');box.replaceChildren();
-    if(!rows.length){box.textContent='Start a conversation with Myles.';return;}
+    if(!rows.length){box.textContent='No shared messages yet. Start a conversation with Myles.';return;}
     rows.forEach(row=>{
       if(!['user','assistant'].includes(row.role))return;
       const el=document.createElement('div');
@@ -1782,23 +1783,24 @@ function renderResearchTournament(m){
   async function initGuestChat(){
     document.body.classList.add('guest-chat-mode');
     $('guestPairBox').classList.add('hidden');
-    $('guestStatus').textContent='Chat only · no owner access';
-    document.querySelector('.guest-header p').textContent='Chat only. Owner controls, files, accounts, and trading stay private.';
+    $('guestStatus').textContent='Shared chat · no owner access';
+    document.querySelector('.guest-header p').textContent='One shared conversation. Everyone with this link sees the same messages.';
     const ownerLink=document.createElement('a');
     ownerLink.href=(location.pathname||'/')+'?owner=1';ownerLink.textContent='Owner dashboard';
     ownerLink.style.color='#9bb2ff';
     document.querySelector('.guest-header').appendChild(ownerLink);
     let conversation=[];
-    try{const saved=JSON.parse(sessionStorage.getItem('myles_public_chat_history')||'[]');
-      if(Array.isArray(saved))conversation=saved.slice(-12).filter(x=>x&&['user','assistant'].includes(x.role)&&typeof x.content==='string');
-    }catch(_){}
+    try{
+      await loadGuestEndpoint();
+      const shared=await fetchJson(guest.endpoint+'/dashboard/public-chat/messages',{headers:{Accept:'application/json'}},12000);
+      conversation=Array.isArray(shared.messages)?shared.messages.slice(-60).filter(x=>x&&['user','assistant'].includes(x.role)&&typeof x.content==='string'):[];
+    }catch(e){$('guestStatus').textContent='Shared chat unavailable: '+String(e.message||e);}
     renderGuestMessages(conversation);
     $('guestForm').addEventListener('submit',async event=>{
       event.preventDefault();
       const message=String($('guestText').value||'').trim();
       if(guest.busy||!message)return;
       guest.busy=true;$('guestSubmit').disabled=true;
-      const previous=conversation.slice(-12);
       conversation.push({role:'user',content:message});
       renderGuestMessages(conversation);
       $('guestStatus').textContent='Myles is responding…';
@@ -1806,18 +1808,16 @@ function renderResearchTournament(m){
         if(!guest.endpoint)await loadGuestEndpoint();
         const out=await fetchJson(guest.endpoint+'/dashboard/public-chat/messages',{
           method:'POST',headers:{'Content-Type':'application/json'},
-          body:JSON.stringify({message,history:previous})},90000);
+          body:JSON.stringify({message})},90000);
         if(!out.ok||!out.reply)throw new Error('No response from Myles');
-        conversation.push({role:'assistant',content:out.reply});
-        conversation=conversation.slice(-12);
+        conversation=Array.isArray(out.messages)?out.messages.slice(-60):[...conversation,{role:'assistant',content:out.reply}].slice(-60);
         sessionStorage.setItem('myles_public_chat_history',JSON.stringify(conversation));
         $('guestText').value='';
-        $('guestStatus').textContent='Public chat · Chat only';
+        $('guestStatus').textContent='Shared chat · everyone sees this conversation';
       }catch(e){conversation.pop();$('guestStatus').textContent=String(e.message||e);}
       finally{renderGuestMessages(conversation);guest.busy=false;$('guestSubmit').disabled=false;}
     });
-    // Legacy ?guest=1 is deliberately limited; normal link is full-owner dashboard.
-    try{await loadGuestEndpoint();}catch(e){$('guestStatus').textContent='Tower offline: '+String(e.message||e);}
+    // ?guest=1 is the shared public conversation; ?owner=1 is the private dashboard.
     return;
     guest.token=localStorage.getItem('myles_guest_chat_token')||'';
     const status=$('guestStatus');
