@@ -853,7 +853,7 @@ html,body{max-width:100%;overflow-x:clip}
       <div class="guest-share-card">
         <strong>Share chat-only access</strong>
         <span>Give someone this link to talk with Myles without owner pairing or access to your computer, files, accounts, or trading.</span>
-        <button type="button" id="copyGuestChatLink" class="secondary-btn">Copy guest chat link</button>
+        <div class="guest-share-actions"><button type="button" id="openGuestChat" class="primary-btn">Open guest chat</button><button type="button" id="copyGuestChatLink" class="secondary-btn">Copy guest chat link</button></div>
         <div id="guestShareResult" class="pair-result"></div>
       </div>
     </div>
@@ -864,7 +864,7 @@ html,body{max-width:100%;overflow-x:clip}
     .guest-share-card{display:grid;gap:7px;margin-top:16px;padding-top:15px;border-top:1px solid rgba(120,130,150,.18)}
     .guest-share-card strong{font-size:12px;letter-spacing:-.01em}
     .guest-share-card span{font-size:10px;line-height:1.45;color:#6e6e73}
-    .guest-share-card .secondary-btn{justify-self:start}
+    .guest-share-actions{display:flex;flex-wrap:wrap;gap:8px}
     #guestShell{display:none}
     body.guest-chat-mode .app-shell,body.guest-chat-mode #pairModal{display:none!important}
     body.guest-chat-mode #guestShell{display:flex;max-width:750px;min-height:100dvh;margin:0 auto;flex-direction:column;padding:24px 16px;color:#e7ecfa;background:#0b1020;gap:14px}
@@ -1733,6 +1733,7 @@ function renderResearchTournament(m){
   function scheduleStatusPoll(){clearTimeout(state.refreshTimer);const ms=document.hidden?30000:(state.view==='trading'?5000:REFRESH_MS);state.refreshTimer=setTimeout(async()=>{await fetchStatus();scheduleStatusPoll();},ms);}
   function scheduleChatPoll(){clearTimeout(state.chatTimer);const ms=document.hidden?30000:(state.view==='chat'?CHAT_POLL_MS:5000);state.chatTimer=setTimeout(async()=>{if(state.bridge.healthy&&state.view==='chat')await pollMessages();scheduleChatPoll();},ms);}
   function bindGuestShare(){
+    $('openGuestChat')?.addEventListener('click',()=>{location.assign(guestUrl());});
     $('copyGuestChatLink')?.addEventListener('click',async()=>{
       const url=guestUrl();
       const out=$('guestShareResult');
@@ -1740,7 +1741,7 @@ function renderResearchTournament(m){
       catch(_){if(out){out.textContent=url;out.className='pair-result ok';}}
     });
   }
-  async function init(){if(isGuestPage){await initGuestChat();return;}loadPairing();const savedWalletMode=localStorage.getItem('myles_wallet_connection_mode');if(savedWalletMode&&$('walletConnectionMode'))$('walletConnectionMode').value=savedWalletMode;bind();bindGuestShare();renderAll();await discoverBridge();if(!state.bridge.url&&state.bridge.discovered)$('bridgeUrlInput').value=state.bridge.discovered;if(bridgeUrl()&&(state.bridge.token||state.bridge.recoveryCode))await testBridge(false);let recovered=false;if(!state.bridge.token&&!state.bridge.recoveryCode&&bridgeUrl())recovered=await recoverLocalPairing(false);if(!recovered&&!state.bridge.token&&!state.bridge.recoveryCode&&bridgeUrl())recovered=await recoverSavedPairing(false);if(!recovered&&!state.bridge.token&&!state.bridge.recoveryCode){showView('chat');openPairModal();$('pairResult').textContent='Tap reconnect to connect this computer or restore its saved credential.';}await fetchStatus();if(state.bridge.healthy){await pollMessages();await quantGet().catch(()=>{});await liveGet().catch(()=>{});}scheduleStatusPoll();scheduleChatPoll();state.chart.timer=setInterval(()=>{if(!document.hidden&&state.view==='trading'&&state.tradeTab==='tradeManual'&&state.bridge.healthy)loadMarketChart();},20000);state.liveTimer=setInterval(()=>{if(!document.hidden&&state.bridge.healthy&&state.view==='trading')liveGet().catch(()=>{});},20000);document.addEventListener('visibilitychange',()=>{scheduleStatusPoll();scheduleChatPoll();});}
+  async function init(){if(isGuestPage){await initGuestChat();return;}const params=new URLSearchParams(location.search);const hasOwnerTrust=!!(localStorage.getItem('myles_bridge_token')||localStorage.getItem('myles_bridge_pair_code')||localStorage.getItem('myles_bridge_url'));if(location.protocol==='https:'&&params.get('owner')!=='1'&&!hasOwnerTrust){location.replace(guestUrl());return;}loadPairing();const savedWalletMode=localStorage.getItem('myles_wallet_connection_mode');if(savedWalletMode&&$('walletConnectionMode'))$('walletConnectionMode').value=savedWalletMode;bind();bindGuestShare();renderAll();await discoverBridge();if(!state.bridge.url&&state.bridge.discovered)$('bridgeUrlInput').value=state.bridge.discovered;if(bridgeUrl()&&(state.bridge.token||state.bridge.recoveryCode))await testBridge(false);let recovered=false;if(!state.bridge.token&&!state.bridge.recoveryCode&&bridgeUrl())recovered=await recoverLocalPairing(false);if(!recovered&&!state.bridge.token&&!state.bridge.recoveryCode&&bridgeUrl())recovered=await recoverSavedPairing(false);if(!recovered&&!state.bridge.token&&!state.bridge.recoveryCode){showView('chat');openPairModal();$('pairResult').textContent='Owner access is optional. Use Open guest chat for chat-only access.';}await fetchStatus();if(state.bridge.healthy){await pollMessages();await quantGet().catch(()=>{});await liveGet().catch(()=>{});}scheduleStatusPoll();scheduleChatPoll();state.chart.timer=setInterval(()=>{if(!document.hidden&&state.view==='trading'&&state.tradeTab==='tradeManual'&&state.bridge.healthy)loadMarketChart();},20000);state.liveTimer=setInterval(()=>{if(!document.hidden&&state.bridge.healthy&&state.view==='trading')liveGet().catch(()=>{});},20000);document.addEventListener('visibilitychange',()=>{scheduleStatusPoll();scheduleChatPoll();});}
 
   document.addEventListener('DOMContentLoaded',()=>{const box=$('chatMessages'),jump=$('chatJumpLatest');if(box)box.addEventListener('scroll',updateChatJump,{passive:true});if(jump)jump.addEventListener('click',jumpChatLatest);});
   document.addEventListener('DOMContentLoaded',init);
@@ -1784,7 +1785,7 @@ function renderResearchTournament(m){
     $('guestStatus').textContent='Chat only · no owner access';
     document.querySelector('.guest-header p').textContent='Chat only. Owner controls, files, accounts, and trading stay private.';
     const ownerLink=document.createElement('a');
-    ownerLink.href=location.pathname||'/';ownerLink.textContent='Owner dashboard';
+    ownerLink.href=(location.pathname||'/')+'?owner=1';ownerLink.textContent='Owner dashboard';
     ownerLink.style.color='#9bb2ff';
     document.querySelector('.guest-header').appendChild(ownerLink);
     let conversation=[];
