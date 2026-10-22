@@ -45,7 +45,7 @@ function Set-Prop($Object,[string]$Name,$Value) {
 function PinScalpPaperConfig {
     if (-not (Test-Path -LiteralPath $ConfigFile)) { return }
     $cfg = Get-Content -LiteralPath $ConfigFile -Raw -Encoding UTF8 | ConvertFrom-Json
-    Set-Prop $cfg "timeframe" "1m"
+    Set-Prop $cfg "timeframe" "4h"
     Set-Prop $cfg "poll_seconds" 30
     $paper = $cfg.paper
     if (-not $paper) { $paper = [pscustomobject]@{}; Set-Prop $cfg "paper" $paper }
@@ -75,7 +75,7 @@ function PinScalpPaperConfig {
     $tmp = "$ConfigFile.tmp"
     ($cfg | ConvertTo-Json -Depth 30) | Set-Content -LiteralPath $tmp -Encoding UTF8
     Move-Item -LiteralPath $tmp -Destination $ConfigFile -Force
-    Write-Host "PASS: 1-minute scalp paper loop and continuous research pinned; live execution locked."
+    Write-Host "PASS: 4-hour Drift paper loop and continuous research pinned; live execution locked."
 }
 function RecoverPaperRiskHalt {
     $stateFile = Join-Path $Data "quant_paper_state_v3.json"
@@ -189,7 +189,7 @@ try {
     Write-Host ("Engine status: {0}" -f $engine)
     Write-Host ("Mode: {0}" -f $status.mode)
     Write-Host ("Execution locked: {0}" -f $locked)
-    Write-Host ("GMX markets: {0}" -f $markets)
+    Write-Host ("Drift markets: {0}" -f $markets)
     Write-Host ("Quant cycle: {0}" -f $cycle)
     Write-Host ("Recent paper trades: {0}" -f $trades)
     Write-Host ("Open paper positions: {0}" -f $positions)
@@ -197,8 +197,8 @@ try {
     Write-Host ("Paper entry evidence gate: {0}" -f $gateStatus)
     Write-Host ("Evidence-qualified candidates: {0}" -f $gateEligible)
     Write-Host "============================================================"
-    if (-not $status -or $age -eq $null -or $age -gt 180 -or $markets -lt 1 -or $engine -ne "running" -or -not $locked -or $actualTimeframe -ne "1m") { throw "Quant did not produce fresh locked 1m paper telemetry. Inspect $Logs." }
-    Write-Host "SUCCESS: Quant is running with fresh GMX-backed paper telemetry."
+    if (-not $status -or $age -eq $null -or $age -gt 180 -or $markets -lt 1 -or $engine -ne "running" -or -not $locked -or $actualTimeframe -ne "4h") { throw "Quant did not produce fresh locked 4h paper telemetry. Inspect $Logs." }
+    Write-Host "SUCCESS: Quant is running with fresh Drift-backed paper telemetry."
     Write-Host ("Quant log: {0}" -f (Join-Path $Logs "quant.log"))
     Write-Host ("Quant errors: {0}" -f (Join-Path $Logs "quant-error.log"))
     exit 0

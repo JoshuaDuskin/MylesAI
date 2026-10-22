@@ -1,50 +1,31 @@
 # Myles Quant stack
 
-Myles Quant combines GMX market research, a chart-based scalp terminal, simulated forward-paper trading, and an owner-gated GMX live execution adapter. Component versions are reported by the running services; this document intentionally does not assign one stale version number to the whole stack.
+Myles Quant combines Drift market research on Solana, simulated forward-paper trading, copy-trader shadow research, and a separately owner-gated live adapter. Component versions are reported by the running services.
 
 ## Architecture
 
-- **Research / paper engine:** `quant_service.mjs`
-- **GMX live adapter:** `gmx_live.mjs`
+- **Research and paper engine:** `quant_service.mjs`
+- **Drift paper adapter:** `drift_adapter.mjs`
+- **Drift copy research:** `drift_copy_adapter.mjs` and `copy_trader_service.mjs`
 - **Dashboard transport:** authenticated Myles tower bridge
-- **Network:** Arbitrum One (`42161`)
-- **Funding asset:** USDC
-- **Owner custody:** funds stay in the owner's wallet; the owner private key is never given to Myles
-- **Trading delegation:** GMX One-Click Trading subaccount, derived from the owner wallet's GMX session signature
-- **Subaccount secret at rest:** Windows DPAPI, CurrentUser scope, on the tower only
-- **Live enablement:** explicit owner-wallet signature opens an 8-hour LIVE scalp session; a separate owner-wallet signature enables LIVE Auto
-- **Manual live orders:** after the owner explicitly arms an 8-hour live session, manual open/close/cancel actions use the limited GMX one-click subaccount without another wallet popup; restart/expiry fails closed
-- **Live risk changes:** max margin, notional, leverage, position count, and LIVE Auto sizing/stop/target limits are bound into a fresh owner-wallet signature before they can change
-- **LIVE Auto qualification:** automatic live actions are ignored unless the selected market/strategy pair currently passes the Quant validation gate
-- **Withdrawals:** always owner-wallet signed; Myles never receives withdrawal authority
+- **Network:** Solana mainnet-beta
+- **Venue:** Drift perps through the public Velocity Data API
+- **Execution:** paper only; wallet signing and live execution are hard-locked
 
-## Live workflow
+## Paper workflow
 
-1. Open the canonical Myles Control Center and pair it to the tower.
-2. Go to **Trading Bot → Funding**.
-3. Open the page inside an injected-wallet browser (Coinbase Wallet / MetaMask mobile browser or a desktop wallet extension).
-4. Connect the owner wallet and switch to Arbitrum One.
-5. Choose **Set up one-click** and sign the two GMX authorization prompts.
-6. Put USDC in that owner wallet on Arbitrum and approve USDC for the GMX router.
-7. Explicitly **ARM LIVE EXECUTION**. This requires another owner-wallet signature.
-8. Use **Trade → LIVE** for real manual Long/Short orders with attached stop-loss and take-profit orders. While the 8-hour owner-armed session is active, manual live actions are one-click; the owner wallet is not prompted for every scalp.
-9. LIVE Auto remains OFF until separately enabled with another owner-wallet signature. Even when enabled, it only acts on closed-candle signals whose market/strategy research gate is currently passing.
+1. The engine reads Drift candles for BTC-PERP, ETH-PERP, and SOL-PERP.
+2. Candidate strategies are evaluated with fees, slippage, market impact, and a doubled-cost stress run.
+3. Walk-forward results and a minimum trade count are required before a strategy can open a paper position.
+4. The adaptive governor may rotate a market to a better validated candidate; it cannot change risk bounds or unlock live execution.
+5. Drift leaderboard accounts are discovered and shadow-tested separately. A trader is never copied into a live wallet by this service.
 
 ## Safety model
 
-The GMX one-click subaccount may execute only the authorized trading actions. The main wallet remains the account owner. The dashboard's withdraw flow creates a USDC transfer that the owner wallet itself must sign. There is no owner private key or seed phrase in GitHub, the browser source, or Myles's config.
+Paper positions are simulated and cannot move funds. There is no owner private key or seed phrase in GitHub, the browser source, or Myles's config. Live execution remains disabled until a separate owner review and explicit authorization flow exist.
 
-Live defaults are intentionally conservative: $100 max margin per trade, $250 max notional, 2x max leverage, 2 concurrent positions, an 8-hour armed session, and LIVE Auto OFF. Any live-adapter restart automatically disarms both manual LIVE and LIVE Auto. The Advanced page exposes these limits, but changing them requires the configured owner wallet to sign the exact new limit set.
+Paper defaults are conservative: 0.5% risk per trade, 1.5x maximum notional leverage, two concurrent positions, 1.5% stops, 3% targets, and an 8% maximum drawdown halt. A candidate that fails the evidence gate remains a research hypothesis and cannot open a paper position.
 
+## Research versus paper performance safety
 
-## Research versus paper performance safety (v10.15.7)
-
-An unvalidated research/shadow signal now records the hypothesis separately
-and **never becomes an automatic paper order**. Paper entries require an
-actual qualified strategy with stressed-cost and walk-forward evidence.
-Existing trades, equity history and paper balances are preserved. Drawdown
-stops can no longer be cleared by five unattended research cycles; the owner
-must explicitly reset the paper account to clear a max-drawdown halt.
-This improves evidence quality and risk containment, not guaranteed returns.
-The live execution adapter, owner-wallet signing, and LIVE Auto policy are
-not changed.
+An unvalidated research or shadow signal is recorded separately and never becomes an automatic paper order. Existing trades, equity history, and paper balances are preserved. Drawdown stops require an explicit owner reset. These controls improve evidence quality and risk containment; they do not guarantee returns.

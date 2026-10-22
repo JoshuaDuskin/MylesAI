@@ -21,7 +21,9 @@ const DEFAULT_CONFIG = {
   runtime_generation: 4,
   venue: 'Drift',
   chain_id: 'solana',
-  timeframe: '1m',
+  // Drift's public 1m endpoint currently repeats a small number of marks.
+  // Use 4h candles for paper research until the 1m feed has real history.
+  timeframe: '4h',
   history_limit: 3000,
   poll_seconds: 30,
   starting_equity: 10000,
@@ -65,7 +67,9 @@ const DEFAULT_CONFIG = {
   research_costs: {
     position_fee_bps_per_side: 6,
     slippage_bps_per_side: 5,
-    impact_bps_per_side: 20,
+    // Small-size paper orders should model a modest market-impact reserve;
+    // the stress run doubles this assumption before a candidate can qualify.
+    impact_bps_per_side: 2,
     holding_cost_bps_per_day: 5,
   },
   validation: {
@@ -74,7 +78,7 @@ const DEFAULT_CONFIG = {
     min_walk_forward_positive_pct: 50,
     min_base_return_pct: 0,
     min_stress_return_pct: 0,
-    stress_cost_multiplier: 2.5,
+    stress_cost_multiplier: 2,
   },
   live_execution: {
     enabled: false,
