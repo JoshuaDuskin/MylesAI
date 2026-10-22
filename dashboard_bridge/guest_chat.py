@@ -306,3 +306,60 @@ def send(text: str) -> tuple[int, dict]:
         save(HISTORY, {"messages": updated})
         return 200, {"ok": True, "role": "guest_chat_only",
                      "reply": reply, "messages": updated}
+
+
+DEVICE_ACCESS = DATA / "dashboard_device_requests.json"
+
+
+def _device_rows() -> list[dict]:
+    return [r for r in read(DEVICE_ACCESS).get("requests", [])
+            if isinstance(r, dict) and float(r.get("expires_at") or 0) > time.time()]
+
+
+def request_device_access(name: str) -> dict:
+    name = str(name or "Phone").strip()
+    if not name or len(name) > 60 or any(ord(c) < 32 for c in name):
+        raise ValueError("Use a device name of 1–60 characters")
+    with LOCK:
+        rows = _device_rows()
+        if len(rows) >= 12:
+            raise ValueError("Too many device requests. Try again in ten minutes.")
+        secret = secrets.token_urlsafe(36)
+        row = {"id": uuid.uuid4().hex, "name": name, "created_at": time.time(),
+               "expires_at": time.time() + 600, "status": "pending", "secret_hash": digest(secret)}
+        save(DEVICE_ACCESS, {"requests": rows + [row]})
+        return {"ok": True, "request_token": secret, "expires_at": row["expires_at"], "status": "pending"}
+
+
+def pending_devices() -> dict:
+    with LOCK:
+        return {"ok": True, "requests": [{k: r[k] for k in ("id", "name", "created_at", "expires_at")}
+                                          for r in _device_rows() if r.get("status") == "pending"]}
+
+
+def decide_device(request_id: str, approved: bool, owner_token: str) -> dict:
+    with LOCK:
+        rows = _device_rows()
+        row = next((r for r in rows if r["id"] == request_id and r.get("status") == "pending"), None)
+        if row is None:
+            raise ValueError("Device request expired or already handled")
+        row["status"] = "approved" if approved else "denied"
+        row["owner_hash"] = digest(owner_token)
+        save(DEVICE_ACCESS, {"requests": rows})
+        return {"ok": True, "status": row["status"]}
+
+
+def device_access_status(secret: str, owner_token: str) -> dict | None:
+    if not 32 <= len(secret) <= 100:
+        return None
+    with LOCK:
+        row = next((r for r in _device_rows() if hmac.compare_digest(r["secret_hash"], digest(secret))), None)
+        if row is None:
+            return None
+        result = {"ok": True, "status": row["status"]}
+        if row["status"] == "approved":
+            if not owner_token or not hmac.compare_digest(row.get("owner_hash", ""), digest(owner_token)):
+                return None
+            result["token"] = owner_token
+            result["role"] = "household_owner"
+        return result

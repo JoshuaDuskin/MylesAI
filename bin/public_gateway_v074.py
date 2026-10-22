@@ -298,7 +298,7 @@ class Handler(BaseHTTPRequestHandler):
 
     def cors(self):
         self.send_header("Access-Control-Allow-Origin", "*")
-        self.send_header("Access-Control-Allow-Headers", "Authorization, Content-Type, X-Myles-Token, X-Myles-Link, X-Myles-Read, X-Myles-Guest")
+        self.send_header("Access-Control-Allow-Headers", "Authorization, Content-Type, X-Myles-Token, X-Myles-Link, X-Myles-Read, X-Myles-Guest, X-Myles-Device")
         self.send_header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
         self.send_header("Cache-Control", "no-store")
 
@@ -384,6 +384,26 @@ class Handler(BaseHTTPRequestHandler):
         status,response_headers,raw = request_local(path,self.command,body,forwarded,85)
         return self.send_json(status,raw,response_headers.get("Content-Type","application/json"))
 
+    def proxy_device_access(self):
+        path = self.path.split("?", 1)[0]
+        routes = {"/dashboard/device-access/request": "POST", "/dashboard/device-access/status": "GET",
+                  "/dashboard/device-access/pending": "GET", "/dashboard/device-access/approve": "POST",
+                  "/dashboard/device-access/deny": "POST"}
+        if path not in routes or self.command != routes[path]:
+            return self.send_json(405, {"ok": False, "error": "Device access method not allowed"})
+        if path.endswith(("/pending", "/approve", "/deny")) and not owner_read_ok(self.headers):
+            return self.send_json(401, {"ok": False, "error": "Connected device required"})
+        try:
+            size = int(self.headers.get("Content-Length", "0"))
+        except ValueError:
+            size = -1
+        if not 0 <= size <= 1024:
+            return self.send_json(400, {"ok": False, "error": "Invalid device request size"})
+        body = self.rfile.read(size) if size else None
+        headers = {name: self.headers[name] for name in ("Authorization", "X-Myles-Token", "X-Myles-Device", "Content-Type", "Origin") if self.headers.get(name)}
+        code, response_headers, raw = request_local(path, self.command, body, headers, 12)
+        return self.send_json(code, raw, response_headers.get("Content-Type", "application/json"))
+
     def proxy_public_chat(self):
         """Shared public chat; privileged routes retain owner authentication."""
         path = self.path.split("?", 1)[0]
@@ -429,6 +449,8 @@ class Handler(BaseHTTPRequestHandler):
         self.send_json(status, raw, response_headers.get("Content-Type", "application/json"))
 
     def do_GET(self):
+        if self.path.split("?",1)[0].startswith("/dashboard/device-access/"):
+            return self.proxy_device_access()
         if self.path.split("?",1)[0] == "/dashboard/public-chat/messages":
             return self.proxy_public_chat()
         if self.path.split("?",1)[0] == "/dashboard/guest/messages":
@@ -438,6 +460,8 @@ class Handler(BaseHTTPRequestHandler):
         return self.proxy()
 
     def do_POST(self):
+        if self.path.split("?",1)[0].startswith("/dashboard/device-access/"):
+            return self.proxy_device_access()
         if self.path.split("?", 1)[0] == "/dashboard/public-chat/messages":
             return self.proxy_public_chat()
         if self.path.split("?",1)[0] in {"/dashboard/guest/pair","/dashboard/guest/messages"}:

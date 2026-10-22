@@ -1005,7 +1005,7 @@ class Handler(BaseHTTPRequestHandler):
         if origin == "null" or origin in ALLOWED_ORIGINS or origin.startswith("http://127.0.0.1:") or origin.startswith("http://localhost:"):
             self.send_header("Access-Control-Allow-Origin", origin)
             self.send_header("Vary", "Origin")
-        self.send_header("Access-Control-Allow-Headers", "Authorization, X-Myles-Token, X-Myles-Link, X-Myles-Guest, Content-Type")
+        self.send_header("Access-Control-Allow-Headers", "Authorization, X-Myles-Token, X-Myles-Link, X-Myles-Guest, X-Myles-Device, Content-Type")
         self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
         self.send_header("Cache-Control", "no-store")
         self.send_header("X-Content-Type-Options", "nosniff")
@@ -1047,8 +1047,47 @@ class Handler(BaseHTTPRequestHandler):
             return False
         return True
 
+    def device_access(self) -> None:
+        path = urlparse(self.path).path
+        routes = {"/dashboard/device-access/request": "POST", "/dashboard/device-access/status": "GET",
+                  "/dashboard/device-access/pending": "GET", "/dashboard/device-access/approve": "POST",
+                  "/dashboard/device-access/deny": "POST"}
+        if path not in routes or self.command != routes[path]:
+            return self.deny(405, "Device access method not allowed")
+        origin = self.headers.get("Origin", "")
+        if origin and origin != "null" and origin not in ALLOWED_ORIGINS and not origin.startswith(("http://127.0.0.1:", "http://localhost:")):
+            return self.deny(403, "Origin not allowed")
+        if not guest_request_rate(self, self.command == "POST"):
+            return self.deny(429, "Device request rate limit")
+        if path.endswith(("/pending", "/approve", "/deny")) and not authorized(self):
+            return self.deny(401, "A connected household device must approve access")
+        if not TOKEN:
+            return self.deny(503, "Device connection is unavailable")
+        module = guest_chat_module()
+        if path.endswith("/pending"):
+            return self.json_response(200, module.pending_devices())
+        if path.endswith("/status"):
+            result = module.device_access_status(self.headers.get("X-Myles-Device", ""), TOKEN)
+            return self.json_response(200, result) if result else self.deny(404, "Device request expired")
+        try:
+            size = int(self.headers.get("Content-Length", "0"))
+            if not 0 < size <= 1024:
+                raise ValueError("Invalid device request body")
+            body = json.loads(self.rfile.read(size).decode("utf-8"))
+            if not isinstance(body, dict):
+                raise ValueError("Invalid device request")
+            if path.endswith("/request"):
+                result = module.request_device_access(body.get("name", "Phone"))
+            else:
+                result = module.decide_device(str(body.get("request_id") or ""), path.endswith("/approve"), TOKEN)
+            return self.json_response(200, result)
+        except (ValueError, UnicodeDecodeError) as error:
+            return self.deny(400, str(error))
+
     def do_GET(self) -> None:  # noqa: N802
         path = urlparse(self.path).path
+        if path.startswith("/dashboard/device-access/"):
+            return self.device_access()
         if path == "/dashboard/public-chat/messages":
             # Public chat has its own history and no owner tools or data.
             origin = self.headers.get("Origin", "")
@@ -1132,6 +1171,8 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_POST(self) -> None:  # noqa: N802
         path = self.path.split("?", 1)[0]
+        if path.startswith("/dashboard/device-access/"):
+            return self.device_access()
         if path == "/dashboard/public-chat/messages":
             origin = self.headers.get("Origin", "")
             if (origin and origin != "null" and origin not in ALLOWED_ORIGINS

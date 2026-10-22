@@ -59,6 +59,9 @@ jobs:
           ! grep -q "Launching the single owner console automatically" UPDATE_TOWER.ps1
           echo "durable startup and recovery contract OK"
 
+      - name: Verify approval-based household device access
+        run: python -m unittest discover -s tests -p test_device_access.py -v
+
       - name: Verify two-user full-access dashboard safety
         run: python -m unittest discover -s tests -p test_two_owner_dashboard_101511.py -v
 

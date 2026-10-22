@@ -8,7 +8,8 @@ class PhoneCredentialRecovery(unittest.TestCase):
   self.assertIn('id="ownerPairForm"',h)
   self.assertIn('autocomplete="username"',h)
   self.assertIn('autocomplete="current-password"',h)
-  self.assertIn("['ownerPairSubmit',true]",h)
+  self.assertIn('id="requestDeviceAccess"',h)
+  self.assertIn('bindDeviceAccess',h)
   self.assertNotIn('id="bridgeTokenInput" type="text"',h)
  def test_pairing_secret_is_not_committed(self):
   h=(ROOT/"index.html").read_text(encoding="utf-8")
