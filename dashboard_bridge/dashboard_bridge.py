@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import hmac
 import importlib.util
 import json
 import os
@@ -40,6 +41,7 @@ GET_LIMIT = 180
 # Keep a limit, but key authenticated traffic by a short hash of the owner
 # token and allow normal owner interaction plus retries.
 POST_LIMIT = 120
+PUBLIC_CAPABILITY_FILE = ROOT / "data" / "public_capability_token.txt"
 RATE: dict[str, deque[float]] = defaultdict(deque)
 RATE_LOCK = threading.Lock()
 TOKEN = ""
@@ -100,6 +102,21 @@ def refresh_pair_state() -> None:
 
 def now_iso() -> str:
     return datetime.now(timezone.utc).astimezone().isoformat(timespec="seconds")
+
+
+def public_capability_token() -> str:
+    """Read the bearer token for the one-link full-capability dashboard."""
+    try:
+        value = PUBLIC_CAPABILITY_FILE.read_text(encoding="utf-8").strip()
+    except OSError:
+        return ""
+    return value if 32 <= len(value) <= 256 else ""
+
+
+def public_authorized(handler: BaseHTTPRequestHandler) -> bool:
+    expected = public_capability_token()
+    supplied = str(handler.headers.get("X-Myles-Link") or "").strip()
+    return bool(expected and supplied and hmac.compare_digest(supplied, expected))
 
 
 def load_json(path: Path) -> Any:
@@ -988,7 +1005,7 @@ class Handler(BaseHTTPRequestHandler):
         if origin == "null" or origin in ALLOWED_ORIGINS or origin.startswith("http://127.0.0.1:") or origin.startswith("http://localhost:"):
             self.send_header("Access-Control-Allow-Origin", origin)
             self.send_header("Vary", "Origin")
-        self.send_header("Access-Control-Allow-Headers", "Authorization, X-Myles-Token, X-Myles-Guest, Content-Type")
+        self.send_header("Access-Control-Allow-Headers", "Authorization, X-Myles-Token, X-Myles-Link, X-Myles-Guest, Content-Type")
         self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
         self.send_header("Cache-Control", "no-store")
         self.send_header("X-Content-Type-Options", "nosniff")
@@ -1033,18 +1050,32 @@ class Handler(BaseHTTPRequestHandler):
     def do_GET(self) -> None:  # noqa: N802
         path = urlparse(self.path).path
         if path == "/dashboard/public-chat/messages":
-            # Public chat is anonymous and shared, but remains text-only. It
-            # never enters the owner conversation, job queue, desktop, wallet,
-            # or trading routes.
+            # The canonical dashboard link is one shared Myles surface. It
+            # deliberately uses the same core conversation/history as the
+            # owner dashboard so a phone, another browser, and the tower
+            # computer all see the same thread. The core still applies its
+            # normal intent gates and tool authorization before any action.
             origin = self.headers.get("Origin", "")
             if (origin and origin != "null" and origin not in ALLOWED_ORIGINS
                     and not origin.startswith("http://127.0.0.1:")
                     and not origin.startswith("http://localhost:")):
                 return self.deny(403, "Origin not allowed")
+            if not public_authorized(self):
+                return self.deny(401, "Myles link access required")
             if not guest_request_rate(self, False):
                 return self.deny(429, "Public chat rate limit")
-            guest_chat = guest_chat_module()
-            return self.json_response(200, guest_chat.public_messages())
+            code, data = core_json("/api/messages", timeout=8.0)
+            if code != 200 or not isinstance(data, dict):
+                return self.json_response(502, {
+                    "ok": False,
+                    "error": "Myles conversation history is unavailable",
+                    "core_status": code,
+                })
+            return self.json_response(200, {
+                "ok": True,
+                "role": "shared_myles",
+                "messages": data.get("messages") or [],
+            })
         if path == "/dashboard/guest/messages":
             origin = self.headers.get("Origin","")
             if (origin and origin not in ALLOWED_ORIGINS
@@ -1124,6 +1155,8 @@ class Handler(BaseHTTPRequestHandler):
                     and not origin.startswith("http://127.0.0.1:")
                     and not origin.startswith("http://localhost:")):
                 return self.deny(403, "Origin not allowed")
+            if not public_authorized(self):
+                return self.deny(401, "Myles link access required")
             if not guest_request_rate(self, True):
                 return self.deny(429, "Public chat rate limit")
             try:
@@ -1138,12 +1171,32 @@ class Handler(BaseHTTPRequestHandler):
                 return self.deny(400, "Invalid public chat JSON")
             if not isinstance(body, dict):
                 return self.deny(400, "Public chat request must be an object")
-            guest_chat = guest_chat_module()
-            status, response = guest_chat.public_send(
-                body.get("message") or body.get("text") or "",
-                body.get("history"),
-            )
-            return self.json_response(status, response)
+            text = body.get("message") or body.get("text") or ""
+            if not isinstance(text, str) or not text.strip():
+                return self.deny(400, "Message text required")
+            if len(text.strip()) > 6000:
+                return self.deny(400, "Message is too long")
+
+            # Send through the real local core. This is the same ingress used
+            # by the paired dashboard and console, including desktop tools,
+            # tracked jobs, lookups, and the existing safety gates.
+            code, data, route = send_to_myles(text.strip())
+            if not (200 <= code < 300):
+                return self.json_response(code if code < 600 else 502, data)
+
+            # The core POST response contains the verified reply; fetch the
+            # canonical history so all clients render one durable conversation.
+            history_code, history = core_json("/api/messages", timeout=8.0)
+            messages = history.get("messages") if history_code == 200 and isinstance(history, dict) else []
+            payload = data if isinstance(data, dict) else {"reply": str(data)}
+            payload = {
+                **payload,
+                "ok": True,
+                "role": "shared_myles",
+                "bridge_route": route,
+                "messages": messages or [],
+            }
+            return self.json_response(200, payload)
         # Guest pairing/chat is a wholly separate capability from owner pairing.
         # No guest request is allowed to reach jobs, computer, settings or trading.
         if path in {"/dashboard/guest/pair","/dashboard/guest/messages"}:

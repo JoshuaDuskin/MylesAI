@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import hmac
 import os
 import time
 import urllib.error
@@ -16,6 +17,7 @@ LOCAL = "http://127.0.0.1:8790"
 PORT = 8791
 TOKEN_FILE = DATA / "dashboard_bridge_token.txt"
 READ_FILE = DATA / "dashboard_public_read_token.txt"
+PUBLIC_CAPABILITY_FILE = DATA / "public_capability_token.txt"
 LOG_FILE = ROOT / "logs" / "public_gateway_v074.log"
 DIRECT_OPENER = urllib.request.build_opener(urllib.request.ProxyHandler({}))
 
@@ -50,6 +52,17 @@ def owner_token() -> str:
 
 def read_token() -> str:
     return read_file(READ_FILE)
+
+
+def public_capability_token() -> str:
+    value = read_file(PUBLIC_CAPABILITY_FILE)
+    return value if 32 <= len(value) <= 256 else ""
+
+
+def public_authorized(headers) -> bool:
+    expected = public_capability_token()
+    supplied = str(headers.get("X-Myles-Link") or "").strip()
+    return bool(expected and supplied and hmac.compare_digest(supplied, expected))
 
 
 def log_error(message: str) -> None:
@@ -268,7 +281,7 @@ class Handler(BaseHTTPRequestHandler):
 
     def cors(self):
         self.send_header("Access-Control-Allow-Origin", "*")
-        self.send_header("Access-Control-Allow-Headers", "Authorization, Content-Type, X-Myles-Token, X-Myles-Read, X-Myles-Guest")
+        self.send_header("Access-Control-Allow-Headers", "Authorization, Content-Type, X-Myles-Token, X-Myles-Link, X-Myles-Read, X-Myles-Guest")
         self.send_header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
         self.send_header("Cache-Control", "no-store")
 
@@ -355,12 +368,17 @@ class Handler(BaseHTTPRequestHandler):
         return self.send_json(status,raw,response_headers.get("Content-Type","application/json"))
 
     def proxy_public_chat(self):
-        """Anonymous shared chat route; never forwards owner credentials."""
+        """One-link shared chat route with an explicit bearer capability."""
         path = self.path.split("?", 1)[0]
         if path != "/dashboard/public-chat/messages" or self.command not in {"GET", "POST"}:
             return self.send_json(405, {"ok": False, "error": "Public chat method not allowed"})
+        if not public_authorized(self.headers):
+            return self.send_json(401, {"ok": False, "error": "Myles link access required"})
         if self.command == "GET":
-            status, response_headers, raw = request_local(path, "GET", None, {"Accept": "application/json"}, 20)
+            status, response_headers, raw = request_local(path, "GET", None, {
+                "Accept": "application/json",
+                "X-Myles-Link": self.headers.get("X-Myles-Link", ""),
+            }, 20)
             return self.send_json(status, raw, response_headers.get("Content-Type", "application/json"))
         try:
             size = int(self.headers.get("Content-Length", "0"))
@@ -369,13 +387,16 @@ class Handler(BaseHTTPRequestHandler):
         if size < 0 or size > 4096:
             return self.send_json(400, {"ok": False, "error": "Public chat request too large"})
         body = self.rfile.read(size) if size else b""
-        forwarded = {"Content-Type": "application/json"}
+        forwarded = {
+            "Content-Type": "application/json",
+            "X-Myles-Link": self.headers.get("X-Myles-Link", ""),
+        }
         status, response_headers, raw = request_local(path, "POST", body, forwarded, 85)
         return self.send_json(status, raw, response_headers.get("Content-Type", "application/json"))
 
     def proxy(self):
-        # The public URL is read-only by default. Pairing is protected by the
-        # bridge's one-time code; every other private route needs the owner token.
+        # The canonical Myles link uses its bearer capability for the shared
+        # conversation. Other dashboard routes still require the owner token.
         if self.path.startswith("/dashboard/pair"):
             allowed = True
         else:
