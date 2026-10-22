@@ -1050,32 +1050,15 @@ class Handler(BaseHTTPRequestHandler):
     def do_GET(self) -> None:  # noqa: N802
         path = urlparse(self.path).path
         if path == "/dashboard/public-chat/messages":
-            # The canonical dashboard link is one shared Myles surface. It
-            # deliberately uses the same core conversation/history as the
-            # owner dashboard so a phone, another browser, and the tower
-            # computer all see the same thread. The core still applies its
-            # normal intent gates and tool authorization before any action.
+            # Public chat has its own history and no owner tools or data.
             origin = self.headers.get("Origin", "")
             if (origin and origin != "null" and origin not in ALLOWED_ORIGINS
                     and not origin.startswith("http://127.0.0.1:")
                     and not origin.startswith("http://localhost:")):
                 return self.deny(403, "Origin not allowed")
-            if not public_authorized(self):
-                return self.deny(401, "Myles link access required")
             if not guest_request_rate(self, False):
                 return self.deny(429, "Public chat rate limit")
-            code, data = core_json("/api/messages", timeout=8.0)
-            if code != 200 or not isinstance(data, dict):
-                return self.json_response(502, {
-                    "ok": False,
-                    "error": "Myles conversation history is unavailable",
-                    "core_status": code,
-                })
-            return self.json_response(200, {
-                "ok": True,
-                "role": "shared_myles",
-                "messages": data.get("messages") or [],
-            })
+            return self.json_response(200, guest_chat_module().public_messages())
         if path == "/dashboard/guest/messages":
             origin = self.headers.get("Origin","")
             if (origin and origin not in ALLOWED_ORIGINS
@@ -1155,8 +1138,6 @@ class Handler(BaseHTTPRequestHandler):
                     and not origin.startswith("http://127.0.0.1:")
                     and not origin.startswith("http://localhost:")):
                 return self.deny(403, "Origin not allowed")
-            if not public_authorized(self):
-                return self.deny(401, "Myles link access required")
             if not guest_request_rate(self, True):
                 return self.deny(429, "Public chat rate limit")
             try:
@@ -1177,26 +1158,8 @@ class Handler(BaseHTTPRequestHandler):
             if len(text.strip()) > 6000:
                 return self.deny(400, "Message is too long")
 
-            # Send through the real local core. This is the same ingress used
-            # by the paired dashboard and console, including desktop tools,
-            # tracked jobs, lookups, and the existing safety gates.
-            code, data, route = send_to_myles(text.strip())
-            if not (200 <= code < 300):
-                return self.json_response(code if code < 600 else 502, data)
-
-            # The core POST response contains the verified reply; fetch the
-            # canonical history so all clients render one durable conversation.
-            history_code, history = core_json("/api/messages", timeout=8.0)
-            messages = history.get("messages") if history_code == 200 and isinstance(history, dict) else []
-            payload = data if isinstance(data, dict) else {"reply": str(data)}
-            payload = {
-                **payload,
-                "ok": True,
-                "role": "shared_myles",
-                "bridge_route": route,
-                "messages": messages or [],
-            }
-            return self.json_response(200, payload)
+            code, payload = guest_chat_module().public_send(text.strip())
+            return self.json_response(code, payload)
         # Guest pairing/chat is a wholly separate capability from owner pairing.
         # No guest request is allowed to reach jobs, computer, settings or trading.
         if path in {"/dashboard/guest/pair","/dashboard/guest/messages"}:

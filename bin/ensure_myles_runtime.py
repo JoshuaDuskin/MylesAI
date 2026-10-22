@@ -69,22 +69,28 @@ def supervisor_pid() -> int:
     return 0
 
 
-def endpoint_ok(url: str) -> bool:
+def endpoint_ok(url: str, headers: dict[str, str] | None = None) -> bool:
     try:
-        request = urllib.request.Request(url, headers={"Accept": "application/json"})
-        with urllib.request.urlopen(request, timeout=4) as response:
+        request = urllib.request.Request(url, headers={"Accept": "application/json", **(headers or {})})
+        opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+        with opener.open(request, timeout=4) as response:
             return 200 <= int(response.status) < 500
     except Exception:
         return False
 
 
 def runtime_healthy() -> bool:
+    try:
+        owner = (DATA / "dashboard_bridge_token.txt").read_text(encoding="utf-8").strip()
+        read = (DATA / "dashboard_public_read_token.txt").read_text(encoding="utf-8").strip()
+    except OSError:
+        return False
     return all(
-        endpoint_ok(url)
-        for url in (
-            "http://127.0.0.1:8766/health",
-            "http://127.0.0.1:8790/dashboard/health",
-            "http://127.0.0.1:8791/dashboard/health",
+        endpoint_ok(url, headers)
+        for url, headers in (
+            ("http://127.0.0.1:8766/health", {}),
+            ("http://127.0.0.1:8790/dashboard/health", {"X-Myles-Token": owner}),
+            ("http://127.0.0.1:8791/dashboard/health", {"X-Myles-Read": read}),
         )
     )
 

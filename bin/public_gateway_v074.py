@@ -368,12 +368,10 @@ class Handler(BaseHTTPRequestHandler):
         return self.send_json(status,raw,response_headers.get("Content-Type","application/json"))
 
     def proxy_public_chat(self):
-        """One-link shared chat route with an explicit bearer capability."""
+        """Shared public chat; privileged routes retain owner authentication."""
         path = self.path.split("?", 1)[0]
         if path != "/dashboard/public-chat/messages" or self.command not in {"GET", "POST"}:
             return self.send_json(405, {"ok": False, "error": "Public chat method not allowed"})
-        if not public_authorized(self.headers):
-            return self.send_json(401, {"ok": False, "error": "Myles link access required"})
         if self.command == "GET":
             status, response_headers, raw = request_local(path, "GET", None, {
                 "Accept": "application/json",

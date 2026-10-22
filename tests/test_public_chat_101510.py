@@ -55,6 +55,9 @@ class PublicChatTests(unittest.TestCase):
         threading.Thread(target=server.serve_forever,daemon=True).start()
         base=f"http://127.0.0.1:{server.server_port}"
         try:
+            with patch.object(guest_chat,"public_messages",return_value={"ok":True,"messages":[]}), patch.object(bridge,"core_json") as private_core:
+                self.assertEqual(call(base,"/dashboard/public-chat/messages")[0],200)
+                private_core.assert_not_called()
             with patch.object(guest_chat,"public_send",return_value=(200,{"ok":True,"reply":"Hello"})) as proc:
                 status,result=call(base,"/dashboard/public-chat/messages","POST",{"message":"Hi"})
                 self.assertEqual(status,200)
@@ -72,7 +75,8 @@ class PublicChatTests(unittest.TestCase):
         self.assertIn("dashboard/public-chat/messages",src)
         self.assertIn("sessionStorage.setItem('myles_public_chat_history'",src)
         self.assertIn("await exchangePair(false)",src)
-        self.assertIn("get('owner') !== '1'",src)
+        self.assertIn("params.get('owner')!=='1'",src)
+        self.assertNotIn("Capability link required",src)
         gateway_src=(Path(__file__).resolve().parents[1]/"bin"/"public_gateway_v074.py").read_text()
         self.assertIn("dashboard/public-chat/messages",gateway_src)
         self.assertIn('path == "/dashboard/guest/messages" and not',gateway_src)
