@@ -1747,11 +1747,11 @@ function renderResearchTournament(m){
   document.addEventListener('DOMContentLoaded',()=>{const box=$('chatMessages'),jump=$('chatJumpLatest');if(box)box.addEventListener('scroll',updateChatJump,{passive:true});if(jump)jump.addEventListener('click',jumpChatLatest);});
   document.addEventListener('DOMContentLoaded',init);
 
-  // The ordinary URL is the full dashboard for both authorized household users.
-  // A saved browser token restores full access without a second pairing prompt.
-  const isGuestPage = new URLSearchParams(location.search).get('guest') === '1';
+  // The shared URL is the common conversation. Private controls require the explicit owner view.
+  const queryParams = new URLSearchParams(location.search);
+  const isGuestPage = queryParams.get('shared') === '1' || queryParams.get('guest') === '1';
   const guest = {endpoint:'',token:'',busy:false};
-  function guestUrl(){return location.origin+(location.pathname||'/')+'?guest=1';}
+  function guestUrl(){return location.origin+(location.pathname||'/')+'?shared=1';}
   async function loadGuestEndpoint(){
     for(const url of ['./bridge.json?t='+Date.now(),RAW_BASE+'/bridge.json?t='+Date.now()]){
       try{
@@ -1817,7 +1817,7 @@ function renderResearchTournament(m){
       }catch(e){conversation.pop();$('guestStatus').textContent=String(e.message||e);}
       finally{renderGuestMessages(conversation);guest.busy=false;$('guestSubmit').disabled=false;}
     });
-    // ?guest=1 is the shared public conversation; ?owner=1 is the private dashboard.
+    // ?shared=1 is the shared public conversation; ?owner=1 is the private dashboard.
     return;
     guest.token=localStorage.getItem('myles_guest_chat_token')||'';
     const status=$('guestStatus');
