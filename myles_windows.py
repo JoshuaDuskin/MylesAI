@@ -124,6 +124,9 @@ def visible_windows() -> list[dict[str, object]]:
         try:
             if not user32.IsWindowVisible(hwnd):
                 return True
+            cloaked = wintypes.DWORD()
+            if ctypes.windll.dwmapi.DwmGetWindowAttribute(hwnd, 14, ctypes.byref(cloaked), ctypes.sizeof(cloaked)) == 0 and cloaked.value:
+                return True
             length = int(user32.GetWindowTextLengthW(hwnd))
             if length <= 0:
                 return True
@@ -155,6 +158,10 @@ def _matching_visible_windows(requested: str) -> list[dict[str, object]]:
     for row in visible_windows():
         title = str(row.get("MainWindowTitle") or "").casefold()
         process = Path(str(row.get("ProcessName") or "")).stem.casefold()
+        if _normalized_app_name(requested).casefold() == "xbox":
+            if process == "xboxpcapp" or (process == "applicationframehost" and title.strip() == "xbox"):
+                matches.append(row)
+            continue
         process_match = any(token in process for token in tokens)
         title_match = all(token in title for token in tokens)
         browser_host = process in {"chrome", "msedge", "firefox", "brave", "opera", "vivaldi"}
@@ -280,14 +287,24 @@ def _best_start_app(requested: str) -> dict[str, str] | None:
     return max(ranked, default=(0, 0, None), key=lambda item: (item[0], item[1]))[2]
 
 
-def _activate_window(row: dict[str, object]) -> None:
+def _activate_window(row: dict[str, object]) -> bool:
+    """Success requires the requested window to become the foreground window."""
     hwnd = int(row.get("Handle") or 0)
     if not hwnd:
-        return
+        return False
     user32 = ctypes.windll.user32
+    user32.GetForegroundWindow.restype = wintypes.HWND
+    user32.ShowWindow.argtypes = [wintypes.HWND, ctypes.c_int]
+    user32.BringWindowToTop.argtypes = [wintypes.HWND]
+    user32.SetForegroundWindow.argtypes = [wintypes.HWND]
     user32.ShowWindow(hwnd, 9)
     user32.BringWindowToTop(hwnd)
     user32.SetForegroundWindow(hwnd)
+    for _ in range(5):
+        if int(user32.GetForegroundWindow() or 0) == hwnd:
+            return True
+        time.sleep(0.1)
+    return False
 
 
 def _open_start_menu() -> str:
@@ -317,8 +334,7 @@ def launch_app_verified(app_name: str, timeout_seconds: int = 20) -> str:
     if requested.casefold() in {"start", "start menu", "windows start menu"}:
         return _open_start_menu()
     existing = _matching_visible_windows(requested)
-    if existing:
-        _activate_window(existing[0])
+    if existing and _activate_window(existing[0]):
         return f"DESKTOP_APP_LAUNCH_VERIFIED: {requested} is already visibly open; window={existing[0].get('MainWindowTitle')}."
 
     before_pids = {int(row.get("Id") or 0) for row in visible_windows()}
@@ -344,7 +360,9 @@ def launch_app_verified(app_name: str, timeout_seconds: int = 20) -> str:
         matches = _matching_visible_windows(requested)
         if matches:
             row = next((item for item in matches if int(item.get("Id") or 0) not in before_pids), matches[0])
-            _activate_window(row)
+            if not _activate_window(row):
+                time.sleep(0.75)
+                continue
             return f"DESKTOP_APP_LAUNCH_VERIFIED: Opened {requested}; visible window={row.get('MainWindowTitle')}; process={row.get('ProcessName')}; method={launch_evidence}."
         time.sleep(0.75)
     if not catalog_match:

@@ -52,6 +52,28 @@ class PublicBasicApps(unittest.TestCase):
         self.assertIn("couldn't verify", out["reply"])
         self.assertNotIn("private/path", str(out))
 
+    def test_xbox_tray_and_companion_are_not_the_xbox_app(self):
+        from myles_windows import _matching_visible_windows
+        app = {"ProcessName": "XboxPcApp.exe", "MainWindowTitle": "XBOX", "Handle": 1}
+        with patch("myles_windows.visible_windows", return_value=[
+            {"ProcessName": "XboxPcTray.exe", "MainWindowTitle": "DesktopWindowXamlSource"},
+            {"ProcessName": "ApplicationFrameHost.exe", "MainWindowTitle": "Xbox Console Companion"},
+            app,
+        ]):
+            self.assertEqual(_matching_visible_windows("Xbox"), [app])
+
+    def test_background_window_does_not_verify_launch(self):
+        from myles_windows import launch_app_verified
+        with patch("myles_windows.os.name", "nt"), \
+             patch("myles_windows._matching_visible_windows", return_value=[{"Id": 1, "Handle": 1}]), \
+             patch("myles_windows._activate_window", return_value=False), \
+             patch("myles_windows.visible_windows", return_value=[]), \
+             patch("myles_windows._best_start_app", return_value={"app_id": "Xbox", "name": "Xbox"}), \
+             patch("myles_windows._shell_open", return_value=(True, "sent")), \
+             patch("myles_windows.time.time", side_effect=[0, 0, 100]), \
+             patch("myles_windows.time.sleep"):
+            self.assertTrue(launch_app_verified("Xbox").startswith("DESKTOP_APP_LAUNCH_NOT_VERIFIED:"))
+
     def test_game_mode_prevents_public_launch(self):
         with patch("myles_game_guard.game_is_active", return_value=True), \
              patch("myles_windows.launch_app_verified") as launch:
