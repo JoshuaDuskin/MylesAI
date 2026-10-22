@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import html
+import base64
 import json
 import re
 import urllib.parse
@@ -365,8 +366,15 @@ def web_search(text: str, max_results: int = 5) -> QuickLookupResult:
     query = str(text or "").strip()
     if not query:
         return QuickLookupResult(kind="web_search", error="No search query was supplied.")
+    search_query = re.sub(
+        r"(?i)^\s*(?:please\s+)?(?:find|look\s+up|search\s+for|google)\s+(?:for\s+me\s+)?",
+        "",
+        query,
+    ).strip()
+    search_query = re.sub(r"(?i)^(?:the\s+)?(?:movie|film)\s+", "", search_query).strip()
+    search_query = search_query or query
     try:
-        url = "https://html.duckduckgo.com/html/?" + urllib.parse.urlencode({"q": query})
+        url = "https://www.bing.com/search?" + urllib.parse.urlencode({"q": search_query})
         req = urllib.request.Request(
             url,
             headers={
@@ -398,6 +406,43 @@ def web_search(text: str, max_results: int = 5) -> QuickLookupResult:
                 continue
             urls.append(href)
             rows.append(f"{len(rows)+1}. {title}\n{snippet}\n{href}".strip())
+        relevance_terms = [w for w in re.findall(r"[a-z0-9]+", search_query.lower()) if len(w) >= 4 and w not in {"this", "that", "with", "from", "where", "when", "what", "movie", "film"}]
+        ddg_text = " ".join(rows[:3]).lower()
+        if not rows or (relevance_terms and not any(term in ddg_text for term in relevance_terms)):
+            # DuckDuckGo occasionally serves a consent/anti-bot shell without
+            # result nodes. Fall back to Bing's bounded HTML result list so a
+            # simple public request such as a movie lookup still gets evidence.
+            bing_url = "https://www.bing.com/search?" + urllib.parse.urlencode({"q": search_query})
+            bing_req = urllib.request.Request(
+                bing_url,
+                headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Myles/9.4", "Accept": "text/html,application/xhtml+xml"},
+            )
+            with urllib.request.urlopen(bing_req, timeout=15) as r:
+                bing_page = r.read().decode("utf-8", errors="replace")
+            blocks = re.findall(r'(?is)<li[^>]+class=["\']b_algo["\'][^>]*>.*?</li>', bing_page)
+            rows = []
+            urls = []
+            for block in blocks[: max(1, min(int(max_results), 8))]:
+                link = re.search(r'(?is)<h2[^>]*>\s*<a[^>]+href=["\']([^"\']+)["\'][^>]*>(.*?)</a>\s*</h2>', block)
+                if not link:
+                    continue
+                href = html.unescape(link.group(1))
+                title = _strip_tags(link.group(2))
+                parsed = urllib.parse.urlparse(href)
+                encoded = urllib.parse.parse_qs(parsed.query).get("u", [""])[0]
+                if encoded.startswith("a1"):
+                    try:
+                        decoded = base64.urlsafe_b64decode(encoded[2:] + "=" * (-len(encoded[2:]) % 4)).decode("utf-8", errors="ignore")
+                        if decoded.startswith("http"):
+                            href = decoded
+                    except Exception:
+                        pass
+                snippet_m = re.search(r'(?is)<p[^>]*>(.*?)</p>', block)
+                snippet = _strip_tags(snippet_m.group(1)) if snippet_m else ""
+                if not href.startswith("http"):
+                    continue
+                urls.append(href)
+                rows.append(f"{len(rows)+1}. {title}\n{snippet}\n{href}".strip())
         if not rows:
             return QuickLookupResult(kind="web_search", error="The quick web search returned no usable results.")
         return QuickLookupResult(
