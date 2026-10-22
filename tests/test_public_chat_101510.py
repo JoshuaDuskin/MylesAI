@@ -75,7 +75,7 @@ class PublicChatTests(unittest.TestCase):
         self.assertIn("dashboard/public-chat/messages",src)
         self.assertIn("sessionStorage.setItem('myles_public_chat_history'",src)
         self.assertIn("await exchangePair(false)",src)
-        self.assertIn("!hasOwnerTrust&&params.get('owner')!=='1'",src)
+        self.assertIn("if(!hasOwnerTrust){await initPublicApp();return;}",src)
         self.assertNotIn("Capability link required",src)
         gateway_src=(Path(__file__).resolve().parents[1]/"bin"/"public_gateway_v074.py").read_text()
         self.assertIn("dashboard/public-chat/messages",gateway_src)

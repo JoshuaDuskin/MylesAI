@@ -843,19 +843,19 @@ html,body{max-width:100%;overflow-x:clip}
     <div class="modal-backdrop" data-close-modal></div>
     <div class="modal-panel">
       <div class="modal-head"><div><span class="eyebrow">DEVICE CONNECTION</span><h2>Trusted device connection</h2></div><button class="icon-btn" data-close-modal>×</button></div>
-      <p class="muted">This device reconnects automatically using its saved secure credential. Tap reconnect only if the browser needs to wake the connection.</p>
+      <p class="muted">You and your wife use this same dashboard with the same controls. Connect each device once with your household code; future visits reconnect automatically.</p>
       <label class="field pairing-advanced-field"><span>Bridge URL</span><input id="bridgeUrlInput" type="url" placeholder="https://…trycloudflare.com" /></label>
       <form id="ownerPairForm" autocomplete="on" method="post" action="" onsubmit="return false">
         <input type="text" name="username" autocomplete="username" value="Myles household owner" readonly tabindex="-1" aria-hidden="true" class="credential-username" />
-        <label class="field pairing-advanced-field"><span>Saved device credential</span><input id="bridgeTokenInput" name="password" type="password" maxlength="8" autocomplete="current-password" autocapitalize="characters" spellcheck="false" placeholder="Saved securely on this device" /></label>
+        <label class="field"><span>Household connection code</span><input id="bridgeTokenInput" name="password" type="password" maxlength="8" autocomplete="current-password" autocapitalize="characters" spellcheck="false" placeholder="Enter the same 8-character household code" /></label>
         <button type="submit" id="ownerPairSubmit" class="primary-btn">Reconnect device</button>
       </form>
       <div id="pairResult" class="pair-result"></div>
       <div class="guest-share-card">
-        <strong>Shared conversation</strong>
-        <span>Everyone using the shared link sees this same Myles conversation. No device connection is required.</span>
-        <div class="guest-share-actions"><button type="button" id="openGuestChat" class="primary-btn">Open shared chat</button><button type="button" id="copyGuestChatLink" class="secondary-btn">Copy shared chat link</button></div>
-        <div id="guestShareResult" class="pair-result"></div>
+        <strong>One household dashboard</strong>
+        <span>Use this same dashboard address on both phones. Each connected device has full household access.</span>
+        <div class="guest-share-actions"><button type="button" id="openDashboardChat" class="primary-btn">Open Chat</button><button type="button" id="copyDashboardLink" class="secondary-btn">Copy dashboard link</button></div>
+        <div id="dashboardShareResult" class="pair-result"></div>
       </div>
     </div>
   </div>
@@ -866,37 +866,6 @@ html,body{max-width:100%;overflow-x:clip}
     .guest-share-card strong{font-size:12px;letter-spacing:-.01em}
     .guest-share-card span{font-size:10px;line-height:1.45;color:#6e6e73}
     .guest-share-actions{display:flex;flex-wrap:wrap;gap:8px}
-    #guestShell{display:none}
-    body.guest-chat-mode .app-shell,body.guest-chat-mode #pairModal{display:none!important}
-    body.guest-chat-mode #guestShell{display:flex;max-width:750px;min-height:100dvh;margin:0 auto;flex-direction:column;padding:24px 16px;color:#e7ecfa;background:#0b1020;gap:14px}
-    .guest-header{padding:14px 4px;border-bottom:1px solid #28324a}
-    .guest-header small{letter-spacing:.18em;color:#9daac6}.guest-header h1{font-size:27px;margin:7px 0}
-    .guest-box{padding:15px;border:1px solid #303b52;border-radius:16px;background:#111a2e}
-    #guestConversation{min-height:42vh;max-height:55vh;overflow-y:auto;display:flex;flex-direction:column;gap:12px}
-    .guest-bubble{border:1px solid #2c3752;background:#1b2741;padding:12px 14px;border-radius:16px;white-space:pre-wrap;overflow-wrap:anywhere;max-width:92%;align-self:flex-start}
-    .guest-bubble.mine{background:#444ad8;border-color:#5b62e4;align-self:flex-end}
-    #guestForm{display:flex;gap:8px;align-items:stretch}
-    #guestText{flex:1;min-height:66px;resize:vertical;min-width:0;border-radius:14px;padding:12px;background:#111a2e;color:#fff;border:1px solid #3e4a66}
-    #guestSubmit{border:0;border-radius:14px;padding:12px 18px;background:#6763ed;color:white;font-weight:650}
-    #guestInviteCode{width:100%;padding:12px;background:#111a2e;border:1px solid #3e4a66;border-radius:12px;color:#fff;text-transform:uppercase}
-    #guestStatus{color:#bdc8dd;min-height:22px}
-
-    /* Shared chat follows the dashboard appearance instead of a separate navy theme. */
-    body.guest-chat-mode #guestShell{background:#f2f3f7;color:#1c1c1e}
-    .guest-header{border-color:#d1d1d6}
-    .guest-header small,#guestStatus{color:#6e6e73}
-    .guest-box{background:#fff;border-color:#d1d1d6}
-    .guest-bubble{background:#f2f2f7;color:#1c1c1e;border-color:#e5e5ea}
-    .guest-bubble.mine{background:#e5e5ea;color:#1c1c1e;border-color:#d1d1d6}
-    #guestText,#guestInviteCode{background:#fff;color:#1c1c1e;border-color:#d1d1d6}
-    #guestSubmit{background:#343434;color:#fff}
-    body.theme-dark.guest-chat-mode{background:#000!important}
-    body.theme-dark.guest-chat-mode #guestShell{background:#000;color:#f5f5f7}
-    body.theme-dark .guest-box{background:#1c1c1e;border-color:#38383a}
-    body.theme-dark .guest-bubble{background:#2c2c2e;color:#f5f5f7;border-color:#38383a}
-    body.theme-dark .guest-bubble.mine{background:#3a3a3c;border-color:#545458}
-    body.theme-dark .guest-header{border-color:#38383a}
-    body.theme-dark .guest-header small,body.theme-dark #guestStatus{color:#a1a1a6}
     .ios-tabbar{display:none}
     .disabled-live-panel{display:none!important}
     @media(max-width:780px){
@@ -1288,13 +1257,7 @@ html,body{max-width:100%;overflow-x:clip}
       .chat-messages{max-height:calc(100dvh - 270px)!important}
     }
   </style>
-  <section id="guestShell" aria-label="Myles shared chat">
-    <header class="guest-header"><small>MYLES · SHARED CHAT</small><h1>Talk with Myles</h1><p>One shared conversation. Everyone with this link sees the same messages.</p></header>
-    <div id="guestPairBox" class="guest-box hidden"><label for="guestInviteCode">Legacy 8-character invitation</label><input id="guestInviteCode" autocomplete="off" autocapitalize="characters" maxlength="8" placeholder="Enter invitation code" /><button id="guestPairBtn" class="primary-btn" style="margin-top:12px" type="button">Connect chat</button></div>
-    <div id="guestConversation" class="guest-box" role="log" aria-live="polite"></div>
-    <form id="guestForm"><textarea id="guestText" maxlength="2500" placeholder="Ask Myles anything…" aria-label="Message Myles"></textarea><button id="guestSubmit" type="submit">Send</button></form>
-    <div id="guestStatus" role="status"></div>
-  </section>
+
 
   <script>
 (() => {
@@ -1328,6 +1291,7 @@ html,body{max-width:100%;overflow-x:clip}
   const safe = (v, fb='—') => v === undefined || v === null || v === '' ? fb : String(v);
   const escapeHtml = v => safe(v,'').replace(/[&<>'"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]));
   const bool = v => v === true || v === 1 || v === '1' || v === 'true' || v === 'on' || v === 'enabled';
+  const round = (value, digits=2) => { const scale=10**digits; return Math.round(Number(value)*scale)/scale; };
   const num = v => { if (typeof v === 'number' && Number.isFinite(v)) return v; if (typeof v === 'string') { const n = Number(v.replace(/[$,%]/g,'').trim()); return Number.isFinite(n) ? n : null; } return null; };
   const get = (obj,path) => path.split('.').reduce((a,k)=>a && a[k] !== undefined ? a[k] : undefined,obj);
   const first = (obj,paths,fb=undefined) => { for (const p of paths) { const v=get(obj,p); if(v!==undefined && v!==null && v!=='') return v; } return fb; };
@@ -1441,6 +1405,7 @@ html,body{max-width:100%;overflow-x:clip}
       }
       else state.bridge.healthy=false;
       if(show){$('pairResult').textContent=state.bridge.healthy?`Connected${h?.myles?.data?.version?` · Myles ${h.myles.data.version}`:''}.`:'Tower is online. Enter the saved recovery code once; this device will retain it.';$('pairResult').className=state.bridge.healthy?'pair-result ok':'pair-result bad';}
+      if(state.bridge.healthy&&state.bridge.token)state.publicMode=false;
       renderBridge();return state.bridge.reachable;
     }catch(e){state.bridge.reachable=false;state.bridge.healthy=false;state.bridge.checkedAt=new Date();state.bridge.error=e.message||String(e);if(show){$('pairResult').textContent=`Could not reach tower: ${state.bridge.error}`;$('pairResult').className='pair-result bad';}renderBridge();return false;}
   }
@@ -1495,9 +1460,9 @@ html,body{max-width:100%;overflow-x:clip}
   function updateChatJump(){const box=$('chatMessages'),button=$('chatJumpLatest');if(!box||!button)return;const distance=box.scrollHeight-box.scrollTop-box.clientHeight;button.classList.toggle('hidden',distance<90);}
   function jumpChatLatest(){const box=$('chatMessages');if(box)box.scrollTo({top:box.scrollHeight,behavior:'smooth'});}
   function renderMessages(){const box=$('chatMessages');if(!box)return;const distance=box.scrollHeight-box.scrollTop-box.clientHeight;const shouldStayAtBottom=!box.dataset.rendered||distance<90;const sys=state.publicMode?'<div class="chat-system">Myles conversation · history stays in sync on every device.</div>':'<div class="chat-system">Connected to the tower conversation. Replies are not generated in this browser.</div>';const html=state.messages.slice(-100).map(m=>{const owner=['owner','user','dashboard','console'].includes(m.role);return `<div class="msg ${owner?'owner':'myles'}"><div class="msg-bubble">${escapeHtml(m.text)}</div><div class="msg-meta">${owner?'You':'Myles'}${m.ts?` · ${timeAgo(m.ts)}`:''}</div></div>`;}).join('');box.innerHTML=sys+html;box.dataset.rendered='1';if(shouldStayAtBottom)box.scrollTop=box.scrollHeight;updateChatJump();}
-  async function sendMessage(text){if(state.publicMode){const d=await fetchJson(`${state.publicEndpoint||guest.endpoint}/dashboard/public-chat/messages`,{method:'POST',headers:publicHeaders({'Content-Type':'application/json'}),body:JSON.stringify({message:text})},120000);state.messages=normalizeMessages(d);renderMessages();renderChatPreview();return d;}if(!state.bridge.healthy)throw new Error('Device bridge is not connected');const body={message:text};const d=await fetchJson(`${bridgeUrl()}/dashboard/messages`,{method:'POST',headers:bridgeHeaders({'Content-Type':'application/json'}),body:JSON.stringify(body)},120000);await pollMessages();return d;}
+  async function sendMessage(text){if(state.publicMode){const d=await fetchJson(`${state.publicEndpoint||guest.endpoint}/dashboard/public-chat/messages`,{method:'POST',headers:publicHeaders({'Content-Type':'application/json'}),body:JSON.stringify({message:text})},120000);state.messages=normalizeMessages(d);sessionStorage.setItem('myles_public_chat_history',JSON.stringify(state.messages));renderMessages();renderChatPreview();return d;}if(!state.bridge.healthy)throw new Error('Device bridge is not connected');const body={message:text};const d=await fetchJson(`${bridgeUrl()}/dashboard/messages`,{method:'POST',headers:bridgeHeaders({'Content-Type':'application/json'}),body:JSON.stringify(body)},120000);await pollMessages();return d;}
   async function command(text,label){if(!state.bridge.healthy){openPairModal();$('pairResult').textContent=`Pair the tower first, then I can send: ${label||text}`;return;}showView('chat');$('chatInput').value=text;resizeChat();try{await sendMessage(text);$('chatInput').value='';resizeChat();}catch(e){state.messages.push({role:'myles',text:`Dashboard error: ${e.message||e}`,ts:new Date().toISOString()});renderMessages();}}
-  async function setRuntimeControl(kind,enabled){if(!state.bridge.healthy){openPairModal();return;}const ids=kind==='game-mode'?['overviewGameOn','overviewGameOff']:['overviewContinuousOn','overviewContinuousOff'];ids.forEach(id=>{if($(id))$(id).disabled=true;});try{await quantPost(`/dashboard/control/${kind}`,{enabled:!!enabled});await new Promise(r=>setTimeout(r,500));await fetchStatus();}catch(e){alert(`${kind==='game-mode'?'Game Mode':'Continuous improvement'} control failed: ${e.message||e}`);}finally{ids.forEach(id=>{if($(id))$(id).disabled=false;});}}
+  async function setRuntimeControl(kind,enabled){if(state.publicMode||!state.bridge.healthy){openPairModal();return;}const ids=kind==='game-mode'?['overviewGameOn','overviewGameOff']:['overviewContinuousOn','overviewContinuousOff'];ids.forEach(id=>{if($(id))$(id).disabled=true;});try{await quantPost(`/dashboard/control/${kind}`,{enabled:!!enabled});await new Promise(r=>setTimeout(r,500));await fetchStatus();}catch(e){alert(`${kind==='game-mode'?'Game Mode':'Continuous improvement'} control failed: ${e.message||e}`);}finally{ids.forEach(id=>{if($(id))$(id).disabled=false;});}}
 
   async function quantGet(){if(!state.bridge.healthy)return null;const d=await fetchJson(`${bridgeUrl()}/dashboard/quant/config`,{headers:bridgeHeaders()},8000);state.quantConfig=d?.config||null;state.quantMeta=d||null;renderQuantConfig();return d;}
   async function quantPost(path,body){if(!state.bridge.healthy)throw new Error('Device bridge is not connected');return await fetchJson(`${bridgeUrl()}${path}`,{method:'POST',headers:bridgeHeaders({'Content-Type':'application/json'}),body:JSON.stringify(body)},120000);}
@@ -1545,7 +1510,7 @@ html,body{max-width:100%;overflow-x:clip}
   function renderQuantConfig(){const c=state.quantConfig;if(!c){if($('quantMarketSettings'))$('quantMarketSettings').innerHTML='<div class="empty-row">Pair the tower to load Quant configuration.</div>';renderQuantControlState();return;}const markets=state.quantMeta?.markets||Object.keys(c.market_settings||{});if($('quantMarketSettings'))$('quantMarketSettings').innerHTML=markets.map(sym=>{const row=c.market_settings?.[sym]||{};return `<label class="asset-config-chip"><input type="checkbox" data-q-market="${escapeHtml(sym)}" ${row.enabled!==false?'checked':''}><span>${escapeHtml(sym.split('/')[0])}</span></label>`;}).join('');const botOn=c.paper?.auto_trading_enabled!==false&&c.research_exploration?.paper_lab_enabled!==false,researchOn=c.research_exploration?.continuous_market_research_enabled!==false&&c.research_exploration?.enabled!==false;if($('quantAutoTrading'))$('quantAutoTrading').checked=botOn;const botBtn=$('quantAutoToggleButton');if(botBtn){botBtn.classList.toggle('on',botOn);setText('quantAutoToggleText',botOn?'STOP PAPER BOT':'START PAPER BOT');}const researchBtn=$('researchContinuousToggle');if(researchBtn){researchBtn.textContent=researchOn?'PAUSE RESEARCH':'START RESEARCH';researchBtn.className=researchOn?'secondary-btn':'primary-btn';}setText('researchContinuousState',researchOn?'RUNNING':'PAUSED');setText('researchContinuousDetail',researchOn?'Market intelligence, candidate rotation and the research tournament are refreshing continuously.':'Research refresh and candidate rotation are paused. The paper bot remains a separate control.');const badge=$('researchModeBadge');if(badge){badge.textContent=researchOn?'RUNNING':'PAUSED';badge.className=`status-chip ${researchOn?'live':'warn'}`;}if($('quantTimeframe'))$('quantTimeframe').value=c.timeframe||'5m';if($('quantEntryCooldown'))$('quantEntryCooldown').value=String(c.research_exploration?.entry_cooldown_bars??c.paper?.entry_cooldown_bars??0);if($('quantMaxPosition'))$('quantMaxPosition').value=c.risk?.max_position_usd??0;if($('quantRiskTrade'))$('quantRiskTrade').value=c.risk?.max_risk_per_trade_pct??.5;if($('quantLeverage'))$('quantLeverage').value=c.risk?.max_notional_leverage??1.5;if($('quantStop'))$('quantStop').value=c.risk?.stop_loss_pct??1.5;if($('quantTake'))$('quantTake').value=c.risk?.take_profit_pct??3;if($('quantStylePreset'))$('quantStylePreset').value='custom';renderQuantControlState();renderManualTrade();}
   function collectQuantConfig(){const base=JSON.parse(JSON.stringify(state.quantConfig||{}));base.timeframe=$('quantTimeframe')?.value||base.timeframe||'5m';const cooldown=Math.max(0,Math.round(qv('quantEntryCooldown',base.research_exploration?.entry_cooldown_bars??base.paper?.entry_cooldown_bars??0))),botOn=$('quantAutoTrading')?$('quantAutoTrading').checked:base.paper?.auto_trading_enabled!==false;base.paper={...(base.paper||{}),auto_trading_enabled:botOn,entry_cooldown_bars:cooldown};base.research_exploration={...(base.research_exploration||{}),paper_lab_enabled:botOn,entry_cooldown_bars:cooldown};base.market_settings=base.market_settings||{};$$('[data-q-market]').forEach(cb=>{const sym=cb.dataset.qMarket,prev=base.market_settings[sym]||{};base.market_settings[sym]={...prev,enabled:cb.checked,auto_trade_enabled:prev.auto_trade_enabled!==false,paper_strategy:prev.paper_strategy||'trend_momentum'};});base.risk={...(base.risk||{}),max_risk_per_trade_pct:qv('quantRiskTrade',.5),max_notional_leverage:qv('quantLeverage',1.5),max_position_usd:qv('quantMaxPosition',base.risk?.max_position_usd||0),stop_loss_pct:qv('quantStop',1.5),take_profit_pct:qv('quantTake',3)};return base;}
   async function saveQuantConfig(){const box=$('quantConfigResult');try{box.textContent='Saving Paper Lab settings and refreshing validation…';box.className='quant-result';const d=await quantPost('/dashboard/quant/config',{config:collectQuantConfig()});state.quantConfig=d.config;renderQuantConfig();box.textContent='Saved. Paper Lab settings applied. Hidden fee/stress assumptions were preserved; live trading remains locked.';box.className='quant-result ok';setTimeout(fetchStatus,1600);}catch(e){box.textContent=`Save failed: ${e.message||e}`;box.className='quant-result bad';}}
-  async function setQuantControl(kind,forced=null){if(!state.quantConfig)await quantGet();const flags=quantControlFlags(),current=kind==='research'?flags.research:flags.bot,next=forced===null?!current:!!forced,buttons=(kind==='research'?[$('researchContinuousToggle'),$('overviewResearchOn'),$('overviewResearchOff')]:[$('quantAutoToggleButton'),$('overviewPaperBotOn'),$('overviewPaperBotOff')]).filter(Boolean),box=$('quantConfigResult');try{buttons.forEach(b=>b.disabled=true);const cfg=JSON.parse(JSON.stringify(state.quantConfig||{}));cfg.research_exploration={...(cfg.research_exploration||{})};cfg.paper={...(cfg.paper||{})};if(kind==='research'){cfg.research_exploration.enabled=next;cfg.research_exploration.continuous_market_research_enabled=next;}else{cfg.paper.auto_trading_enabled=next;cfg.research_exploration.paper_lab_enabled=next;}const d=await quantPost('/dashboard/quant/config',{config:cfg});state.quantConfig=d.config||cfg;renderQuantConfig();if(box){box.textContent=kind==='research'?(next?'Continuous market research started. The paper bot setting was not changed.':'Continuous market research paused. The paper bot setting was not changed.'):(next?'Paper trading bot started. Live trading remains owner-gated and off.':'Paper trading bot paused. Continuous market research was not changed.');box.className='quant-result ok';}await new Promise(r=>setTimeout(r,900));await fetchStatus();}catch(e){if(box){box.textContent=`${kind==='research'?'Research':'Paper bot'} toggle failed: ${e.message||e}`;box.className='quant-result bad';}}finally{buttons.forEach(b=>b.disabled=false);renderQuantConfig();}}
+  async function setQuantControl(kind,forced=null){if(state.publicMode||!state.bridge.token){openPairModal();return;}if(!state.quantConfig)await quantGet();const flags=quantControlFlags(),current=kind==='research'?flags.research:flags.bot,next=forced===null?!current:!!forced,buttons=(kind==='research'?[$('researchContinuousToggle'),$('overviewResearchOn'),$('overviewResearchOff')]:[$('quantAutoToggleButton'),$('overviewPaperBotOn'),$('overviewPaperBotOff')]).filter(Boolean),box=$('quantConfigResult');try{buttons.forEach(b=>b.disabled=true);const cfg=JSON.parse(JSON.stringify(state.quantConfig||{}));cfg.research_exploration={...(cfg.research_exploration||{})};cfg.paper={...(cfg.paper||{})};if(kind==='research'){cfg.research_exploration.enabled=next;cfg.research_exploration.continuous_market_research_enabled=next;}else{cfg.paper.auto_trading_enabled=next;cfg.research_exploration.paper_lab_enabled=next;}const d=await quantPost('/dashboard/quant/config',{config:cfg});state.quantConfig=d.config||cfg;renderQuantConfig();if(box){box.textContent=kind==='research'?(next?'Continuous market research started. The paper bot setting was not changed.':'Continuous market research paused. The paper bot setting was not changed.'):(next?'Paper trading bot started. Live trading remains owner-gated and off.':'Paper trading bot paused. Continuous market research was not changed.');box.className='quant-result ok';}await new Promise(r=>setTimeout(r,900));await fetchStatus();}catch(e){if(box){box.textContent=`${kind==='research'?'Research':'Paper bot'} toggle failed: ${e.message||e}`;box.className='quant-result bad';}}finally{buttons.forEach(b=>b.disabled=false);renderQuantConfig();}}
   const togglePaperBot=()=>setQuantControl('bot');
   const toggleMarketResearch=()=>setQuantControl('research');
   const togglePaperLab=togglePaperBot;
@@ -1764,7 +1729,7 @@ function renderResearchTournament(m){
   function showView(name){state.view=name;if(window.innerWidth<=780){document.documentElement.scrollLeft=0;document.body.scrollLeft=0;}document.body.classList.toggle('chat-active',name==='chat');$$('.view').forEach(v=>v.classList.toggle('active',v.dataset.viewPanel===name));$$('[data-view]').forEach(b=>b.classList.toggle('active',b.dataset.view===name));const titles={overview:['OWNER VIEW','Overview'],chat:['DIRECT LINE','Chat'],trading:['MYLES QUANT','Trading Bot'],tasks:['OWNER WORK','Tasks'],systems:['TOWER + TOOLS','Systems'],activity:['AUDIT TRAIL','Activity']};setText('pageEyebrow',titles[name]?.[0]||'MYLES');setText('pageTitle',titles[name]?.[1]||'Control Center');$('sidebar').classList.remove('open');if(name==='chat'&&state.bridge.healthy)pollMessages();if(name==='trading'){const m=tradeMetrics();requestAnimationFrame(()=>{const a=activePaperView(m);drawChart('tradeChart','tradeChartEmpty',activeSimulationSeries(m,a),{format:'money',label:a.title,emptyText:'No Paper Lab trades yet.'});});if(state.bridge.healthy&&!state.quantConfig)quantGet().catch(()=>{});if(state.bridge.healthy)liveGet().catch(()=>{});}}
   function showTradeTab(name){state.tradeTab=name;const groups={tradeOverview:['tradeOverview','tradePositions'],tradeStrategy:['tradeConfigure'],tradeWallet:['tradeFunding']};const panels=groups[name]||[name];$$('.trade-tab').forEach(b=>b.classList.toggle('active',b.dataset.tradeTab===name));$$('.trade-panel').forEach(p=>p.classList.toggle('active',panels.includes(p.dataset.tradePanel)));if(panels.includes('tradeOverview')){const m=tradeMetrics();requestAnimationFrame(()=>{const a=activePaperView(m);drawChart('tradeChart','tradeChartEmpty',activeSimulationSeries(m,a),{format:'money',label:a.title,emptyText:'No Paper Lab trades yet.'});});}if(panels.includes('tradeConfigure'))requestAnimationFrame(renderBotPerformance);if(panels.includes('tradeFunding')||panels.includes('tradePositions'))liveGet().catch(()=>{});}
 
-  function openPairModal(){location.assign(guestUrl());}
+  function openPairModal(){$('pairModal').classList.remove('hidden');$('bridgeUrlInput').value=bridgeUrl();}
   async function submitPairCode(closeOnSuccess){
     let code=$('bridgeTokenInput').value.trim().toUpperCase();
     if(!code){
@@ -1794,12 +1759,12 @@ function renderResearchTournament(m){
   function bindChartRangeRefresh(){document.addEventListener('click',e=>{const b=e.target.closest('[data-trade-range],[data-bot-range]');if(!b)return;if(b.dataset.tradeRange){state.tradeRange=b.dataset.tradeRange;refreshFundChart('trade');}if(b.dataset.botRange){state.botChart.range=b.dataset.botRange;refreshFundChart('bot');}});}
   function scheduleStatusPoll(){clearTimeout(state.refreshTimer);const ms=document.hidden?30000:(state.view==='trading'?5000:REFRESH_MS);state.refreshTimer=setTimeout(async()=>{await fetchStatus();scheduleStatusPoll();},ms);}
   function scheduleChatPoll(){clearTimeout(state.chatTimer);const ms=document.hidden?30000:(state.view==='chat'?CHAT_POLL_MS:5000);state.chatTimer=setTimeout(async()=>{if(state.bridge.healthy&&state.view==='chat')await pollMessages();scheduleChatPoll();},ms);}
-  function bindGuestShare(){
-    $('openGuestChat')?.addEventListener('click',()=>{location.assign(guestUrl());});
-    $('copyGuestChatLink')?.addEventListener('click',async()=>{
-      const url=guestUrl();
-      const out=$('guestShareResult');
-      try{await navigator.clipboard.writeText(url);if(out){out.textContent='Guest chat link copied.';out.className='pair-result ok';}}
+  function bindDashboardShare(){
+    $('openDashboardChat')?.addEventListener('click',()=>{closePairModal();showView('chat');});
+    $('copyDashboardLink')?.addEventListener('click',async()=>{
+      const url=dashboardUrl();
+      const out=$('dashboardShareResult');
+      try{await navigator.clipboard.writeText(url);if(out){out.textContent='Dashboard link copied. Use the same address on both phones.';out.className='pair-result ok';}}
       catch(_){if(out){out.textContent=url;out.className='pair-result ok';}}
     });
   }
@@ -1810,9 +1775,7 @@ function renderResearchTournament(m){
     state.publicMode=true;
     state.bridge.reachable=false;
     state.bridge.healthy=false;
-    document.body.classList.remove('guest-chat-mode');
-    $('guestShell').style.display='none';
-    ['openPairing','overviewPairBtn','pairBridge'].forEach(id=>{const el=$(id);if(el)el.style.display='none';});
+    bindDashboardShare();
     setText('pageEyebrow','MYLES');
     setText('chatStatus','Connected');
     setText('chatBadge','CONNECTED');
@@ -1831,17 +1794,15 @@ function renderResearchTournament(m){
     scheduleStatusPoll();
     scheduleChatPoll();
   }
-  async function init(){if(isGuestPage){await initGuestChat();return;}const params=new URLSearchParams(location.search);const hasOwnerTrust=!!(localStorage.getItem('myles_bridge_token')||cookieGet('myles_bridge_token')||localStorage.getItem('myles_bridge_pair_code'));if(!hasOwnerTrust&&params.get('owner')!=='1'){await initPublicApp();return;}loadPairing();const savedWalletMode=localStorage.getItem('myles_wallet_connection_mode');if(savedWalletMode&&$('walletConnectionMode'))$('walletConnectionMode').value=savedWalletMode;bind();bindGuestShare();renderAll();await discoverBridge();if(!state.bridge.url&&state.bridge.discovered)$('bridgeUrlInput').value=state.bridge.discovered;if(bridgeUrl()&&(state.bridge.token||state.bridge.recoveryCode))await testBridge(false);let recovered=false;if(!state.bridge.token&&!state.bridge.recoveryCode&&bridgeUrl())recovered=await recoverLocalPairing(false);if(!recovered&&!state.bridge.token&&!state.bridge.recoveryCode&&bridgeUrl())recovered=await recoverSavedPairing(false);if(!recovered&&!state.bridge.token&&!state.bridge.recoveryCode){showView('chat');openPairModal();$('pairResult').textContent='Owner controls are available only in the explicit owner view.';}await fetchStatus();if(state.bridge.healthy){await pollMessages();await quantGet().catch(()=>{});await liveGet().catch(()=>{});}scheduleStatusPoll();scheduleChatPoll();state.chart.timer=setInterval(()=>{if(!document.hidden&&state.view==='trading'&&state.tradeTab==='tradeManual'&&state.bridge.healthy)loadMarketChart();},20000);state.liveTimer=setInterval(()=>{if(!document.hidden&&state.bridge.healthy&&state.view==='trading')liveGet().catch(()=>{});},20000);document.addEventListener('visibilitychange',()=>{scheduleStatusPoll();scheduleChatPoll();});}
+  async function init(){const params=new URLSearchParams(location.search);let legacyLink=false;['shared','guest','owner'].forEach(key=>{if(params.has(key)){params.delete(key);legacyLink=true;}});if(legacyLink)history.replaceState(null,'',location.pathname+(params.toString()?'?'+params.toString():''));const hasOwnerTrust=!!(localStorage.getItem('myles_bridge_token')||cookieGet('myles_bridge_token')||localStorage.getItem('myles_bridge_pair_code'));if(!hasOwnerTrust){await initPublicApp();return;}loadPairing();const savedWalletMode=localStorage.getItem('myles_wallet_connection_mode');if(savedWalletMode&&$('walletConnectionMode'))$('walletConnectionMode').value=savedWalletMode;bind();bindDashboardShare();renderAll();await discoverBridge();if(!state.bridge.url&&state.bridge.discovered)$('bridgeUrlInput').value=state.bridge.discovered;if(bridgeUrl()&&(state.bridge.token||state.bridge.recoveryCode))await testBridge(false);let recovered=false;if(!state.bridge.token&&!state.bridge.recoveryCode&&bridgeUrl())recovered=await recoverLocalPairing(false);if(!recovered&&!state.bridge.token&&!state.bridge.recoveryCode&&bridgeUrl())recovered=await recoverSavedPairing(false);if(!recovered&&!state.bridge.token&&!state.bridge.recoveryCode){showView('chat');openPairModal();$('pairResult').textContent='Connect this device with the same household code for full access.';}await fetchStatus();if(state.bridge.healthy){await pollMessages();await quantGet().catch(()=>{});await liveGet().catch(()=>{});}scheduleStatusPoll();scheduleChatPoll();state.chart.timer=setInterval(()=>{if(!document.hidden&&state.view==='trading'&&state.tradeTab==='tradeManual'&&state.bridge.healthy)loadMarketChart();},20000);state.liveTimer=setInterval(()=>{if(!document.hidden&&state.bridge.healthy&&state.view==='trading')liveGet().catch(()=>{});},20000);document.addEventListener('visibilitychange',()=>{scheduleStatusPoll();scheduleChatPoll();});}
 
   document.addEventListener('DOMContentLoaded',()=>{const box=$('chatMessages'),jump=$('chatJumpLatest');if(box)box.addEventListener('scroll',updateChatJump,{passive:true});if(jump)jump.addEventListener('click',jumpChatLatest);});
   document.addEventListener('DOMContentLoaded',()=>{applyTheme(localStorage.getItem('myles_theme')||'light');$('themeToggle')?.addEventListener('click',()=>applyTheme(document.body.classList.contains('theme-dark')?'light':'dark'));});
   document.addEventListener('DOMContentLoaded',init);
 
-  // The shared URL is the common conversation. Private controls require the explicit owner view.
-  const queryParams = new URLSearchParams(location.search);
-  const isGuestPage = queryParams.get('shared') === '1' || queryParams.get('guest') === '1';
+  // Every household link opens the same dashboard; device trust selects access.
   const guest = {endpoint:'',token:'',busy:false};
-  function guestUrl(){const access=new URLSearchParams(location.search).get('access')||localStorage.getItem('myles_public_access')||'';return location.origin+(location.pathname||'/')+(access?`?access=${encodeURIComponent(access)}`:'?shared=1');}
+  function dashboardUrl(){return location.origin+(location.pathname||'/');}
   async function loadGuestEndpoint(){
     for(const url of ['./bridge.json?t='+Date.now(),RAW_BASE+'/bridge.json?t='+Date.now()]){
       try{
@@ -1852,136 +1813,6 @@ function renderResearchTournament(m){
     }
     throw new Error('Myles tower connection is not available');
   }
-  function renderGuestMessages(rows){
-    const box=$('guestConversation');box.replaceChildren();
-    if(!rows.length){box.textContent='No shared messages yet. Start a conversation with Myles.';return;}
-    rows.forEach(row=>{
-      if(!['user','assistant'].includes(row.role))return;
-      const el=document.createElement('div');
-      el.className='guest-bubble'+(row.role==='user'?' mine':'');
-      el.textContent=String(row.content||'').slice(0,2500);
-      box.appendChild(el);
-    });
-    box.scrollTop=box.scrollHeight;
-  }
-  async function guestLoadMessages(){
-    if(!guest.endpoint||!guest.token)return;
-    const data=await fetchJson(guest.endpoint+'/dashboard/guest/messages',
-      {headers:{'X-Myles-Guest':guest.token}},8000);
-    renderGuestMessages(data.messages||[]);
-  }
-  async function initGuestChat(){
-    document.body.classList.add('guest-chat-mode');
-    $('guestPairBox').classList.add('hidden');
-    $('guestStatus').textContent='Shared chat · owner controls stay private';
-    document.querySelector('.guest-header p').textContent='One shared conversation. Everyone with this link sees the same messages.';
-    const ownerLink=document.createElement('a');
-    ownerLink.href=(location.pathname||'/')+'?owner=1';ownerLink.textContent='Owner controls';
-    ownerLink.style.color='#9bb2ff';
-    document.querySelector('.guest-header').appendChild(ownerLink);
-    let conversation=[];
-    try{
-      await loadGuestEndpoint();
-      const shared=await fetchJson(guest.endpoint+'/dashboard/public-chat/messages',{headers:{Accept:'application/json'}},12000);
-      conversation=Array.isArray(shared.messages)?shared.messages.slice(-60).filter(x=>x&&['user','assistant'].includes(x.role)&&typeof x.content==='string'):[];
-    }catch(e){$('guestStatus').textContent='Shared chat unavailable: '+String(e.message||e);}
-    renderGuestMessages(conversation);
-    $('guestForm').addEventListener('submit',async event=>{
-      event.preventDefault();
-      const message=String($('guestText').value||'').trim();
-      if(guest.busy||!message)return;
-      guest.busy=true;$('guestSubmit').disabled=true;
-      conversation.push({role:'user',content:message});
-      renderGuestMessages(conversation);
-      $('guestStatus').textContent='Myles is responding…';
-      try{
-        if(!guest.endpoint)await loadGuestEndpoint();
-        const out=await fetchJson(guest.endpoint+'/dashboard/public-chat/messages',{
-          method:'POST',headers:{'Content-Type':'application/json'},
-          body:JSON.stringify({message})},90000);
-        if(!out.ok||!out.reply)throw new Error('No response from Myles');
-        conversation=Array.isArray(out.messages)?out.messages.slice(-60):[...conversation,{role:'assistant',content:out.reply}].slice(-60);
-        sessionStorage.setItem('myles_public_chat_history',JSON.stringify(conversation));
-        $('guestText').value='';
-        $('guestStatus').textContent='Shared chat · everyone sees this conversation';
-      }catch(e){conversation.pop();$('guestStatus').textContent=String(e.message||e);}
-      finally{renderGuestMessages(conversation);guest.busy=false;$('guestSubmit').disabled=false;}
-    });
-    // ?shared=1 is the shared public conversation; ?owner=1 is the private dashboard.
-    return;
-    guest.token=localStorage.getItem('myles_guest_chat_token')||'';
-    const status=$('guestStatus');
-    try{await loadGuestEndpoint();}
-    catch(e){status.textContent=String(e.message||e);return;}
-    if(guest.token){
-      try{await guestLoadMessages();$('guestPairBox').classList.add('hidden');
-          status.textContent='Connected · Chat only';}
-      catch(_){guest.token='';localStorage.removeItem('myles_guest_chat_token');}
-    }
-    $('guestPairBtn').addEventListener('click',async()=>{
-      if(guest.busy)return;
-      guest.busy=true;
-      status.textContent='Connecting guest chat…';
-      try{
-        const code=String($('guestInviteCode').value||'').trim().toUpperCase();
-        if(!/^[A-Z0-9]{8}$/.test(code))throw new Error('Enter the 8-character invitation code');
-        const r=await fetchJson(guest.endpoint+'/dashboard/guest/pair',{
-          method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({code})},8500);
-        if(r.role!=='guest_chat_only'||!r.token)throw new Error('Guest access was not granted');
-        guest.token=r.token;
-        localStorage.setItem('myles_guest_chat_token',guest.token);
-        $('guestInviteCode').value='';
-        $('guestPairBox').classList.add('hidden');
-        await guestLoadMessages();
-        status.textContent='Connected · Chat only';
-      }catch(e){status.textContent=String(e.message||e);}
-      finally{guest.busy=false;}
-    });
-    $('guestForm').addEventListener('submit',async event=>{
-      event.preventDefault();
-      const message=String($('guestText').value||'').trim();
-      if(!guest.token){status.textContent='Enter a guest invitation first.';return;}
-      if(guest.busy||!message)return;
-      guest.busy=true;$('guestSubmit').disabled=true;
-      status.textContent='Myles is responding…';
-      try{
-        const out=await fetchJson(guest.endpoint+'/dashboard/guest/messages',{
-          method:'POST',headers:{'Content-Type':'application/json','X-Myles-Guest':guest.token},
-          body:JSON.stringify({message})},90000);
-        renderGuestMessages(out.messages||[]);
-        $('guestText').value='';status.textContent='Connected · Chat only';
-      }catch(e){
-        if(e.status===401){guest.token='';localStorage.removeItem('myles_guest_chat_token');$('guestPairBox').classList.remove('hidden');}
-        status.textContent=String(e.message||e);
-      }finally{guest.busy=false;$('guestSubmit').disabled=false;}
-    });
-  }
-  function bindGuestOwnerControls(){
-    $('makeGuestInvite')?.addEventListener('click',async()=>{
-      const out=$('guestInviteResult');
-      if(!state.bridge.healthy||!state.bridge.token){out.textContent='Connect your owner device first.';return;}
-      out.textContent='Generating a one-time chat invitation…';
-      try{
-        const result=await fetchJson(bridgeUrl()+'/dashboard/guest/invite',{
-          method:'POST',headers:bridgeHeaders({'Content-Type':'application/json'}),
-          body:'{}'},12000);
-        out.textContent='Share this link:\n'+guestUrl()+'\n\nGuest code: '+result.code+
-          '\nExpires in 20 minutes · Chat-only access; no owner controls.';
-      }catch(e){out.textContent='Could not create invitation: '+String(e.message||e);}
-    });
-    $('revokeGuestChat')?.addEventListener('click',async()=>{
-      const out=$('guestInviteResult');
-      if(!state.bridge.healthy||!state.bridge.token){out.textContent='Owner pairing required.';return;}
-      try{
-        await fetchJson(bridgeUrl()+'/dashboard/guest/revoke',{
-          method:'POST',headers:bridgeHeaders({'Content-Type':'application/json'}),
-          body:'{}'},12000);
-        out.textContent='Guest access revoked. Your owner dashboard is unchanged.';
-      }catch(e){out.textContent='Could not revoke guest access: '+String(e.message||e);}
-    });
-  }
-
-  document.addEventListener('DOMContentLoaded',bindGuestOwnerControls);
   document.addEventListener('DOMContentLoaded',bindPairCodeOnly);
   document.addEventListener('DOMContentLoaded',bindIndependentQuantControls);
   document.addEventListener('DOMContentLoaded',bindChartRangeRefresh);

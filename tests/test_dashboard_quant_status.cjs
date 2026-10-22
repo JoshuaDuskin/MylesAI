@@ -13,3 +13,15 @@ raw._telemetry_state='paused_game_mode';assert.equal(context.tradeMetrics().paus
 raw._verified=true;raw._telemetry_state='live';assert.equal(context.tradeMetrics().verified,true);
 assert.equal(context.quantControlFlags().bot,true,'Live telemetry beats stale settings');
 console.log('Dashboard freshness and control-state regression checks passed');
+
+// Exercise the actual rendering tree with research/open-position telemetry.
+const makeNode=()=>({classList:{add(){},remove(){},toggle(){}},style:{},dataset:{},addEventListener(){},setAttribute(){},querySelector(){return null},querySelectorAll(){return[]},getContext(){return null},getBoundingClientRect(){return{width:900,height:300}},replaceChildren(){},appendChild(){},value:'',textContent:'',innerHTML:''});
+const nodes={};const document={getElementById:id=>nodes[id]??=makeNode(),querySelector:()=>null,querySelectorAll:()=>[],addEventListener(){},documentElement:makeNode(),body:makeNode()};
+const full={document,console,URLSearchParams,URL,Intl,Date,setTimeout:()=>0,clearTimeout(){},setInterval:()=>0,clearInterval(){},requestAnimationFrame:f=>f(),location:{search:'',origin:'https://example.com',pathname:'/'},localStorage:{getItem:()=>null,setItem(){}},navigator:{},window:{innerWidth:900,addEventListener(){},devicePixelRatio:1}};
+vm.createContext(full);let script=[...html.matchAll(/<script\b[^>]*>([\s\S]*?)<\/script>/gi)].map(x=>x[1]).find(x=>x.includes('statusSource:'));
+script=script.replace(/\}\)\(\);\s*$/, 'globalThis.testing={state,renderTrading,openPairModal,dashboardUrl};drawChart=()=>{};drawMarketCandles=()=>{};})();');vm.runInContext(script,full);
+full.testing.state.status={trading:{...raw,research_tournament:{enabled:true,pnl:60,books:[{strategy:'trend',paper_pnl:60,open_position:{side:'long',notional:100,leverage:1,unrealized_pnl:60}}]}}};
+full.testing.state.statusSource='LIVE TOWER';full.testing.renderTrading();assert.equal(nodes.tournamentStatus.textContent,'AUTO SIM');assert.notEqual(nodes.tournamentPnl.textContent,'—');
+assert.equal(full.testing.dashboardUrl(),'https://example.com/');full.testing.openPairModal();
+assert.ok(!html.includes('initGuestChat'));assert.ok(!html.includes('id="guestShell"'));
+console.log('Full dashboard render and single household dashboard checks passed');

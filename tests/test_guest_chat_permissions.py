@@ -142,14 +142,15 @@ class GuestRoleTests(unittest.TestCase):
             finally:
                 server.shutdown();server.server_close();thread.join(timeout=3)
 
-    def test_guest_html_never_initializes_owner_controls(self):
+    def test_household_links_use_one_dashboard(self):
         html=(Path(__file__).resolve().parents[1]/"index.html").read_text(encoding="utf-8")
-        self.assertIn("guest-chat-mode .app-shell",html)
-        self.assertIn("if(isGuestPage){await initGuestChat();return;}",html)
-        self.assertIn("myles_guest_chat_token",html)
-        self.assertIn("/dashboard/guest/invite",html)
-        self.assertIn("/dashboard/guest/revoke",html)
-        self.assertNotIn("guest.ownerToken",html)
+        self.assertNotIn("initGuestChat", html)
+        self.assertNotIn('id="guestShell"', html)
+        self.assertNotIn("guest.ownerToken", html)
+        self.assertIn("['shared','guest','owner']", html)
+        self.assertIn("history.replaceState", html)
+        self.assertIn("function dashboardUrl(){return location.origin+(location.pathname||'/');}", html)
+        self.assertIn("if(state.bridge.healthy&&state.bridge.token)state.publicMode=false", html)
 
 
 if __name__=="__main__":
