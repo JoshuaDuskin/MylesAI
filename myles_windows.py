@@ -504,7 +504,11 @@ def launch_fortnite_verified(timeout_seconds: int = 40) -> str:
     if current:
         return f"FORTNITE_RUNNING: Visible Fortnite game window verified; process={current.get('ProcessName')}."
     uri = "com.epicgames.launcher://apps/Fortnite?action=launch&silent=true"
-    requested, evidence = _shell_open(uri)
+    installed = _best_start_app("Fortnite")
+    if installed and _normalized_app_name(installed["name"]).casefold() == "fortnite":
+        requested, evidence = _shell_open("shell:AppsFolder\\" + installed["app_id"])
+    else:
+        requested, evidence = _shell_open(uri)
     launcher = epic_launcher_executable()
     if not requested and launcher:
         requested, evidence = _shell_open(str(launcher), uri)

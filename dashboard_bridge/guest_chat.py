@@ -76,9 +76,9 @@ def public_app_reply(prompt: str) -> tuple[int, dict] | None:
             if result.startswith("FORTNITE_RUNNING:"):
                 reply = "Fortnite is running on the tower."
             elif result.startswith("FORTNITE_NOT_VERIFIED:"):
-                reply = "I sent the Fortnite launch request to Epic, but haven't verified a game window yet. It may still be loading or need attention in the Epic launcher."
+                reply = "I sent the Fortnite launch request, but haven't verified a game window yet. It may still be loading or need attention in its launcher."
             else:
-                reply = "I couldn't launch Fortnite on the tower. Epic Games Launcher may need to be installed or signed in."
+                reply = "I couldn't launch Fortnite on the tower. Its launcher may need attention or sign-in."
         elif result.startswith("DESKTOP_APP_LAUNCH_VERIFIED:"):
             reply = f"{app} is open on the tower."
         else:

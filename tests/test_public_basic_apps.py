@@ -122,6 +122,12 @@ class PublicBasicApps(unittest.TestCase):
             guest_chat.public_app_reply("Launch Fortnite --extra-argument")
             launch.assert_not_called()
 
+    def test_fortnite_launches_installed_windows_edition(self):
+        import myles_windows as w
+        with patch.object(w.os, "name", "nt"), patch.object(w, "_fortnite_visible", side_effect=[None, {"ProcessName": "FortniteClient-Win64-Shipping.exe"}]), patch.object(w, "_best_start_app", return_value={"name": "Fortnite", "app_id": "InstalledFortnite!Game"}), patch.object(w, "_shell_open", return_value=(True, "sent")) as shell, patch.object(w, "epic_launcher_executable", return_value=None):
+            self.assertTrue(w.launch_fortnite_verified().startswith("FORTNITE_RUNNING:"))
+            shell.assert_called_once_with("shell:AppsFolder\\InstalledFortnite!Game")
+
     def test_game_mode_prevents_public_launch(self):
         with patch("myles_game_guard.game_is_active", return_value=True), \
              patch("myles_windows.launch_app_verified") as launch:
