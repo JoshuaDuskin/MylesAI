@@ -905,6 +905,70 @@ html,body{max-width:100%;overflow-x:clip}
       .chat-panel{border-radius:22px;min-height:calc(100dvh - 165px);height:calc(100dvh - 165px)}
       .chat-composer{border-radius:0 0 22px 22px}
     }
+    @media(max-width:780px){
+      :root{
+        color-scheme:light;
+        --ios-bg:#f2f3f7!important;--ios-card:#ffffff!important;--ios-ink:#1c1c1e!important;--ios-muted:#6e6e73!important;
+        --ios-blue:#007aff!important;--ios-green:#34c759!important;--ios-red:#ff3b30!important;--ios-orange:#ff9500!important;
+        --ios-line:#d1d1d6!important;--line:#d1d1d6!important;--panel:#ffffff!important;--surface:#ffffff!important;
+        --text:#1c1c1e!important;--muted:#6e6e73!important
+      }
+      html{background:#f2f3f7!important;color-scheme:light!important}
+      body,body.guest-chat-mode{background:#f2f3f7!important;color:#1c1c1e!important}
+      .ambient{display:none!important}
+      .main-area,.view,.trade-panel,.content-grid,.hero-layout,.chat-layout{background:transparent!important;color:#1c1c1e!important}
+      .topbar{background:rgba(242,243,247,.94)!important;border-color:#d1d1d6!important}
+      .panel,.metric-card,.task-card,.current-task-panel,.trade-panel,.research-note,.config-card,.service-card,
+      .capability-card,.bot-command-card,.market-chart-card,.trade-ticket,.bot-decision-panel,.activity-console,
+      .chart-wrap,.candle-wrap,.simple-account,.mini-card,.live-wallet-strip,.wallet-readiness,.advanced-drawer,
+      .polymarket-card,.quant-banner,.strategy-card,.market-card,.task-list-item,.completion-card,.overview-chat-preview,
+      .trading-mode-box,.control-card,.task-meta-grid>div,.mini-metrics>div,.task-facts>div,.strategy-stats div{
+        background:#ffffff!important;color:#1c1c1e!important;border-color:#e5e5ea!important;
+        box-shadow:0 8px 24px rgba(60,60,67,.10)!important
+      }
+      .panel::before,.panel::after,.metric-card::before,.metric-card::after,.bot-command-card::before,.bot-command-card::after{background:none!important}
+      h1,h2,h3,h4,h5,strong,.panel-heading h3,.section-heading h2,.section-heading h3,.current-task-panel h2,
+      .config-card h4,.metric-card strong,.bot-command-title strong,.chart-price,.trade-ticket h3,.market-chart-card h3,
+      .live-status-card strong,.fact-list strong,.wallet-balance strong,.mini-card strong,.ticket-summary strong,
+      .service-card strong,.market-card strong,.strategy-card h4,.task-list-item strong,.completion-card strong,
+      .task-facts strong,.task-meta-grid strong,.mini-metrics strong,.activity-main strong{color:#1c1c1e!important}
+      p,small,.muted,.subtle,.helper,.eyebrow,.metric-card span,.chart-context-line,.chart-overlay-note,.source-detail,
+      .research-note span,.task-card small,.service-card small,.wallet-readiness p,.live-note,.table-empty,.empty-row,
+      .task-meta-grid small,.mini-metrics small,.task-facts small,.strategy-stats small,.trading-mode-box small,
+      .trading-mode-box span,.market-card small,.activity-main small,.activity-time,.fact-list span,.step-list span,
+      .funding-lock p,.chat-system,.msg-meta,.chart-empty{color:#6e6e73!important}
+      .eyebrow{color:#8e8e93!important}
+      a,.text-action{color:#007aff!important}
+      input,select,textarea,.field input,.field select,.field textarea,.ticket-field input,.control-field input,
+      .quant-control-field input,.wallet-field input,.wallet-field select,.chat-composer textarea,#chatInput,
+      #manualMargin,#manualStop,#manualTake{background:#f2f2f7!important;color:#1c1c1e!important;border:1px solid #d1d1d6!important;box-shadow:none!important}
+      input::placeholder,textarea::placeholder{color:#8e8e93!important}
+      button,.primary-btn,.secondary-btn,.danger-btn,.wallet-action,.place-trade-btn,.auto-toggle-btn,.live-arm,
+      .live-auto-btn,.nav-btn,.trade-tab,.side-btn,.asset-btn,.tf-btn,.quick-amounts button,.chart-control-group button,
+      .simple-chart-controls button,.icon-btn,.mini-btn,.segmented button{color:#1c1c1e!important;background:#ffffff!important;
+        border-color:#d1d1d6!important;box-shadow:0 1px 3px rgba(60,60,67,.08)!important}
+      .primary-btn,.place-trade-btn,.auto-toggle-btn.active,.live-arm.armed{background:#007aff!important;color:#ffffff!important;border-color:#007aff!important}
+      .danger-btn,.danger-btn:hover{color:#ff3b30!important;background:#ffffff!important;border-color:#ff3b30!important}
+      .status-chip,.status-chip.paper,.status-chip.neutral,.status-chip.live,.status-chip.danger,.owner-lock-badge,
+      .live-table-badge,.source-pill,.inline-status{background:#f2f2f7!important;color:#6e6e73!important;border-color:#d1d1d6!important}
+      .status-chip.live,.status-chip.paper{color:#007aff!important}
+      .status-dot.online,.status-dot.live,.health-dot.ok{background:#34c759!important;box-shadow:none!important}
+      .status-dot.warn,.health-dot.warn{background:#ff9500!important;box-shadow:none!important}
+      .status-dot.offline,.health-dot.bad{background:#ff3b30!important;box-shadow:none!important}
+      .chat-panel,.chat-messages,.chat-composer,.chat-header,.chat-input,.chat-side{background:#ffffff!important;color:#1c1c1e!important;border-color:#e5e5ea!important}
+      .chat-composer{border-top:1px solid #d1d1d6!important}
+      .msg.owner .msg-bubble,.chat-bubble.user{background:#007aff!important;color:#ffffff!important;border-color:#007aff!important}
+      .msg.myles .msg-bubble,.chat-bubble.myles{background:#f2f2f7!important;color:#1c1c1e!important;border-color:#e5e5ea!important}
+      table,thead,tbody,tr,th,td{background:#ffffff!important;color:#1c1c1e!important;border-color:#e5e5ea!important}
+      th{color:#6e6e73!important}
+      canvas{background:#ffffff!important}
+      .ios-tabbar{background:rgba(255,255,255,.96)!important;border-color:#d1d1d6!important}
+      .ios-tabbar button{color:#8e8e93!important;background:transparent!important;border:0!important;box-shadow:none!important}
+      .ios-tabbar button.active{color:#007aff!important;background:transparent!important}
+      .modal,.modal-panel{color:#1c1c1e!important}.modal-panel{background:#ffffff!important;border-color:#d1d1d6!important;box-shadow:0 16px 44px rgba(0,0,0,.18)!important}
+      .modal-backdrop{background:rgba(0,0,0,.22)!important}
+      .disabled-live-panel{display:none!important}
+    }
   </style>
   <section id="guestShell" aria-label="Chat-only Myles guest access">
     <header class="guest-header"><small>MYLES · GUEST CHAT</small><h1>Talk with Myles</h1><p>General conversation only. No owner tasks, files, trading, or computer controls.</p></header>
