@@ -110,6 +110,9 @@ class VerifiedReleaseTests(unittest.TestCase):
                  "enabled":True,"auto_update":True} if p.name=="remote_deploy_enabled.json" else {}), \
              patch.object(agent,"lock",return_value=Lock()), \
              patch.object(agent,"git",side_effect=lambda *args: NEW if args[0]=="rev-parse" else ""), \
+             patch.object(agent,"unchanged_main_without_git",return_value=False), \
+             patch.object(agent,"report_tower_health"), \
+             patch.object(agent,"start_intelligence_baseline"), \
              patch.object(agent,"try_approved_release",return_value=0) as auto:
             self.assertEqual(agent.poll(),0)
             auto.assert_called_once()
@@ -124,7 +127,10 @@ class VerifiedReleaseTests(unittest.TestCase):
         self.assertEqual(updater.count("[CmdletBinding()]"),1)
         self.assertIn('"cat-file", "-t", $ExpectedHead',updater)
         self.assertIn('"checkout", "-B", "main", $CheckoutRef',updater)
-        self.assertIn('-RemoteQuiet -ExpectedHead $ExpectedHead',launcher)
+        self.assertIn("'-RemoteQuiet', '-ExpectedHead', $ExpectedHead",launcher)
+        self.assertIn('$UpdaterProcess.WaitForExit()',launcher)
+        self.assertIn('-RedirectStandardOutput $RunLog -RedirectStandardError $UpdaterErrorLog',launcher)
+        self.assertNotIn('*> $RunLog',launcher)
         self.assertIn('auto_update = $true',enable)
         self.assertIn('Register-ScheduledTask',enable)
 
