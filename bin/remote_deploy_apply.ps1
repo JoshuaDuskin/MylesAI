@@ -24,7 +24,7 @@ try {
     $UpdaterArgs = @('-NoLogo', '-NoProfile', '-ExecutionPolicy', 'Bypass', '-NonInteractive', '-WindowStyle', 'Hidden', '-File', ('"' + $Updater + '"'), '-RemoteQuiet', '-ExpectedHead', $ExpectedHead)
     $UpdaterProcess = Start-Process -FilePath powershell.exe -ArgumentList $UpdaterArgs -WindowStyle Hidden -PassThru -RedirectStandardOutput $RunLog -RedirectStandardError $UpdaterErrorLog
     $null = $UpdaterProcess.Handle
-    $UpdaterProcess.WaitForExit()
+    while (-not $UpdaterProcess.WaitForExit(1000)) { }
     $ExitCode = [int]$UpdaterProcess.ExitCode
     $HeadOutput = & git.exe -C $Root rev-parse HEAD 2>$null
     if ($LASTEXITCODE -eq 0) {
