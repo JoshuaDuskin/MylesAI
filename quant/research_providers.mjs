@@ -88,13 +88,41 @@ export async function researchFeeds(options={}) {
   return {generated_at:new Date(now).toISOString(),health,markets};
 }
 
-export async function researchCandles(asset, {fetcher=fetch,now=Date.now()}={}) {
-  const key='candles:'+asset,old=cache.get(key);
-  if(old&&now-old.at<600000)return old.rows;
-  const raw=await publicJson(`https://api.exchange.coinbase.com/products/${asset}-USD/candles?granularity=3600`,{fetcher});
-  if(!Array.isArray(raw))throw new Error('Invalid Coinbase candle response');
-  const rows=raw.map(r=>({timestamp:Number(r[0]),low:Number(r[1]),high:Number(r[2]),open:Number(r[3]),close:Number(r[4]),volume:Number(r[5])}))
-    .filter(r=>r.timestamp>0&&r.low>0&&r.high>=r.low&&r.open>0&&r.close>0&&r.timestamp+3600<=now/1000).sort((a,b)=>a.timestamp-b.timestamp);
-  if(rows.length<80||now/1000-rows.at(-1).timestamp>10800)throw new Error('Insufficient or stale completed candles');
+export const RESEARCH_TIMEFRAMES = {'1m':60,'5m':300,'15m':900,'1h':3600,'4h':14400,'1d':86400};
+export function completedCandles(raw, seconds, now=Date.now()) {
+  if(!Array.isArray(raw))throw new Error('Invalid candle response');
+  const unique=new Map();
+  for(const r of raw){
+    const c={timestamp:Number(r[0]),low:Number(r[1]),high:Number(r[2]),open:Number(r[3]),close:Number(r[4]),volume:Number(r[5])};
+    if(Object.values(c).every(Number.isFinite)&&c.timestamp>0&&c.low>0&&c.high>=Math.max(c.low,c.open,c.close)&&c.low<=Math.min(c.open,c.close)&&c.volume>=0&&c.timestamp+seconds<=now/1000)unique.set(c.timestamp,c);
+  }
+  return [...unique.values()].sort((a,b)=>a.timestamp-b.timestamp);
+}
+export async function researchCandles(asset, {fetcher=fetch,now=Date.now(),timeframe='1h',extended=false}={}) {
+  const seconds=RESEARCH_TIMEFRAMES[timeframe];
+  if(!seconds||!RESEARCH_ASSETS.includes(asset))throw new Error('Unsupported research market/timeframe');
+  const key='candles:'+asset+':'+timeframe,old=cache.get(key),ttl=Math.min(600000,seconds*1000);
+  if(old&&now-old.at<ttl)return old.rows;
+  // Coinbase has no 4h bucket: aggregate four contiguous completed hourly bars.
+  const sourceSeconds=timeframe==='4h'?3600:seconds;
+  const raw=await publicJson(`https://api.exchange.coinbase.com/products/${asset}-USD/candles?granularity=${sourceSeconds}`,{fetcher});
+  if(extended&&Array.isArray(raw)){
+    const pages=timeframe==='4h'?7:2;
+    for(let page=1;page<pages;page++){
+      const valid=raw.map(r=>Number(r[0])).filter(Number.isFinite);if(!valid.length)break;
+      const end=Math.min(...valid),start=end-300*sourceSeconds;
+      const extra=await publicJson(`https://api.exchange.coinbase.com/products/${asset}-USD/candles?granularity=${sourceSeconds}&start=${new Date(start*1000).toISOString()}&end=${new Date(end*1000).toISOString()}`,{fetcher});
+      if(!Array.isArray(extra)||!extra.some(r=>Number(r[0])<end))break;
+      raw.push(...extra);
+    }
+  }
+  let rows=completedCandles(raw,sourceSeconds,now);
+  if(timeframe==='4h'){
+    const groups=new Map();
+    for(const c of rows){const t=Math.floor(c.timestamp/seconds)*seconds;const g=groups.get(t)||[];g.push(c);groups.set(t,g);}
+    rows=[...groups.entries()].filter(([t,g])=>g.length===4&&g.every((c,i)=>c.timestamp===t+i*sourceSeconds)&&t+seconds<=now/1000).map(([timestamp,g])=>({timestamp,open:g[0].open,close:g[3].close,low:Math.min(...g.map(c=>c.low)),high:Math.max(...g.map(c=>c.high)),volume:g.reduce((a,c)=>a+c.volume,0)}));
+  }
+  if(rows.length<60||now/1000-rows.at(-1).timestamp>seconds*3)throw new Error('Insufficient or stale completed candles');
+  if(rows.some((r,i)=>i>0&&r.timestamp-rows[i-1].timestamp!==seconds))throw new Error('Gapped candle history; no synthetic bars inserted');
   cache.set(key,{at:now,rows});return rows;
 }

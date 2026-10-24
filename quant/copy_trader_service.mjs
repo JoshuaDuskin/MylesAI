@@ -172,7 +172,7 @@ async function driftMain(args, payload) {
   if (args.includes('--discover')) { console.log(JSON.stringify(await run(true))); return true; }
   if (args.includes('--once')) { console.log(JSON.stringify(await run(false))); return true; }
   if (args.includes('--daemon')) {
-    for (;;) { try { await run(false); } catch (error) { writeJson(STATUS_FILE, { ...readJson(STATUS_FILE, {}), ok: false, generated_at: iso(), error: String(error?.message || error) }); } await sleep(config().poll_seconds * 1000); }
+    for (;;) { try { await run(false); } catch (error) { writeJson(STATUS_FILE, { ...readJson(STATUS_FILE, {}), ok: false, last_attempt_at: iso(), error: String(error?.message || error) }); } await sleep(config().poll_seconds * 1000); }
   }
   return false;
 }
@@ -189,7 +189,7 @@ async function main() {
     if (args.includes('--daemon')) {
       for (;;) {
         try { await cycle(false); }
-        catch (e) { writeJson(STATUS_FILE, { ...readJson(STATUS_FILE, {}), ok: false, generated_at: iso(), error: String(e?.message || e) }); }
+        catch (e) { writeJson(STATUS_FILE, { ...readJson(STATUS_FILE, {}), ok: false, last_attempt_at: iso(), error: String(e?.message || e) }); }
         await sleep(config().poll_seconds * 1000);
       }
     }

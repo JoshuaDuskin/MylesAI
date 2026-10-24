@@ -48,6 +48,12 @@ async function discover(cfg) {
         authority: row.authority,
         period_days: cfg.validation_period_days,
         observed_fills: tradeCount,
+        observed_collateral_usd: Number.isFinite(Number(user?.account?.totalCollateral))?Number(user.account.totalCollateral):null,
+        observed_account_leverage: Number.isFinite(Number(user?.account?.leverage))?Number(user.account.leverage):null,
+        observed_free_collateral_usd: Number.isFinite(Number(user?.account?.freeCollateral))?Number(user.account.freeCollateral):null,
+        performance_confidence: 'unverified; partial public fills, not a complete account ledger',
+        drawdown_pct: null,
+        observed_at: iso(),
         closed_trades: null,
         realized_pnl_usd: null,
         evidence_verified: false,
@@ -131,7 +137,9 @@ export async function runDriftCopyCycle({ config, previous = {}, forceDiscovery 
   }
   const selected = cfg.selected_accounts?.length ? cfg.selected_accounts : discovery.selected_accounts || [];
   const map = new Map((discovery.candidates || []).map(x => [x.account, x]));
-  const positions = await sourcePositions(selected, map);
+  // Observe discovery candidates without selecting them for copy execution.
+  const observedAccounts=[...new Set([...selected,...discovery.candidates.filter(x=>x.account).slice(0,10).map(x=>x.account)])];
+  const positions = await sourcePositions(observedAccounts, map);
   const verifiedAccounts=new Set(discovery.qualified.filter(x=>x.evidence_verified===true).map(x=>x.account));
   const signals = consensus(positions.filter(x=>verifiedAccounts.has(x.account)), cfg.min_copy_sources);
   const actions = cfg.shadow_copy_enabled ? shadowCopy(cfg, signals) : [];
@@ -151,6 +159,8 @@ export async function runDriftCopyCycle({ config, previous = {}, forceDiscovery 
     live_copy_enabled: liveActive,
     safety_note: 'Drift copy research is paper-only. Live copy and wallet signing are disabled until separately validated and owner-authorized.',
     config: { ...cfg, __file: undefined },
+    observed_accounts: observedAccounts,
+    coverage_basis: 'Position market coverage, not number of trader API connections',
     selected_accounts: selected,
     candidates: discovery.candidates || [],
     qualified: discovery.qualified || [],

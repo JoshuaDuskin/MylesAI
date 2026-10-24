@@ -1,8 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {paperAccounting,liquidationEstimate} from '../quant/paper_accounting.mjs';
-import {researchFeeds,normalizeGmx,providerState,researchCandles} from '../quant/research_providers.mjs';
-import {normalizeConfig,createPaperState,updatePaper} from '../quant/quant_service.mjs';
+import {researchFeeds,normalizeGmx,providerState,researchCandles,completedCandles} from '../quant/research_providers.mjs';
+import {normalizeConfig,createPaperState,updatePaper,validatePaperOrder} from '../quant/quant_service.mjs';
 import {simulatePredictionPaper} from '../quant/polymarket_paper_service.mjs';
 
 test('positive unrealized P&L does not create a winning closed trade',()=>{
@@ -23,8 +23,8 @@ test('paper stops react to current marks even without a new strategy candle',()=
   const c=normalizeConfig({market_settings:{'BTC-PERP':{enabled:true},'ETH-PERP':{enabled:false},'SOL-PERP':{enabled:false}}});
   const s=createPaperState(c);s.positions['BTC-PERP']={symbol:'BTC-PERP',entry:100,direction:1,side:'long',notional:100,units:1,margin_usd:100,leverage:1,entry_fee:0,opened_ts:100,stop:99,target:105};
   s.last_candle_ts['BTC-PERP']=200;
-  updatePaper(s,{'BTC-PERP':[{timestamp:200,open:100,high:100,low:100,close:100},{timestamp:201,open:100,high:100,low:100,close:100}]},{'BTC-PERP':{price:98,timestamp:300}},c,[]);
-  assert.equal(Object.keys(s.positions).length,0);assert.equal(s.trades[0].reason,'stop_loss');assert.equal(s.trades[0].closed_at,new Date(300000).toISOString());
+  updatePaper(s,{'BTC-PERP':[{timestamp:200,open:100,high:100,low:100,close:100},{timestamp:201,open:100,high:100,low:100,close:100}]},{'BTC-PERP':{price:98,timestamp:Math.floor(Date.now()/1000)}},c,[]);
+  assert.equal(Object.keys(s.positions).length,0);assert.equal(s.trades[0].reason,'stop_loss');assert.ok(Math.abs(Date.parse(s.trades[0].closed_at)-Date.now())<2000);
 });
 test('GMX fixed-point quotes use the documented market ticker schema',()=>{
   const r=normalizeGmx([{symbol:'BTC/USD [BTC-USDC]',markPrice:String(80000e30),minPrice:String(79999e30),maxPrice:String(80001e30)}]);
@@ -57,4 +57,36 @@ test('prediction paper waits for evidence and uses observed quotes with costs',(
   assert.equal(opened.positions.length,1);assert.ok(opened.equity_usd<1000);assert.equal(opened.cash_usd,975);
   const closed=simulatePredictionPaper({paper_simulation:opened},[{...m,best_bid:.62,best_ask:.63,outcomes:[{outcome:'Yes',price:.62}]}],{},1001000);
   assert.equal(closed.trades.length,1);assert.ok(closed.trades[0].exit_fee>0);
+});
+
+test('completed candles reject malformed bars and deduplicate timestamps',()=>{
+  const rows=completedCandles([[60,99,101,100,100,1],[60,99,101,100,100,2],[120,101,99,100,100,1],[180,99,101,100,100,-1]],60,300000);
+  assert.equal(rows.length,1);assert.equal(rows[0].volume,2);
+});
+test('four-hour research aggregates only contiguous completed hourly observations',async()=>{
+  const now=Date.now(),hour=Math.floor(now/14400000)*14400;
+  const data=Array.from({length:320},(_,i)=>[hour-(i+1)*3600,99,101,100,100,10]);
+  const rows=await researchCandles('ETH',{timeframe:'4h',now,fetcher:async()=>({ok:true,json:async()=>data})});
+  assert.equal(rows.length,80);assert.equal(rows[0].volume,40);assert.ok(rows.at(-1).timestamp+14400<=now/1000);
+});
+test('gapped historical samples are rejected instead of fabricating missing candles',async()=>{
+  const now=Date.now(),t=Math.floor(now/300000)*300;
+  const data=Array.from({length:100},(_,i)=>[t-(i+1)*300,99,101,100,100,10]).filter((_,i)=>i!==45);
+  await assert.rejects(researchCandles('SOL',{timeframe:'5m',now,fetcher:async()=>({ok:true,json:async()=>data})}),/Gapped/);
+});
+test('disconnected execution feed cannot open from cached strategy candles',()=>{
+  const c=normalizeConfig({market_settings:{'BTC-PERP':{enabled:true},'ETH-PERP':{enabled:false},'SOL-PERP':{enabled:false}}}),s=createPaperState(c);
+  const now=Math.floor(Date.now()/1000),bars=Array.from({length:100},(_,i)=>({timestamp:now-10000+i*60,open:100+i,close:100+i,low:99+i,high:101+i}));
+  updatePaper(s,{'BTC-PERP':bars},{},c,[]);
+  assert.equal(Object.keys(s.positions).length,0);assert.ok(s.decision_feed.some(r=>r.reason==='missing_or_stale_execution_mark'));
+});
+
+test('failed paper orders enforce fee-inclusive available margin, position cap and risk budget',()=>{
+  const config=normalizeConfig({risk:{max_market_allocation_pct:100,max_risk_per_trade_pct:5,max_notional_leverage:5,max_position_usd:250}});
+  const order={equity:1000,usedMargin:0,margin:100,leverage:2,stopPct:1,openCount:0,config};
+  assert.equal(validatePaperOrder(order).notional,200);
+  assert.throws(()=>validatePaperOrder({...order,usedMargin:900}),/Insufficient/);
+  assert.throws(()=>validatePaperOrder({...order,openCount:config.risk.max_concurrent_positions}),/concurrent/);
+  assert.throws(()=>validatePaperOrder({...order,margin:200}),/risk limits/);
+  assert.throws(()=>validatePaperOrder({...order,margin:NaN}),/Invalid/);
 });

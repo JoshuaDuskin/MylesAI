@@ -147,7 +147,7 @@ async function main() {
   try {
     if (args.includes('--self-test')) { console.log(JSON.stringify({ ok: true, api: API, live_locked: true })); return; }
     if (args.includes('--once')) { console.log(JSON.stringify(await runPolymarketPaperCycle())); return; }
-    if (args.includes('--daemon')) { for (;;) { try { await runPolymarketPaperCycle(); } catch (error) { writeJson(STATUS_FILE, { ...readJson(STATUS_FILE, {}), ok: false, generated_at: iso(), error: String(error?.message || error), live_locked: true }); } await sleep(900000); } }
+    if (args.includes('--daemon')) { for (;;) { try { await runPolymarketPaperCycle(); } catch (error) { writeJson(STATUS_FILE, { ...readJson(STATUS_FILE, {}), ok: false, last_attempt_at: iso(), error: String(error?.message || error), live_locked: true }); } await sleep(900000); } }
     console.log(JSON.stringify(readJson(STATUS_FILE, { ok: true, version: '0.1.0-paper-only', live_locked: true, markets: [], signals: [] })));
   } catch (error) {
     console.error(JSON.stringify({ ok: false, error: String(error?.message || error), live_locked: true }));

@@ -76,3 +76,24 @@ Fortnite game mode and hidden launches remain in place.
 - [Polymarket API](https://docs.polymarket.com/api-reference/predictions/overview)
 - [Polymarket US data guide](https://docs.polymarket.us/data-guide/overview)
 - [Polymarket geographic restrictions](https://help.polymarket.com/en/articles/13364163-geographic-restrictions)
+
+## Multi-timeframe upgrade, core 10.15.18
+
+Public trader feed coverage counts observed position markets, not disconnected
+providers. Discovery observes up to ten candidate accounts without selecting them
+for copy execution. Public collateral/leverage and incomplete performance evidence
+are visible; leaderboard P&L is never relabeled as realized return.
+
+Coinbase research now evaluates five families over 1m, 5m, 15m, 1h, 4h and 1d
+for five assets. History is paginated, deduplicated, checked for missing bars and
+aggregated from contiguous hours for 4h. Stress/walk-forward gates are unchanged.
+These spot proxies cannot automatically enter the Drift perpetual portfolio.
+Unknown actual historical funding remains explicitly modeled carrying cost.
+
+Failed Polymarket and trader refreshes retain observation timestamps. Paper
+orders validate available margin including fees, position caps and explicit size
+limits. Stale execution marks cannot open or trigger mark-based exits. Charts
+respect selected time ranges without falling back to older data. Retained closed
+trades provide strategy totals. Live order previews are calculations only and
+reject stale quotes; all execution remains locked. Cross margin is unavailable
+in this isolated paper simulator and is not advertised as supported.
