@@ -17,8 +17,15 @@ try {
     $Updater = Join-Path $Root "UPDATE_TOWER.ps1"
     # A nested PowerShell can allocate its OWN visible console even when its
     # parent was started with CREATE_NO_WINDOW. Hide the child explicitly.
-    & powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -NonInteractive -WindowStyle Hidden -File $Updater -RemoteQuiet -ExpectedHead $ExpectedHead *> $RunLog
-    $ExitCode = [int]$LASTEXITCODE
+    # Do not run the updater in a native pipeline: hidden services can inherit
+    # its pipe handles and keep this receipt writer waiting after it exits.
+    # WaitForExit waits for the updater itself, not its long-lived service tree.
+    $UpdaterErrorLog = Join-Path $LogDir ("remote_deploy_" + $RequestId + ".err.log")
+    $UpdaterArgs = @('-NoLogo', '-NoProfile', '-ExecutionPolicy', 'Bypass', '-NonInteractive', '-WindowStyle', 'Hidden', '-File', ('"' + $Updater + '"'), '-RemoteQuiet', '-ExpectedHead', $ExpectedHead)
+    $UpdaterProcess = Start-Process -FilePath powershell.exe -ArgumentList $UpdaterArgs -WindowStyle Hidden -PassThru -RedirectStandardOutput $RunLog -RedirectStandardError $UpdaterErrorLog
+    $null = $UpdaterProcess.Handle
+    $UpdaterProcess.WaitForExit()
+    $ExitCode = [int]$UpdaterProcess.ExitCode
     $HeadOutput = & git.exe -C $Root rev-parse HEAD 2>$null
     if ($LASTEXITCODE -eq 0) {
         $Installed = ([string]($HeadOutput | Select-Object -First 1)).Trim().ToLowerInvariant()
