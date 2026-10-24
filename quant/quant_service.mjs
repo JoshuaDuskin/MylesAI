@@ -200,7 +200,7 @@ function loadConfig(){ const cfg=normalizeConfig(readJson(CONFIG_FILE,DEFAULT_CO
 function loadResearchState(){
   const raw=readJson(RESEARCH_FILE,null);
   if(!raw||raw.version!==1)return{version:1,last_run_epoch:0,cycle_sequence:0,results:[],history:[],promotions:[],activity_feed:[]};
-  return{version:1,last_run_epoch:n(raw.last_run_epoch,0),cycle_sequence:n(raw.cycle_sequence,0),results:Array.isArray(raw.results)?raw.results:[],history:Array.isArray(raw.history)?raw.history:[],promotions:Array.isArray(raw.promotions)?raw.promotions:[],activity_feed:Array.isArray(raw.activity_feed)?raw.activity_feed:[]};
+  return{version:1,last_run_epoch:n(raw.last_run_epoch,0),cycle_sequence:n(raw.cycle_sequence,0),results:Array.isArray(raw.results)?raw.results:[],history:Array.isArray(raw.history)?raw.history:[],promotions:Array.isArray(raw.promotions)?raw.promotions:[],supplemental_research:Array.isArray(raw.supplemental_research)?raw.supplemental_research:[],activity_feed:Array.isArray(raw.activity_feed)?raw.activity_feed:[]};
 }
 function compactResearchResult(r){
   const pick=x=>({return_pct:n(x?.return_pct,0),pnl:n(x?.pnl,0),ending_equity:n(x?.ending_equity,0),win_rate:n(x?.win_rate,0),max_drawdown:n(x?.max_drawdown,0),trades:n(x?.trades,0)});
@@ -290,6 +290,7 @@ function adaptPaperStrategiesFromResults(config,results,paper){
   return changes;
 }
 let researchState=loadResearchState();
+supplementalResearch=researchState.supplemental_research||[];
 let cachedResearchResults=Array.isArray(researchState.results)?researchState.results:[];
 let lastResearchEpoch=n(researchState.last_run_epoch,0);
 let cycleSequence=n(researchState.cycle_sequence,0);
@@ -638,7 +639,7 @@ async function cycle({backtestOnly=false}={}){
   const enabledStrategyCount=['scalp_trend','trend_momentum','mean_reversion'].filter(name=>config.strategies?.[name]?.enabled!==false).length;
   const expectedCandidateCount=enabled.length*enabledStrategyCount;
   const researchIncomplete=cachedResearchResults.length!==expectedCandidateCount;
-  const researchDue=backtestOnly||(researchOn&&(researchIncomplete||nowEpoch-lastResearchEpoch>=researchInterval));
+  const researchDue=backtestOnly||(researchOn&&(researchIncomplete||supplementalResearch.length===0||nowEpoch-lastResearchEpoch>=researchInterval));
   const candleLimit=researchDue?config.history_limit:Math.min(config.history_limit,240);
   const marketResults=await Promise.all(enabled.map(async symbol=>{
     try{return{symbol,snapshot:await fetchMarketSnapshot(config,symbol,candleLimit),error:null};}
@@ -668,6 +669,7 @@ async function cycle({backtestOnly=false}={}){
       try{const bars=await researchCandles(asset);return {asset,venue:'Coinbase spot',paper_execution:false,timeframe:'1h',completed_candles:bars.length,generated_at:iso(),results:['trend_momentum','mean_reversion','scalp_trend','breakout','volatility'].map(strategy=>{const base=backtest(bars,strategy,config),stress=backtest(bars,strategy,config,{costMultiplier:config.validation.stress_cost_multiplier}),wf=walkForward(bars,strategy,config);return compactResearchResult({symbol:asset+'/USD',strategy,base,stress,walk_forward:wf,validation:validationFor(base,stress,wf,config)});})};}
       catch(error){return {asset,venue:'Coinbase spot',paper_execution:false,error:String(error.message||error),generated_at:iso()};}
     }));
+    researchState.supplemental_research=supplementalResearch;
     cachedResearchResults=fresh;
     lastResearchEpoch=nowEpoch;
     results=fresh;
