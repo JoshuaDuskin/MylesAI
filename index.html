@@ -771,7 +771,7 @@ html,body{max-width:100%;overflow-x:clip}
           <div id="copyTraderResult" class="manual-result"></div>
         </div>
 
-        <div class="trade-panel disabled-live-panel" data-trade-panel="tradeFunding">
+        <div class="trade-panel" data-trade-panel="tradeFunding">
           <div class="section-heading"><div><span class="eyebrow">WALLET</span><h3>Live access</h3></div><span id="fundingLockBadge" class="status-chip danger">NOT CONFIGURED</span></div>
           <div class="live-note">Your wallet keeps custody. Myles can only trade through a time-limited GMX permission you explicitly sign; withdrawals always stay with you.</div>
           <div class="live-setup-grid top-gap">
@@ -1890,5 +1890,12 @@ function renderResearchTournament(m){
 })();
 
 </script>
+<style>
+@media(max-width:780px){
+  .sidebar:not(.open){visibility:hidden!important;pointer-events:none!important;box-shadow:none!important}
+  .sidebar.open{visibility:visible!important;pointer-events:auto!important}
+  .quant-repair .quant-control-grid{grid-template-columns:1fr!important}
+}
+</style>
 </body>
 </html>
