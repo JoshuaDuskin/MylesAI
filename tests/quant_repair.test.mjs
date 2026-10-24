@@ -90,3 +90,11 @@ test('failed paper orders enforce fee-inclusive available margin, position cap a
   assert.throws(()=>validatePaperOrder({...order,margin:200}),/risk limits/);
   assert.throws(()=>validatePaperOrder({...order,margin:NaN}),/Invalid/);
 });
+
+test('explicit minute windows avoid stale provider default-range responses',async()=>{
+  const now=Date.now(),minute=Math.floor(now/60000)*60;
+  const fresh=Array.from({length:100},(_,i)=>[minute-(i+1)*60,99,101,100,100,1]);
+  const stale=fresh.map(r=>[r[0]-1200,...r.slice(1)]);
+  const rows=await researchCandles('XRP',{timeframe:'1m',now,fetcher:async url=>({ok:true,json:async()=>url.includes('&start=')&&url.includes('&end=')?fresh:stale})});
+  assert.equal(rows.at(-1).timestamp,minute-60);
+});

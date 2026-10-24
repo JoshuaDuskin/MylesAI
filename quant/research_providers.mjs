@@ -105,7 +105,9 @@ export async function researchCandles(asset, {fetcher=fetch,now=Date.now(),timef
   if(old&&now-old.at<ttl)return old.rows;
   // Coinbase has no 4h bucket: aggregate four contiguous completed hourly bars.
   const sourceSeconds=timeframe==='4h'?3600:seconds;
-  const raw=await publicJson(`https://api.exchange.coinbase.com/products/${asset}-USD/candles?granularity=${sourceSeconds}`,{fetcher});
+  // Explicit windows avoid stale default-range CDN responses on short periods.
+  const end=Math.floor(now/1000/sourceSeconds)*sourceSeconds,start=end-300*sourceSeconds;
+  const raw=await publicJson(`https://api.exchange.coinbase.com/products/${asset}-USD/candles?granularity=${sourceSeconds}&start=${new Date(start*1000).toISOString()}&end=${new Date(end*1000).toISOString()}`,{fetcher});
   if(extended&&Array.isArray(raw)){
     const pages=timeframe==='4h'?7:2;
     for(let page=1;page<pages;page++){
