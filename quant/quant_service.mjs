@@ -13,6 +13,8 @@ const STATE_FILE = path.join(DATA_DIR, 'quant_paper_state_v3.json');
 const RESEARCH_FILE = path.join(DATA_DIR, 'quant_research_status_v1.json');
 const STATUS_FILE = path.join(DATA_DIR, 'trading_status.json');
 const COPY_STATUS_FILE = path.join(DATA_DIR, 'copy_trader_status.json');
+const PAPER_LOCK_FILE = path.join(DATA_DIR,'quant_paper_writer.lock');
+const DAEMON_PID_FILE = path.join(DATA_DIR,'quant_daemon.pid');
 const CONFIG_FILE = path.join(__dirname, 'quant_config.json');
 const VERSION = '0.10.0-quant-repair';
 let supplementalFeeds={health:{},markets:{}}, supplementalResearch=[];
@@ -99,6 +101,23 @@ function clamp(v,lo,hi){ return Math.max(lo,Math.min(hi,v)); }
 function round(v,d=6){ const m=10**d; return Math.round(v*m)/m; }
 function readJson(file,fallback){ try{return JSON.parse(fs.readFileSync(file,'utf8'));}catch{return fallback;} }
 function writeJsonAtomic(file,value){ fs.mkdirSync(path.dirname(file),{recursive:true}); const tmp=`${file}.tmp-${process.pid}`; fs.writeFileSync(tmp,JSON.stringify(value,null,2),'utf8'); fs.renameSync(tmp,file); }
+function processAlive(pid){try{process.kill(Number(pid),0);return Number(pid)>0;}catch{return false;}}
+function acquireDaemon(){
+  fs.mkdirSync(DATA_DIR,{recursive:true});
+  for(let attempt=0;attempt<2;attempt++){
+    try{const fd=fs.openSync(DAEMON_PID_FILE,'wx');fs.writeFileSync(fd,String(process.pid));fs.closeSync(fd);process.once('exit',()=>{if(Number(readJson(DAEMON_PID_FILE,0))===process.pid)try{fs.unlinkSync(DAEMON_PID_FILE);}catch{}});return true;}
+    catch(error){if(error.code!=='EEXIST')throw error;const pid=readJson(DAEMON_PID_FILE,0);if(processAlive(pid))return false;try{if(!pid&&Date.now()-fs.statSync(DAEMON_PID_FILE).mtimeMs<5000)return false;fs.unlinkSync(DAEMON_PID_FILE);}catch{return false;}}
+  }return false;
+}
+async function withPaperWriter(action){
+  fs.mkdirSync(DATA_DIR,{recursive:true});const deadline=Date.now()+45000;
+  for(;;){
+    try{const fd=fs.openSync(PAPER_LOCK_FILE,'wx');fs.writeFileSync(fd,JSON.stringify({pid:process.pid}));fs.closeSync(fd);break;}
+    catch(error){if(error.code!=='EEXIST')throw error;const lock=readJson(PAPER_LOCK_FILE,{});if(!processAlive(lock.pid)){try{if(lock.pid||Date.now()-fs.statSync(PAPER_LOCK_FILE).mtimeMs>5000){fs.unlinkSync(PAPER_LOCK_FILE);continue;}}catch{}}
+      if(Date.now()>deadline)throw new Error('Paper portfolio is busy; another writer holds the lock');await new Promise(r=>setTimeout(r,150));}
+  }
+  try{return await action();}finally{if(readJson(PAPER_LOCK_FILE,{}).pid===process.pid)try{fs.unlinkSync(PAPER_LOCK_FILE);}catch{}}
+}
 function deepMerge(base,extra){
   if(!extra || typeof extra!=='object' || Array.isArray(extra)) return structuredClone(base);
   const out=structuredClone(base);
@@ -704,10 +723,11 @@ async function main(){
   if(args.has('--self-test')){const r=selfTest();console.log(JSON.stringify(r,null,2));process.exit(r.pass?0:1);}
   const manualIndex=rawArgs.indexOf('--manual-order');
   if(manualIndex>=0){
-    try{const payload=JSON.parse(rawArgs[manualIndex+1]||'{}');const result=await manualPaperAction(payload);console.log(JSON.stringify(result));return;}
+    try{const payload=JSON.parse(rawArgs[manualIndex+1]||'{}');const result=await withPaperWriter(()=>manualPaperAction(payload));console.log(JSON.stringify(result));return;}
     catch(err){console.error(JSON.stringify({ok:false,error:String(err?.message||err)}));process.exit(2);}
   }
   const once=args.has('--once')||args.has('--backtest-only');
-  do{try{const status=await cycle({backtestOnly:args.has('--backtest-only')});console.log(JSON.stringify({ok:true,generated_at:status.generated_at,equity:status.equity,pnl:status.total_pnl,positions:status.positions.length,backtests:status.backtests.length,markets:status.markets.map(m=>m.symbol),errors:status.market_errors}));}catch(err){const failure={schema_version:3,generated_at:iso(),engine:{name:'Myles Quant',version:VERSION,status:'error'},mode:'paper',execution_locked:true,error:String(err?.stack||err)};writeJsonAtomic(STATUS_FILE,failure);console.error(failure.error);if(once)process.exit(1);}if(once)break;const cfg=loadConfig();await new Promise(r=>setTimeout(r,cfg.poll_seconds*1000));}while(true);
+  if(!once&&!acquireDaemon()){console.log(JSON.stringify({ok:true,already_running:true}));return;}
+  do{try{const status=await withPaperWriter(()=>cycle({backtestOnly:args.has('--backtest-only')}));console.log(JSON.stringify({ok:true,generated_at:status.generated_at,equity:status.equity,pnl:status.total_pnl,positions:status.positions.length,backtests:status.backtests.length,markets:status.markets.map(m=>m.symbol),errors:status.market_errors}));}catch(err){const failure={schema_version:3,generated_at:iso(),engine:{name:'Myles Quant',version:VERSION,status:'error'},mode:'paper',execution_locked:true,error:String(err?.stack||err)};writeJsonAtomic(STATUS_FILE,failure);console.error(failure.error);if(once)process.exit(1);}if(once)break;const cfg=loadConfig();await new Promise(r=>setTimeout(r,cfg.poll_seconds*1000));}while(true);
 }
 if(import.meta.url===`file://${process.argv[1]?.replaceAll('\\','/')}`||path.resolve(process.argv[1]||'')===path.resolve(fileURLToPath(import.meta.url))){main();}

@@ -332,7 +332,7 @@ class Handler(BaseHTTPRequestHandler):
         # The phone overview uses one small canonical payload. This keeps Core,
         # Quant, GMX and paper metrics independent from private chat/pairing and
         # avoids sending the full research/backtest state through the tunnel.
-        if self.path.startswith("/dashboard/status") or self.path.startswith("/api/public-status") or self.path.split("?",1)[0] == "/dashboard/polymarket/status":
+        if self.path.startswith("/dashboard/status") or self.path.startswith("/api/public-status") or self.path.split("?",1)[0] in {"/dashboard/polymarket/status", "/dashboard/quant/config", "/dashboard/quant/copy/status"}:
             summary_code, summary = compact_status()
             self.send_json(summary_code, summary)
             return
@@ -457,13 +457,15 @@ class Handler(BaseHTTPRequestHandler):
         self.send_json(status, raw, response_headers.get("Content-Type", "application/json"))
 
     def do_GET(self):
+        if self.path.split("?",1)[0] in {"/dashboard/polymarket/status", "/dashboard/quant/config", "/dashboard/quant/copy/status"} and owner_read_ok(self.headers):
+            return self.proxy()
         if self.path.split("?",1)[0].startswith("/dashboard/device-access/"):
             return self.proxy_device_access()
         if self.path.split("?",1)[0] == "/dashboard/public-chat/messages":
             return self.proxy_public_chat()
         if self.path.split("?",1)[0] == "/dashboard/guest/messages":
             return self.proxy_guest()
-        if self.path.startswith("/dashboard/health") or self.path.startswith("/dashboard/status") or self.path.startswith("/api/public-status") or self.path.split("?",1)[0] == "/dashboard/polymarket/status":
+        if self.path.startswith("/dashboard/health") or self.path.startswith("/dashboard/status") or self.path.startswith("/api/public-status") or self.path.split("?",1)[0] in {"/dashboard/polymarket/status", "/dashboard/quant/config", "/dashboard/quant/copy/status"}:
             return self.public_status()
         return self.proxy()
 

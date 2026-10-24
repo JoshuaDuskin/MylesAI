@@ -334,9 +334,33 @@ QUANT_MARKETS = ["BTC/USD", "ETH/USD", "SOL/USD", "XRP/USD", "TAO/USD"]
 QUANT_PERIODS = ["1m", "5m", "15m", "1h", "4h", "1d"]
 
 
+def quant_markets(config: dict | None = None) -> list[str]:
+    config = load_quant_config() if config is None else config
+    if str(config.get("venue", "")).lower() == "drift" or str(config.get("chain_id", "")) == "solana":
+        return ["BTC-PERP", "ETH-PERP", "SOL-PERP"]
+    return QUANT_MARKETS
+
+
 def fetch_quant_candles(symbol: str, period: str, limit: int = 240) -> dict[str, Any]:
     symbol = str(symbol or "").upper()
     period = str(period or "")
+    if symbol in {"BTC-PERP", "ETH-PERP", "SOL-PERP"}:
+        resolutions={"1m":1,"5m":5,"15m":15,"1h":60,"4h":240,"1d":1440}
+        if period not in resolutions:
+            raise RuntimeError("Unsupported Drift candle period")
+        request=Request(f"https://data.velocity.exchange/market/{quote(symbol)}/candles/{resolutions[period]}?limit={max(50,min(500,int(limit)))}",headers={"Accept":"application/json","User-Agent":"MylesQuant/10.15.17"})
+        with urlopen(request,timeout=12) as response:
+            raw=json.loads(response.read().decode("utf-8"))
+        candles=[]
+        for row in raw.get("records",raw.get("candles",[])):
+            try:
+                item={"timestamp":int(row["ts"]),**{key:float(row.get("fill"+key.title()) or row.get("oracle"+key.title())) for key in ("open","high","low","close")}}
+                if min(item.values())>0:candles.append(item)
+            except (ValueError,TypeError,KeyError):
+                continue
+        candles.sort(key=lambda x:x["timestamp"])
+        if len(candles)<2:raise RuntimeError("Insufficient verified Drift candle history")
+        return {"ok":True,"symbol":symbol,"period":period,"source":"Drift / Velocity public candles","generated_at":now_iso(),"candles":candles}
     if symbol not in QUANT_MARKETS:
         raise RuntimeError("Unsupported market")
     if period not in QUANT_PERIODS:
@@ -421,8 +445,9 @@ def save_quant_config(payload: Any) -> dict[str, Any]:
 
     cfg = dict(current)
     cfg["schema_version"] = 3
-    cfg["venue"] = "GMX"
-    cfg["chain_id"] = 42161
+    # Configuration edits must preserve the active paper venue and symbol keys.
+    cfg["venue"] = current.get("venue", "Drift")
+    cfg["chain_id"] = current.get("chain_id", "solana")
     timeframe = str(incoming.get("timeframe", cfg.get("timeframe", "1m")))
     cfg["timeframe"] = timeframe if timeframe in QUANT_PERIODS else "1m"
     cfg["history_limit"] = int(clamp_num(incoming.get("history_limit", cfg.get("history_limit", 3000)), 300, 10000, 3000))
@@ -432,7 +457,7 @@ def save_quant_config(payload: Any) -> dict[str, Any]:
     existing_markets = cfg.get("market_settings") if isinstance(cfg.get("market_settings"), dict) else {}
     incoming_markets = incoming.get("market_settings") if isinstance(incoming.get("market_settings"), dict) else {}
     market_settings: dict[str, Any] = {}
-    for symbol in QUANT_MARKETS:
+    for symbol in quant_markets(cfg):
         old = existing_markets.get(symbol) if isinstance(existing_markets.get(symbol), dict) else {}
         new = incoming_markets.get(symbol) if isinstance(incoming_markets.get(symbol), dict) else {}
         strategy = str(new.get("paper_strategy", old.get("paper_strategy", "trend_momentum")))
@@ -1148,7 +1173,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.json_response(502, {"error": "Could not read Myles message history", "core_status": code, "detail": data})
             return
         if path == "/dashboard/quant/config":
-            self.json_response(200, {"ok": True, "config": load_quant_config(), "markets": QUANT_MARKETS, "periods": QUANT_PERIODS})
+            self.json_response(200, {"ok": True, "config": load_quant_config(), "markets": quant_markets(), "periods": QUANT_PERIODS})
             return
         if path == "/dashboard/quant/live/status":
             self.json_response(200, live_status())

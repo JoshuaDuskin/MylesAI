@@ -26,7 +26,7 @@ function parseJson(value, fallback = []) {
 
 function normalizeMarket(row) {
   const outcomes = parseJson(row.outcomes);
-  const prices = parseJson(row.outcomePrices).map(n);
+  const prices = parseJson(row.outcomePrices).map(value=>n(value,NaN));
   const tokens = parseJson(row.clobTokenIds);
   const points = outcomes.map((outcome, i) => ({ outcome: String(outcome), price: n(prices[i]), token_id: tokens[i] || null })).filter(x => x.price > 0 && x.price < 1);
   const volume = n(row.volumeNum ?? row.volume);
