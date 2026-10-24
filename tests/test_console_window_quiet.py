@@ -15,9 +15,11 @@ ROOT=Path(__file__).resolve().parents[1]
 class QuietConsoleTests(unittest.TestCase):
     def test_nested_ci_updater_is_explicitly_hidden(self):
         script=(ROOT/"bin"/"remote_deploy_apply.ps1").read_text(encoding="utf-8")
-        self.assertIn("powershell.exe -NoLogo -NoProfile",script)
-        self.assertIn("-WindowStyle Hidden -File $Updater",script)
-        self.assertIn("-RemoteQuiet -ExpectedHead $ExpectedHead",script)
+        self.assertIn("Start-Process -FilePath powershell.exe",script)
+        self.assertIn("'-NoLogo', '-NoProfile'",script)
+        self.assertIn("-WindowStyle Hidden -PassThru",script)
+        self.assertIn("'-WindowStyle', 'Hidden'",script)
+        self.assertIn("'-RemoteQuiet', '-ExpectedHead', $ExpectedHead",script)
 
     def test_supervisor_prevents_cli_windows_and_preserves_owner_console(self):
         source=(ROOT/"bin"/"runtime_supervisor_v074.py").read_text(encoding="utf-8")
