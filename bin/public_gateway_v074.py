@@ -332,7 +332,7 @@ class Handler(BaseHTTPRequestHandler):
         # The phone overview uses one small canonical payload. This keeps Core,
         # Quant, GMX and paper metrics independent from private chat/pairing and
         # avoids sending the full research/backtest state through the tunnel.
-        if self.path.startswith("/dashboard/status") or self.path.startswith("/api/public-status") or self.path.split("?",1)[0] in {"/dashboard/polymarket/status", "/dashboard/quant/config", "/dashboard/quant/copy/status"}:
+        if self.path.startswith("/dashboard/status") or self.path.startswith("/api/public-status"):
             summary_code, summary = compact_status()
             self.send_json(summary_code, summary)
             return
