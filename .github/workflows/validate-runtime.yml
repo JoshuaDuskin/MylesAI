@@ -164,6 +164,11 @@ jobs:
       - name: Test Quant evidence gate and persistent risk stops
         run: python -m unittest discover -s tests -p test_quant_paper_safety.py -v
 
+      - name: Test real-feed schemas, accounting, and worker lease recovery
+        run: |
+          node --test tests/quant_repair.test.mjs
+          python -m unittest discover -s tests -p test_job_lease_repair.py -v
+
       - name: Check Quant syntax
         run: node --check quant/quant_service.mjs
 
@@ -216,8 +221,9 @@ jobs:
       - name: Verify GMX resilient feed contract
         shell: bash
         run: |
-          grep -q "arbitrum-api-fallback.gmxinfra.io" quant/quant_service.mjs
-          grep -q "arbitrum-api-fallback.gmxinfra2.io" quant/quant_service.mjs
+          grep -q "arbitrum.gmxapi.io/v1" quant/research_providers.mjs
+          grep -q "arbitrum.gmxapi.ai/v1" quant/research_providers.mjs
+          grep -q "/markets/tickers" quant/research_providers.mjs
           grep -q "Promise.all(enabled.map" quant/quant_service.mjs
           grep -q "arbitrum-api-fallback.gmxinfra.io" dashboard_bridge/dashboard_bridge.py
           grep -q "_verified_source.*data/trading_status.json" bin/public_gateway_v074.py

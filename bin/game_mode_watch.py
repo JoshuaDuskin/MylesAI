@@ -30,7 +30,7 @@ LOGS.mkdir(parents=True, exist_ok=True)
 
 WATCHER_FILE_LOCK = None
 WATCHER_MUTEX = None
-if os.name == "nt":
+if os.name == "nt" and __name__ == "__main__":
     # A Windows named mutex can split into Global and Local namespaces when
     # elevated and non-elevated launchers overlap. Hold an OS file lock too so
     # exactly one watcher survives across both privilege/session contexts.

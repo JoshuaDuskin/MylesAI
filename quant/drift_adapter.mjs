@@ -95,7 +95,11 @@ export async function readDriftSnapshot(symbol, timeframe = '1m', limit = 3000) 
     candles,
     latest: {
       price: finiteNumber(market?.price ?? candle?.close),
-      timestamp: finiteNumber(candle?.timestamp, Math.floor(Date.now() / 1000)),
+      timestamp: Math.floor(Date.now() / 1000),
+      candle_timestamp: finiteNumber(candle?.timestamp),
+      observed_at: new Date().toISOString(),
+      max_leverage: finiteNumber(market?.limits?.leverage?.max),
+      funding_rate_24h: finiteNumber(market?.funding_rate_24h),
       source: 'Drift Data API oracle/market snapshot',
       degraded: !market?.price,
     },

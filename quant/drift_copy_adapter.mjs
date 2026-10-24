@@ -47,8 +47,12 @@ async function discover(cfg) {
         account: account.accountId,
         authority: row.authority,
         period_days: cfg.validation_period_days,
-        closed_trades: tradeCount,
-        realized_pnl_usd: Number(n(row.pnl).toFixed(2)),
+        observed_fills: tradeCount,
+        closed_trades: null,
+        realized_pnl_usd: null,
+        evidence_verified: false,
+        evidence_gaps: ['Public leaderboard P&L is not verified realized net return','Fill count is not a closed-position count','Full fees, funding, liquidation and survivorship history unavailable'],
+        leaderboard_reported_pnl_usd: Number(n(row.pnl).toFixed(2)),
         volume_usd: Number(n(row.volume).toFixed(2)),
         open_markets: positions,
         score: scoreCandidate(row, tradeCount),
@@ -60,8 +64,8 @@ async function discover(cfg) {
     await sleep(60);
   }
   candidates.sort((a, b) => n(b.score) - n(a.score));
-  const qualified = candidates.filter(x => x.account && x.realized_pnl_usd > 0 && x.closed_trades >= n(cfg.min_closed_trades, 12) && x.score >= n(cfg.min_score, 55));
-  const selected = cfg.auto_select && !cfg.selected_accounts.length ? qualified.slice(0, n(cfg.max_selected_traders, 3)).map(x => x.account) : cfg.selected_accounts;
+  const qualified = candidates.filter(x => x.account && x.evidence_verified === true && x.realized_pnl_usd > 0 && x.closed_trades >= n(cfg.min_closed_trades, 12) && x.score >= n(cfg.min_score, 55));
+  const selected = cfg.auto_select ? qualified.slice(0, n(cfg.max_selected_traders, 3)).map(x => x.account) : cfg.selected_accounts;
   if (selected.length && JSON.stringify(selected) !== JSON.stringify(cfg.selected_accounts)) {
     cfg.selected_accounts = selected;
     const saved = { ...cfg };
@@ -128,7 +132,8 @@ export async function runDriftCopyCycle({ config, previous = {}, forceDiscovery 
   const selected = cfg.selected_accounts?.length ? cfg.selected_accounts : discovery.selected_accounts || [];
   const map = new Map((discovery.candidates || []).map(x => [x.account, x]));
   const positions = await sourcePositions(selected, map);
-  const signals = consensus(positions, cfg.min_copy_sources);
+  const verifiedAccounts=new Set(discovery.qualified.filter(x=>x.evidence_verified===true).map(x=>x.account));
+  const signals = consensus(positions.filter(x=>verifiedAccounts.has(x.account)), cfg.min_copy_sources);
   const actions = cfg.shadow_copy_enabled ? shadowCopy(cfg, signals) : [];
   const liveActions = cfg.live_copy_enabled ? liveCopy(cfg, signals) : [];
   const liveActive = false;
@@ -138,10 +143,10 @@ export async function runDriftCopyCycle({ config, previous = {}, forceDiscovery 
     version: '0.10.0-drift-paper-copy',
     generated_at: generated,
     discovery_at: discoveryAt,
-    next_discovery_at: new Date(Date.now() + n(cfg.discovery_interval_seconds, 900) * 1000).toISOString(),
+    next_discovery_at: new Date(Date.parse(discoveryAt||generated) + n(cfg.discovery_interval_seconds, 900) * 1000).toISOString(),
     data_source: 'Drift/Velocity public Data API',
     source_health: { drift_api: { available: true, endpoint: API, updated_at: generated } },
-    research_findings: { candidates: discovery.candidates?.length || 0, qualified: discovery.qualified?.length || 0, consensus_signals: signals.length, shadow_actions: actions.length, live_actions: 0, statement: signals.length ? `${signals.length} Drift trader-consensus signal(s) are being shadow-tested.` : 'No verified Drift consensus signal is present.' },
+    research_findings: { candidates: discovery.candidates?.length || 0, qualified: discovery.qualified?.length || 0, consensus_signals: signals.length, shadow_actions: actions.length, live_actions: 0, evidence_note:'Leaderboard ranking is discovery evidence only; verified closed-position accounting is required for copy signals.', statement: signals.length ? `${signals.length} Drift trader-consensus signal(s) are being shadow-tested.` : 'No verified Drift consensus signal is present.' },
     mode: 'paper_shadow_copy',
     live_copy_enabled: liveActive,
     safety_note: 'Drift copy research is paper-only. Live copy and wallet signing are disabled until separately validated and owner-authorized.',

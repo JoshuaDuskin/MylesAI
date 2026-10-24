@@ -1123,6 +1123,15 @@ def main() -> int:
         if state == "running" and owner_pid == pid:
             job = candidate
             break
+        # Windows venv launchers can stay as a parent of the actual interpreter.
+        # The core initially records that launcher's PID. Transfer its existing
+        # lease atomically to this direct child; never adopt another worker's lease.
+        if state == "running" and owner_pid == os.getppid():
+            if set_job_if_owned(job_id, owner_pid, runner_pid=pid):
+                candidate = get_job(job_id)
+                if candidate and int(candidate.get("runner_pid") or 0) == pid:
+                    job = candidate
+                    break
         if state in {"cancelled", "completed", "failed", "blocked_auth"}:
             return 0
         time.sleep(0.05)

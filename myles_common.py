@@ -10,7 +10,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-APP_VERSION = "10.15.16"
+APP_VERSION = "10.15.17"
 ROOT = Path(__file__).resolve().parent
 DATA = ROOT / "data"
 WORKSPACES = ROOT / "workspaces"
@@ -367,9 +367,9 @@ def assign_job_runner(job_id: str, runner_pid: int) -> bool:
     try:
         now = now_iso()
         cur = con.execute(
-            "UPDATE jobs SET state='running', phase='launching', runner_pid=?, heartbeat_at=?, updated_at=? "
+            "UPDATE jobs SET state='running', phase='launching', runner_pid=?, heartbeat_at=?, updated_at=?, started_at=COALESCE(started_at,?) "
             "WHERE id=? AND state='launching'",
-            (int(runner_pid), now, now, str(job_id)),
+            (int(runner_pid), now, now, now, str(job_id)),
         )
         con.commit()
         return int(cur.rowcount or 0) == 1
@@ -390,17 +390,17 @@ def job_owned_by(job_id: str, runner_pid: int) -> bool:
         con.close()
 
 
-def set_job_if_owned(job_id: str, runner_pid: int, **fields: Any) -> bool:
-    """Update a running job only while ``runner_pid`` still owns its lease."""
+def set_job_if_owned(job_id: str, lease_pid: int, **fields: Any) -> bool:
+    """Update under an existing lease, including transferring/clearing its PID."""
     if not fields:
-        return job_owned_by(job_id, runner_pid)
+        return job_owned_by(job_id, lease_pid)
     fields["updated_at"] = now_iso()
     cols = list(fields.keys())
     sql = (
         "UPDATE jobs SET " + ", ".join(f"{column}=?" for column in cols)
         + " WHERE id=? AND state='running' AND runner_pid=?"
     )
-    values = [fields[column] for column in cols] + [job_id, int(runner_pid)]
+    values = [fields[column] for column in cols] + [job_id, int(lease_pid)]
     con = connect()
     try:
         cur = con.execute(sql, values)
@@ -517,7 +517,10 @@ def job_truth(job: dict[str, Any]) -> dict[str, Any]:
             truth_state = "stalled"
             reasons.append(f"heartbeat age is {hb_age}s")
         else:
-            started_age = age_seconds(job.get("started_at")) or 0
+            started_age = age_seconds(job.get("started_at") or job.get("created_at")) or 0
+            if job.get("phase") == "launching" and started_age > 45:
+                truth_state = "stalled"
+                reasons.append("worker did not complete startup within 45 seconds")
             limit = int(cfg["stall_no_progress_seconds"])
             if started_age > limit and (progress_age is None or progress_age > limit):
                 truth_state = "stalled"

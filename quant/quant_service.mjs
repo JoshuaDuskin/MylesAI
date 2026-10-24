@@ -3,6 +3,8 @@ import path from 'node:path';
 import os from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { readDriftSnapshot } from './drift_adapter.mjs';
+import { researchFeeds, researchCandles, RESEARCH_ASSETS } from './research_providers.mjs';
+import { paperAccounting, liquidationEstimate, RISK_PROFILES } from './paper_accounting.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = process.env.LOCALAPPDATA ? path.join(process.env.LOCALAPPDATA, 'MylesAI') : path.join(os.homedir(), 'AppData', 'Local', 'MylesAI');
@@ -12,7 +14,8 @@ const RESEARCH_FILE = path.join(DATA_DIR, 'quant_research_status_v1.json');
 const STATUS_FILE = path.join(DATA_DIR, 'trading_status.json');
 const COPY_STATUS_FILE = path.join(DATA_DIR, 'copy_trader_status.json');
 const CONFIG_FILE = path.join(__dirname, 'quant_config.json');
-const VERSION = '0.9.0-drift-paper';
+const VERSION = '0.10.0-quant-repair';
+let supplementalFeeds={health:{},markets:{}}, supplementalResearch=[];
 const VALID_PERIODS = new Set(['1m','5m','15m','1h','4h','1d']);
 const SUPPORTED_RESEARCH_MARKETS = ['BTC-PERP','ETH-PERP','SOL-PERP'];
 
@@ -57,6 +60,9 @@ const DEFAULT_CONFIG = {
   risk: {
     max_risk_per_trade_pct: 0.50,
     max_notional_leverage: 1.50,
+    profile: 'custom',
+    margin_mode: 'isolated',
+    trailing_stop_pct: 0,
     stop_loss_pct: 1.50,
     take_profit_pct: 3.00,
     max_daily_loss_pct: 2.00,
@@ -102,7 +108,7 @@ function deepMerge(base,extra){
   }
   return out;
 }
-function normalizeConfig(raw){
+export function normalizeConfig(raw){
   const previousGeneration=n(raw?.runtime_generation,0);
   const cfg=deepMerge(DEFAULT_CONFIG,raw||{});
   cfg.schema_version=3;
@@ -119,7 +125,11 @@ function normalizeConfig(raw){
   }
   for(const key of Object.keys(cfg.market_settings)) if(!SUPPORTED_RESEARCH_MARKETS.includes(key)) delete cfg.market_settings[key];
   cfg.risk.max_risk_per_trade_pct=clamp(n(cfg.risk.max_risk_per_trade_pct,.5),.05,5);
-  cfg.risk.max_notional_leverage=clamp(n(cfg.risk.max_notional_leverage,1.5),.1,5);
+  cfg.risk.max_notional_leverage=clamp(n(cfg.risk.max_notional_leverage,1.5),1,20);
+  cfg.risk.max_position_usd=clamp(n(cfg.risk.max_position_usd,0),0,1000000);
+  cfg.risk.margin_mode='isolated';
+  cfg.risk.trailing_stop_pct=clamp(n(cfg.risk.trailing_stop_pct,0),0,15);
+  cfg.risk.profile=['custom',...Object.keys(RISK_PROFILES)].includes(cfg.risk.profile)?cfg.risk.profile:'custom';
   cfg.risk.stop_loss_pct=clamp(n(cfg.risk.stop_loss_pct,1.5),.25,15);
   cfg.risk.take_profit_pct=clamp(n(cfg.risk.take_profit_pct,3),.25,40);
   cfg.risk.max_daily_loss_pct=clamp(n(cfg.risk.max_daily_loss_pct,2),.25,20);
@@ -282,6 +292,7 @@ export function signalScalpTrend(candles,index){
   return 0;
 }
 function strategySignal(name,candles,index){
+  if(name==='breakout'||name==='volatility'){if(index<30)return 0;const prev=candles.slice(index-20,index),c=candles[index];const hi=Math.max(...prev.map(x=>x.high)),lo=Math.min(...prev.map(x=>x.low));if(name==='volatility'&&(c.high-c.low)<prev.reduce((a,x)=>a+x.high-x.low,0)/20*1.5)return 0;return c.close>hi?1:c.close<lo?-1:0;}
   if(name==='scalp_trend')return signalScalpTrend(candles,index);
   if(name==='mean_reversion')return signalMeanReversion(candles,index);
   return signalTrendMomentum(candles,index);
@@ -302,7 +313,7 @@ async function fetchLatestPrice(_chainId,symbol){
 function costs(config,mult=1){ return {fee:n(config.research_costs.position_fee_bps_per_side,6)/10000*mult,slip:n(config.research_costs.slippage_bps_per_side,5)/10000*mult,impact:n(config.research_costs.impact_bps_per_side,20)/10000*mult,holding:n(config.research_costs.holding_cost_bps_per_day,5)/10000*mult}; }
 function entryFill(mark,direction,cost){ return mark*(1+direction*(cost.slip+cost.impact)); }
 function exitFill(mark,direction,cost){ return mark*(1-direction*(cost.slip+cost.impact)); }
-function positionSize(equity,config,entry){ const riskPct=n(config.risk.max_risk_per_trade_pct,.5)/100,stopPct=n(config.risk.stop_loss_pct,1.5)/100,lev=n(config.risk.max_notional_leverage,1.5),alloc=n(config.risk.max_market_allocation_pct,35)/100; const riskBudget=equity*riskPct;const byRisk=riskBudget/Math.max(.0001,stopPct);const notional=Math.min(equity*lev,equity*alloc,byRisk);return {notional,units:notional/entry,risk_budget:riskBudget}; }
+function positionSize(equity,config,entry){ const riskPct=n(config.risk.max_risk_per_trade_pct,.5)/100,stopPct=n(config.risk.stop_loss_pct,1.5)/100,lev=n(config.risk.max_notional_leverage,1.5),alloc=n(config.risk.max_market_allocation_pct,35)/100; const riskBudget=equity*riskPct;const byRisk=riskBudget/Math.max(.0001,stopPct);const notional=Math.min(equity*lev,equity*alloc,byRisk,n(config.risk.max_position_usd,0)>0?config.risk.max_position_usd:Infinity);return {notional,units:notional/entry,risk_budget:riskBudget}; }
 function stopTarget(entry,direction,config){const s=n(config.risk.stop_loss_pct,1.5)/100,t=n(config.risk.take_profit_pct,3)/100;return{stop:entry*(1-direction*s),target:entry*(1+direction*t)};}
 function intrabarExit(position,candle){ if(position.direction>0){const stopHit=candle.low<=position.stop,targetHit=candle.high>=position.target;if(stopHit)return{reason:targetHit?'stop_and_target_same_candle_conservative_stop':'stop_loss',raw:position.stop};if(targetHit)return{reason:'take_profit',raw:position.target};}else{const stopHit=candle.high>=position.stop,targetHit=candle.low<=position.target;if(stopHit)return{reason:targetHit?'stop_and_target_same_candle_conservative_stop':'stop_loss',raw:position.stop};if(targetHit)return{reason:'take_profit',raw:position.target};}return null; }
 function manualMarkExit(position,mark){
@@ -335,9 +346,9 @@ export function backtest(candles,strategyName,config,{costMultiplier=1}={}){
 export function walkForward(candles,strategyName,config){if(candles.length<420)return{strategy:strategyName,status:'insufficient_history',windows:[]};const windows=[],train=240,test=120,step=120;for(let start=0;start+train+test<=candles.length;start+=step){const seg=candles.slice(Math.max(0,start+train-60),start+train+test),r=backtest(seg,strategyName,config);windows.push({start:new Date(candles[start+train].timestamp*1000).toISOString(),end:new Date(candles[start+train+test-1].timestamp*1000).toISOString(),return_pct:r.return_pct,win_rate:r.win_rate,max_drawdown:r.max_drawdown,trades:r.trades});}return{strategy:strategyName,status:'complete',windows,positive_windows:windows.filter(w=>w.return_pct>0).length,total_windows:windows.length};}
 function validationFor(base,stress,wf,config){const v=config.validation,total=Math.max(1,wf.total_windows||0),positivePct=(wf.positive_windows||0)/total*100;const checks={min_trades:base.trades>=n(v.min_trades,12),base_return:base.return_pct>=n(v.min_base_return_pct,0),stress_return:stress.return_pct>=n(v.min_stress_return_pct,-3),max_drawdown:base.max_drawdown<=n(v.max_drawdown_pct,12),walk_forward_positive_pct:wf.status==='complete'&&positivePct>=n(v.min_walk_forward_positive_pct,50)};return{pass:Object.values(checks).every(Boolean),checks,walk_forward_positive_pct:round(positivePct,1)};}
 
-function createPaperState(config){const e=n(config.starting_equity,10000);return{version:3,created_at:iso(),starting_equity:e,cash:e,realized_pnl:0,positions:{},wins:0,losses:0,trades:[],equity_curve:[],decision_feed:[],day_key:new Date().toISOString().slice(0,10),day_start_equity:e,peak_equity:e,halted:false,halt_reason:null,last_candle_ts:{}};}
+export function createPaperState(config){const e=n(config.starting_equity,10000);return{version:3,created_at:iso(),starting_equity:e,cash:e,realized_pnl:0,positions:{},wins:0,losses:0,trades:[],equity_curve:[],decision_feed:[],day_key:new Date().toISOString().slice(0,10),day_start_equity:e,peak_equity:e,halted:false,halt_reason:null,last_candle_ts:{}};}
 function stateEquity(state,latest){let eq=n(state.cash,0);for(const [symbol,p] of Object.entries(state.positions||{})){const mark=n(latest[symbol]?.price,p.mark||p.entry);p.mark=mark;p.unrealized_pnl=round(p.direction*p.units*(mark-p.entry),2);eq+=p.unrealized_pnl;}return eq;}
-function closePaperPosition(state,symbol,rawExit,ts,cost,reason){const p=state.positions[symbol];if(!p)return;const calc=closeCalc(p,rawExit,ts,cost);state.cash+=calc.gross-calc.exit_fee-calc.holding_cost;state.realized_pnl+=calc.net;state.trades.push({symbol,side:p.direction>0?'long':'short',strategy:p.strategy||'unknown',entry:round(p.entry,4),exit:round(calc.exit,4),pnl:round(calc.net,2),opened_at:new Date(p.opened_ts*1000).toISOString(),closed_at:new Date(ts*1000).toISOString(),reason});if(calc.net>0)state.wins++;else state.losses++;delete state.positions[symbol];}
+function closePaperPosition(state,symbol,rawExit,ts,cost,reason){const p=state.positions[symbol];if(!p)return;const calc=closeCalc(p,rawExit,ts,cost);state.cash+=calc.gross-calc.exit_fee-calc.holding_cost;state.realized_pnl+=calc.net;state.trades.push({gross_pnl:calc.gross,entry_fee:p.entry_fee,exit_fee:calc.exit_fee,holding_cost:calc.holding_cost,symbol,side:p.direction>0?'long':'short',strategy:p.strategy||'unknown',entry:round(p.entry,4),exit:round(calc.exit,4),pnl:round(calc.net,2),opened_at:new Date(p.opened_ts*1000).toISOString(),closed_at:new Date(ts*1000).toISOString(),reason});if(calc.net>0)state.wins++;else state.losses++;delete state.positions[symbol];}
 function paperCandidateEligible(row,config){
   if(!row)return false;
   // Disabling a dashboard preference must never convert an untested research
@@ -367,7 +378,7 @@ function choosePaperSignal(symbol,candles,config,results=[],decisionIndex=candle
   return{strategy:configured,signal:0,source:'evidence_gate_hold'};
 }
 
-function updatePaper(state,candlesBySymbol,latest,config,researchResults=[]){
+export function updatePaper(state,candlesBySymbol,latest,config,researchResults=[]){
   const cost=costs(config,1);state.positions=state.positions||{};state.last_candle_ts=state.last_candle_ts||{};state.decision_feed=Array.isArray(state.decision_feed)?state.decision_feed:[];
   const enabled=Object.entries(config.market_settings).filter(([,v])=>v.enabled).map(([sym])=>sym);
   const newestTs=Math.max(...enabled.map(sym=>candlesBySymbol[sym]?.at(-1)?.timestamp||0),0);
@@ -388,6 +399,15 @@ function updatePaper(state,candlesBySymbol,latest,config,researchResults=[]){
   // until an explicit owner reset, without erasing peak equity.
   if(!state.halted){state.halt_cycles=0;}
   if(state.halted){for(const symbol of Object.keys(state.positions)){const c=candlesBySymbol[symbol]?.at(-1);if(c)closePaperPosition(state,symbol,c.close,c.timestamp,cost,state.halt_reason);}}
+  for(const [symbol,p] of Object.entries(state.positions||{})){
+    const mark=latest[symbol]?.price;
+    if(!(mark>0))continue;
+    const trail=n(config.risk.trailing_stop_pct,0)/100;
+    if(trail>0){p.stop=p.direction>0?Math.max(p.stop,mark*(1-trail)):Math.min(p.stop,mark*(1+trail));}
+    const liq=liquidationEstimate(p),hit=liq!==null&&(p.direction>0?mark<=liq:mark>=liq);
+    const exit=hit?{reason:'simulated_liquidation',raw:mark}:manualMarkExit(p,mark);
+    if(exit)closePaperPosition(state,symbol,exit.raw,latest[symbol].timestamp,cost,exit.reason);
+  }
   for(const symbol of enabled){
     const candles=candlesBySymbol[symbol],markCandle=candles?.at(-1),decisionCandle=candles?.at(-2);
     if(!markCandle||!decisionCandle||state.last_candle_ts[symbol]>=decisionCandle.timestamp)continue;
@@ -412,9 +432,12 @@ function updatePaper(state,candlesBySymbol,latest,config,researchResults=[]){
     let decision='hold',reason='flat_signal';
     if(autoAllowed&&!state.positions[symbol]&&!exitedThisCandle&&!state.halted&&signal!==0&&openCount<n(config.risk.max_concurrent_positions,2)){
       const entryMark=n(latest[symbol]?.price,decisionCandle.close);
-      const entry=entryFill(entryMark,signal,cost),sz=positionSize(eq,config,entry),st=stopTarget(entry,signal,config),entryFee=sz.notional*cost.fee;
+      const venueLeverage=Math.min(n(config.risk.max_notional_leverage,1.5),n(latest[symbol]?.max_leverage,1));
+      const usedMargin=Object.values(state.positions||{}).reduce((sum,p)=>sum+n(p.margin_usd,0),0);
+      const entry=entryFill(entryMark,signal,cost),sz=positionSize(eq,{...config,risk:{...config.risk,max_notional_leverage:venueLeverage}},entry),st=stopTarget(entry,signal,config),entryFee=sz.notional*cost.fee;
+      if(sz.notional/venueLeverage+usedMargin+entryFee>eq)continue;
       state.cash-=entryFee;
-      state.positions[symbol]={symbol,direction:signal,side:signal>0?'long':'short',entry:round(entry,6),units:sz.units,notional:round(sz.notional,2),margin_usd:round(sz.notional/Math.max(.1,n(config.risk.max_notional_leverage,1.5)),2),leverage:n(config.risk.max_notional_leverage,1.5),entry_fee:entryFee,stop:round(st.stop,6),target:round(st.target,6),opened_ts:latest[symbol]?.timestamp||decisionCandle.timestamp,mark:entryMark,unrealized_pnl:0,strategy,source:'auto'};
+      state.positions[symbol]={symbol,direction:signal,side:signal>0?'long':'short',entry:round(entry,6),units:sz.units,notional:round(sz.notional,2),margin_usd:round(sz.notional/Math.max(1,venueLeverage),2),leverage:venueLeverage,entry_fee:entryFee,stop:round(st.stop,6),target:round(st.target,6),opened_ts:latest[symbol]?.timestamp||decisionCandle.timestamp,mark:entryMark,unrealized_pnl:0,strategy,source:'auto'};
       decision='open';reason=choice.source;
     }else if(exitedThisCandle){decision='close';reason='exit_signal_or_risk';}
     else if(state.halted){decision='hold';reason=state.halt_reason||'risk_halt';}
@@ -427,7 +450,7 @@ function updatePaper(state,candlesBySymbol,latest,config,researchResults=[]){
       source:choice.source,action:decision,reason});
     state.last_candle_ts[symbol]=decisionCandle.timestamp;
   }
-  eq=stateEquity(state,latest);state.peak_equity=Math.max(state.peak_equity,eq);state.equity_curve.push({timestamp:newestTs||Math.floor(Date.now()/1000),equity:round(eq,2)});state.equity_curve=state.equity_curve.slice(-2000);state.trades=state.trades.slice(-500);state.decision_feed=state.decision_feed.slice(-300);return state;
+  eq=stateEquity(state,latest);state.peak_equity=Math.max(state.peak_equity,eq);state.equity_curve.push({timestamp:Math.floor(Date.now()/1000),equity:round(eq,2)});state.equity_curve=state.equity_curve.slice(-2000);state.trades=state.trades.slice(-500);state.decision_feed=state.decision_feed.slice(-300);return state;
 }
 
 async function manualPaperAction(payload){
@@ -459,15 +482,18 @@ async function manualPaperAction(payload){
     const direction=side==='long'?1:-1;
     const mark=n(latest[symbol]?.price,0);if(mark<=0)throw new Error(`No current Drift mark for ${symbol}`);
     const equity=stateEquity(state,latest);
-    const leverage=clamp(n(payload?.leverage,1),1,n(config.risk.max_notional_leverage,1.5));
+    const leverage=clamp(n(payload?.leverage,1),1,Math.min(n(config.risk.max_notional_leverage,1.5),n(latest[symbol]?.max_leverage,1)));
+    const usedMargin=Object.values(state.positions||{}).reduce((sum,p)=>sum+n(p.margin_usd,0),0);
     const stopPct=clamp(n(payload?.stop_loss_pct,config.risk.stop_loss_pct),.25,15);
     const takePct=clamp(n(payload?.take_profit_pct,config.risk.take_profit_pct),.25,40);
     const margin=clamp(n(payload?.margin_usd,0),1,Math.max(1,equity));
+    if(margin+usedMargin>equity)throw new Error('Insufficient available paper margin');
+    if(Object.keys(state.positions).length>=config.risk.max_concurrent_positions)throw new Error('Maximum concurrent paper positions reached');
     const requestedNotional=margin*leverage;
     const riskBudget=equity*n(config.risk.max_risk_per_trade_pct,.5)/100;
     const maxByRisk=riskBudget/Math.max(.0001,stopPct/100);
     const maxByAllocation=equity*n(config.risk.max_market_allocation_pct,35)/100;
-    const maxNotional=Math.min(equity*n(config.risk.max_notional_leverage,1.5),maxByRisk,maxByAllocation);
+    const maxNotional=Math.min(equity*leverage,maxByRisk,maxByAllocation);
     if(requestedNotional>maxNotional+0.01){const maxMargin=maxNotional/leverage;throw new Error(`Trade exceeds paper risk limits. At ${leverage.toFixed(2)}x and ${stopPct.toFixed(2)}% stop, max margin is about $${maxMargin.toFixed(2)}.`);}
     const entry=entryFill(mark,direction,cost),notional=requestedNotional,units=notional/entry,entryFee=notional*cost.fee;
     const stop=entry*(1-direction*stopPct/100),target=entry*(1+direction*takePct/100);
@@ -490,7 +516,8 @@ function liveSignals(config,candlesBySymbol,results=[]){const validated=new Map(
 function telemetry(config,candlesBySymbol,latest,results,paper,errors,meta={}){
   const venueLabel=config.venue||'Drift',now=iso(),eq=stateEquity(paper,latest),start=n(paper.starting_equity,config.starting_equity),pnl=eq-start,allTrades=paper.trades||[],wins=paper.wins||0;
   const copyRaw=readJson(COPY_STATUS_FILE,{}),copyGenerated=copyRaw?.generated_at?Date.parse(copyRaw.generated_at):NaN,copyAge=Number.isFinite(copyGenerated)?Math.max(0,(Date.now()-copyGenerated)/1000):null,copyFresh=copyRaw?.ok!==false&&copyAge!==null&&copyAge<=900,copySignals=Array.isArray(copyRaw?.signals)?copyRaw.signals:[],copyQualified=Array.isArray(copyRaw?.qualified)?copyRaw.qualified:[];
-  const positions=Object.values(paper.positions||{}).map(p=>({symbol:p.symbol,side:p.side,size_usd:p.notional,margin_usd:p.margin_usd??null,leverage:p.leverage??null,entry_price:p.entry,mark_price:p.mark,unrealized_pnl:p.unrealized_pnl,stop_loss:p.stop,take_profit:p.target,strategy:p.strategy,source:p.source||'auto',status:'SIMULATED PAPER'}));
+  const accounting=paperAccounting(paper,eq);
+  const positions=Object.values(paper.positions||{}).map(p=>({liquidation_price_estimate:liquidationEstimate(p),liquidation_estimate_only:true,margin_mode:'isolated_simulation',symbol:p.symbol,side:p.side,size_usd:p.notional,margin_usd:p.margin_usd??null,leverage:p.leverage??null,entry_price:p.entry,mark_price:p.mark,unrealized_pnl:p.unrealized_pnl,stop_loss:p.stop,take_profit:p.target,strategy:p.strategy,source:p.source||'auto',status:'SIMULATED PAPER'}));
   const strategyRows=results.map(r=>({name:r.strategy,status:r.validation?.pass?'validated_candidate':forwardCandidate(r,config)?'forward_candidate':'research',symbol:r.symbol,timeframe:config.timeframe,return_pct:n(r.base?.return_pct,0),stress_return_pct:n(r.stress?.return_pct,0),win_rate:n(r.base?.win_rate,0),max_drawdown:n(r.base?.max_drawdown,0),trades:n(r.base?.trades,0),walk_forward_positive_windows:n(r.walk_forward?.positive_windows,0),walk_forward_total_windows:n(r.walk_forward?.total_windows,0),validation_pass:r.validation?.pass===true,forward_test_eligible:forwardCandidate(r,config),validation_checks:r.validation?.checks||{},promotion_score:candidateScore(r)}));
   const passCount=strategyRows.filter(r=>r.validation_pass).length;
   const signals=liveSignals(config,candlesBySymbol,results);
@@ -516,6 +543,8 @@ function telemetry(config,candlesBySymbol,latest,results,paper,errors,meta={}){
     const signal=signals.find(x=>x.symbol===symbol&&x.strategy===selected)?.signal||'flat';
     const available=!!mark;
     const traderSignal=copySignals.find(x=>x.symbol===symbol),row={regime:'unknown',bias:signal==='long'?'bullish':signal==='short'?'bearish':'neutral',opportunity_score:selectedRow?Math.max(0,Math.min(100,Math.round(candidateScore(selectedRow)/10))):0,source_count:(available?1:0)+(copyFresh&&traderSignal?1:0),consensus_price:available?round(mark.price,8):null,dispersion_bps:null,flow:null,sources:{drift:{available,mark_source:mark?.source||null,updated_at:mark?.timestamp?new Date(mark.timestamp*1000).toISOString():null},copy_traders:{available:!!(copyFresh&&traderSignal),signal:traderSignal?.side||null,confidence:traderSignal?.confidence??null,updated_at:copyFresh?copyRaw.generated_at:null}},selected_strategy:selected};
+    const extra=supplementalFeeds.markets[symbol.split('-')[0]];
+    if(extra){row.sources={...extra.sources,...row.sources};row.source_count+=extra.source_count;row.dispersion_bps=extra.dispersion_bps;}
     marketIntelMarkets[symbol]=row;
     pipelineMarkets[symbol]={...row,latest_candle_at:candle?.timestamp?new Date(candle.timestamp*1000).toISOString():null};
   }
@@ -546,19 +575,19 @@ function telemetry(config,candlesBySymbol,latest,results,paper,errors,meta={}){
     detail:strategyRows.length?`${strategyRows.length}/${expectedCandidateCount} strategy/market candidates were tested; ${forwardDetails.length} remain in the forward-test pool; ${passCount} passed validation. ${traderFinding} ${eligiblePaperCandidates?`${eligiblePaperCandidates} candidate(s) clear the paper-entry evidence gate.`:'New paper entries are held until a validated or non-negative-stress forward candidate appears.'}`:`${researchEvaluationErrors.length?`${researchEvaluationErrors.length} evaluator path(s) failed; `:''}the evaluator has not published its ${expectedCandidateCount}-candidate matrix yet; automatic retry is active. ${traderFinding}`,
     next_action:passCount?`Keep validated candidates paper-only and score the next closed ${config.timeframe} candle before promotion.`:eligiblePaperCandidates?`Paper-test only the ${eligiblePaperCandidates} evidence-qualified candidate(s) on the next closed ${config.timeframe} candle; do not promote them yet.`:`Continue the research loop; new paper entries remain gated until stressed-cost and walk-forward evidence passes.`,
     best_candidate:bestHypothesis?{symbol:bestHypothesis.symbol,strategy:bestHypothesis.family,score:bestHypothesis.score,signal:bestHypothesis.signal}:null,
-    source_count:(marketCount>0?1:0)+(copyFresh?1:0),market_count:marketCount,timeframe:config.timeframe,expected_candidates:expectedCandidateCount,tested_candidates:strategyRows.length,evaluation_error_count:researchEvaluationErrors.length,matrix_complete:strategyRows.length===expectedCandidateCount,forward_candidates:forwardDetails.length,validated:passCount,trader_candidates:copyRaw.candidates?.length||0,trader_signals:copySignals.length,generated_at:now
+    source_count:(marketCount>0?1:0)+Object.values(supplementalFeeds.health).filter(h=>h.available).length+(copyFresh?1:0),market_count:marketCount,timeframe:config.timeframe,expected_candidates:expectedCandidateCount,tested_candidates:strategyRows.length,evaluation_error_count:researchEvaluationErrors.length,matrix_complete:strategyRows.length===expectedCandidateCount,forward_candidates:forwardDetails.length,validated:passCount,trader_candidates:copyRaw.candidates?.length||0,trader_signals:copySignals.length,generated_at:now
   };
   const activity=researchState.activity_feed.length?researchState.activity_feed.slice(-24):[{at:now,type:'quant_cycle',title:'Quant cycle',detail:`Waiting for the first verified ${venueLabel} cycle`,value:0}];
   const maxDd=maxDrawdown((paper.equity_curve||[]).map(x=>x.equity));
   return{
-    schema_version:4,generated_at:now,signals,
+    schema_version:4,generated_at:now,signals,accounting,risk_profiles:RISK_PROFILES,supplemental_research:supplementalResearch,provider_health:supplementalFeeds.health,
     controls:{continuous_market_research:{enabled:researchOn,status:researchStateLabel},paper_trading_bot:{enabled:paperBotOn,status:paperBotOn?'running':'paused'},adaptive_strategy_selection:{enabled:config.paper?.adaptive_strategy_selection!==false,status:config.paper?.adaptive_strategy_selection!==false?'promoting validated candidates':'locked'},agentic_strategy_governor:strategyGovernor},
     research_runtime:researchRuntime,
     research_lab:researchRuntime,
-    research_paper:{active_epoch:researchState.cycle_sequence,starting_equity:start,equity:eq,pnl:round(pnl,2),pnl_pct:round(pnl/Math.max(1,start)*100,3),trades:allTrades.length,win_rate:allTrades.length?round(wins/allTrades.length*100,2):0,max_drawdown:round(maxDd,3),open_positions:positions.length,equity_curve:paper.equity_curve||[],recent_trades:allTrades.slice(-30),last_decisions:(paper.decision_feed||[]).slice(-30),last_trade:allTrades.at(-1)||null,last_cycle_at:now},
+    research_paper:{active_epoch:paper.created_at,created_at:paper.created_at,starting_equity:start,equity:eq,pnl:round(pnl,2),pnl_pct:round(pnl/Math.max(1,start)*100,3),trades:allTrades.length,win_rate:allTrades.length?round(wins/allTrades.length*100,2):0,max_drawdown:round(maxDd,3),open_positions:positions.length,equity_curve:paper.equity_curve||[],recent_trades:allTrades.slice(-30),last_decisions:(paper.decision_feed||[]).slice(-30),last_trade:allTrades.at(-1)||null,last_cycle_at:now},
     research_history:researchState.history.slice(-120),
     family_progress:familyProgress,
-    market_intel:{health:{drift:{available:marketCount>0,ok_markets:marketCount,total_markets:enabled.length,last_update_at:marketCount?now:null},copy_traders:{available:copyFresh,ok_markets:copyFresh?new Set(copySignals.map(x=>x.symbol)).size:0,total_markets:enabled.length,last_update_at:copyFresh?copyRaw.generated_at:null,candidate_count:copyRaw.candidates?.length||0,qualified_count:copyQualified.length}},markets:marketIntelMarkets},
+    market_intel:{health:{...supplementalFeeds.health,drift:{available:marketCount>0,ok_markets:marketCount,total_markets:enabled.length,last_update_at:marketCount?now:null},copy_traders:{available:copyFresh,status:copyFresh?'verified':'stale',signal_count:copySignals.length,ok_markets:copyFresh?Math.min(enabled.length,new Set((copyRaw.source_positions||[]).map(x=>x.symbol)).size):0,total_markets:enabled.length,last_update_at:copyFresh?copyRaw.generated_at:null,candidate_count:copyRaw.candidates?.length||0,qualified_count:copyQualified.length}},markets:{...Object.fromEntries(Object.entries(supplementalFeeds.markets).map(([a,v])=>[a+'-PERP',v])),...marketIntelMarkets}},
     research_pipeline:{markets:pipelineMarkets,top_hypotheses:hypotheses,families:familyRows,findings,trader_research:{available:copyFresh,source:copyRaw.data_source||'Drift/Velocity public data API',generated_at:copyRaw.generated_at||null,age_seconds:copyAge,candidates:copyRaw.candidates?.length||0,qualified:copyQualified.length,signals:copySignals.length,selected_accounts:copyRaw.selected_accounts?.length||0},strategy_adaptations:(researchState.adaptations||[]).slice(-12),strategy_governor:strategyGovernor,active_strategy_by_market:Object.fromEntries(enabled.map(symbol=>[symbol,config.market_settings?.[symbol]?.paper_strategy||'trend_momentum']))},
     research_tournament:{enabled:config.research_exploration?.tournament_enabled!==false,slot_count:books.length,open_positions:positions.length,trades:allTrades.length,pnl:round(pnl,2),equity_curve:paper.equity_curve||[],books,recent_trades:allTrades.slice(-30)},
     runtime_activity:{cycle:cycleSequence,cycle_number:cycleSequence,last_cycle_at:now,cycle_completed_at:now,next_cycle_at:new Date(Date.now()+config.poll_seconds*1000).toISOString(),duration_ms:meta.duration_ms??null,poll_seconds:config.poll_seconds,market_count:marketCount,market_error_count:Object.keys(errors).length,research_evaluation_error_count:researchEvaluationErrors.length,research_expected_candidates:expectedCandidateCount,research_matrix_complete:strategyRows.length===expectedCandidateCount,research_enabled:researchOn,research_last_run_at:lastResearchEpoch?new Date(lastResearchEpoch*1000).toISOString():null,paper_bot_enabled:paperBotOn,open_positions:positions.length,closed_trades:allTrades.length,strategy_adaptations:Array.isArray(meta.strategy_adaptations)?meta.strategy_adaptations:[]},
@@ -580,6 +609,7 @@ function telemetry(config,candlesBySymbol,latest,results,paper,errors,meta={}){
 }
 
 async function cycle({backtestOnly=false}={}){
+  supplementalFeeds=await researchFeeds();
   cycleSequence+=1;
   const cycleStarted=Date.now();
   const config=loadConfig(),candlesBySymbol={},latest={},errors={},nowEpoch=Math.floor(Date.now()/1000);
@@ -615,6 +645,10 @@ async function cycle({backtestOnly=false}={}){
     }
     promotions=promoteValidatedStrategies(config,fresh);
     if(promotions.length)writeJsonAtomic(CONFIG_FILE,normalizeConfig(config));
+    supplementalResearch=await Promise.all(RESEARCH_ASSETS.map(async asset=>{
+      try{const bars=await researchCandles(asset);return {asset,venue:'Coinbase spot',paper_execution:false,timeframe:'1h',completed_candles:bars.length,generated_at:iso(),results:['trend_momentum','mean_reversion','scalp_trend','breakout','volatility'].map(strategy=>{const base=backtest(bars,strategy,config),stress=backtest(bars,strategy,config,{costMultiplier:config.validation.stress_cost_multiplier}),wf=walkForward(bars,strategy,config);return compactResearchResult({symbol:asset+'/USD',strategy,base,stress,walk_forward:wf,validation:validationFor(base,stress,wf,config)});})};}
+      catch(error){return {asset,venue:'Coinbase spot',paper_execution:false,error:String(error.message||error),generated_at:iso()};}
+    }));
     cachedResearchResults=fresh;
     lastResearchEpoch=nowEpoch;
     results=fresh;

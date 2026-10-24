@@ -212,7 +212,7 @@ def compact_status():
             "engine", "account_type", "mode", "balance", "equity",
             "starting_equity", "total_pnl", "pnl_pct", "win_rate",
             "max_drawdown", "positions", "markets", "market_errors", "risk",
-            "assumptions", "_verified", "_verified_source",
+            "assumptions", "accounting", "provider_health", "supplemental_research", "risk_profiles", "_verified", "_verified_source",
             "_verified_age_seconds", "_verified_max_age_seconds",
             "_blockers", "_telemetry_state",
         )
@@ -244,6 +244,14 @@ def compact_status():
     else:
         payload.pop("trading", None)
 
+    try:
+        import psutil
+        import shutil
+        memory=psutil.virtual_memory()
+        disk=shutil.disk_usage(ROOT.anchor or str(ROOT))
+        payload["system"]={"cpu_percent":psutil.cpu_percent(interval=0.1),"memory_percent":memory.percent,"disk_percent":round(disk.used/disk.total*100,1),"disk_free_gb":round(disk.free/1024**3,1),"memory_used_gb":round(memory.used/1024**3,1),"memory_total_gb":round(memory.total/1024**3,1)}
+    except Exception:
+        payload.setdefault("system",{})
     payload["bridge"] = {"online": True, "gateway": True, "read_only": True}
     return 200 if code == 200 else 502, payload
 
@@ -324,7 +332,7 @@ class Handler(BaseHTTPRequestHandler):
         # The phone overview uses one small canonical payload. This keeps Core,
         # Quant, GMX and paper metrics independent from private chat/pairing and
         # avoids sending the full research/backtest state through the tunnel.
-        if self.path.startswith("/dashboard/status") or self.path.startswith("/api/public-status"):
+        if self.path.startswith("/dashboard/status") or self.path.startswith("/api/public-status") or self.path.split("?",1)[0] == "/dashboard/polymarket/status":
             summary_code, summary = compact_status()
             self.send_json(summary_code, summary)
             return
@@ -455,7 +463,7 @@ class Handler(BaseHTTPRequestHandler):
             return self.proxy_public_chat()
         if self.path.split("?",1)[0] == "/dashboard/guest/messages":
             return self.proxy_guest()
-        if self.path.startswith("/dashboard/health") or self.path.startswith("/dashboard/status") or self.path.startswith("/api/public-status"):
+        if self.path.startswith("/dashboard/health") or self.path.startswith("/dashboard/status") or self.path.startswith("/api/public-status") or self.path.split("?",1)[0] == "/dashboard/polymarket/status":
             return self.public_status()
         return self.proxy()
 

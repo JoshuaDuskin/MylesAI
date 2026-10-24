@@ -239,6 +239,11 @@ def _terminate_pid(pid: int | None) -> None:
     try:
         import psutil  # type: ignore
         parent = psutil.Process(int(pid))
+        # A stored PID can be reused after an abandoned Windows launcher exits.
+        # Never terminate another application's process on recovery/cancellation.
+        worker_path = str((ROOT / "job_worker.py").resolve()).casefold()
+        if not any(str(arg).strip('"').casefold() == worker_path for arg in parent.cmdline()):
+            return
         descendants = parent.children(recursive=True)
         for process in reversed(descendants):
             try:
@@ -256,10 +261,9 @@ def _terminate_pid(pid: int | None) -> None:
             except Exception:
                 pass
     except Exception:
-        try:
-            os.kill(int(pid), 9)
-        except Exception:
-            pass
+        # If process identity cannot be established, fail closed rather than
+        # killing an unrelated process by a stale PID.
+        return
 
 
 def start_job(job: dict[str, Any]) -> bool:

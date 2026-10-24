@@ -15,7 +15,7 @@ def main():
     myles_common.init_db()
     cfg = myles_common.load_config()
     checks = {
-        "version": myles_common.APP_VERSION == "10.15.16",
+        "version": myles_common.APP_VERSION == "10.15.17",
         "config_loads": isinstance(cfg, dict),
         "telegram_setting_present": "telegram_enabled" in cfg,
         "root_exists": myles_common.ROOT.exists(),
@@ -202,7 +202,7 @@ def main():
     try:
         myles_windows.visible_windows = lambda: [
             {"Id": 1, "ProcessName": "chrome.exe", "MainWindowTitle": "Fortnite | Xbox"},
-            {"Id": 2, "ProcessName": "GamingApp.exe", "MainWindowTitle": "Xbox"},
+            {"Id": 2, "ProcessName": "XboxPcApp.exe", "MainWindowTitle": "Xbox"},
         ]
         checks["visible_verifier_rejects_browser_tabs_and_launcher_helpers"] = (
             myles_windows._fortnite_visible() is None

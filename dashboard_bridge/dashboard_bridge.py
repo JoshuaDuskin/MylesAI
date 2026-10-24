@@ -450,8 +450,12 @@ def save_quant_config(payload: Any) -> dict[str, Any]:
     risk_old = cfg.get("risk") if isinstance(cfg.get("risk"), dict) else {}
     risk_new = incoming.get("risk") if isinstance(incoming.get("risk"), dict) else {}
     cfg["risk"] = {
+        "profile": str(risk_new.get("profile",risk_old.get("profile","custom"))) if str(risk_new.get("profile",risk_old.get("profile","custom"))) in {"custom","conservative","balanced","aggressive"} else "custom",
+        "margin_mode": "isolated",
+        "max_position_usd": clamp_num(risk_new.get("max_position_usd",risk_old.get("max_position_usd",0)),0,1000000,0),
+        "trailing_stop_pct": clamp_num(risk_new.get("trailing_stop_pct",risk_old.get("trailing_stop_pct",0)),0,15,0),
         "max_risk_per_trade_pct": clamp_num(risk_new.get("max_risk_per_trade_pct", risk_old.get("max_risk_per_trade_pct", .5)), .05, 5, .5),
-        "max_notional_leverage": clamp_num(risk_new.get("max_notional_leverage", risk_old.get("max_notional_leverage", 1.5)), .1, 5, 1.5),
+        "max_notional_leverage": clamp_num(risk_new.get("max_notional_leverage", risk_old.get("max_notional_leverage", 1.5)), 1, 20, 1.5),
         "stop_loss_pct": clamp_num(risk_new.get("stop_loss_pct", risk_old.get("stop_loss_pct", 1.5)), .25, 15, 1.5),
         "take_profit_pct": clamp_num(risk_new.get("take_profit_pct", risk_old.get("take_profit_pct", 3)), .25, 40, 3),
         "max_daily_loss_pct": clamp_num(risk_new.get("max_daily_loss_pct", risk_old.get("max_daily_loss_pct", 2)), .25, 20, 2),
