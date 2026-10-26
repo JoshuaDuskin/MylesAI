@@ -1646,7 +1646,7 @@ function renderResearchTournament(m){
   const wg=$('tournamentWinners');if(wg)wg.innerHTML=winners.length?winners.map(x=>tournamentStrategyCard(x,'good')).join(''):'<div class="empty-row">No strategy is positive right now.</div>';
   const lg=$('tournamentLosers');if(lg)lg.innerHTML=losers.length?losers.map(x=>tournamentStrategyCard(x,'bad')).join(''):'<div class="empty-row">No strategy is negative right now.</div>';
   const recent=$('tournamentRecentTrades');if(recent)recent.innerHTML=trades.length?trades.slice().reverse().slice(0,8).map(t=>tournamentTradeRow(t,books)).join(''):'<div class="empty-row">No Strategy Lab trade has closed yet.</div>';
-  const grid=$('tournamentBookGrid');if(grid)grid.innerHTML=sorted.length?sorted.map(x=>`<div class="owner-test-row"><strong>${escapeHtml(friendlyStrategyName(x))} · ${escapeHtml(x.symbol||'—')} · strength ${escapeHtml(String(Math.round(num(x.experiment_score,0))))}</strong><span>Previous test ${escapeHtml(money(x.backtest_pnl||0))} · stressed ${escapeHtml(money(x.stress_pnl||0))} · PF ${escapeHtml(String(round(num(x.profit_factor,0),2)))}</span></div>`).join(''):'<div class="empty-row">No experiment books are active.</div>';
+  const grid=$('tournamentBookGrid');if(grid)grid.innerHTML=sorted.length?sorted.map(x=>`<div class="owner-test-row"><strong>${escapeHtml(friendlyStrategyName(x))} · ${escapeHtml(x.symbol||'—')} · strength ${escapeHtml(String(Math.round(num(x.experiment_score,0))))}</strong><span>Previous test ${escapeHtml(money(x.backtest_pnl||0))} · stressed ${escapeHtml(money(x.stress_pnl||0))} · PF ${escapeHtml(x.profit_factor==null?'Unavailable':String(round(Number(x.profit_factor),2)))}</span></div>`).join(''):'<div class="empty-row">No experiment books are active.</div>';
   $$('[data-investigate-book]').forEach(b=>b.onclick=()=>investigateTournamentBook(b.dataset.investigateBook));
 }
 
@@ -2001,6 +2001,14 @@ body.theme-dark .trade-tab.active{background:#284c77!important;color:#fff!import
 button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible{outline:3px solid #80b6ff!important;outline-offset:3px}
 .trade-tabs{display:flex;flex-wrap:wrap;gap:8px}.quant-repair summary{cursor:pointer;padding:10px 0;line-height:1.5}.quant-repair details{border-bottom:1px solid #40516a;padding:4px 0}.quant-repair p{font-size:14px;line-height:1.65}#researchSummaryPanel{margin-top:14px}
 body.theme-dark .panel .positive,body.theme-dark .positive{color:#72e3ac!important}body.theme-dark .panel .negative,body.theme-dark .negative{color:#ff9ca8!important}.chart-tooltip{background:#0d1420!important;color:#f1f5fa!important;border:1px solid #526781!important;line-height:1.5!important;white-space:normal!important;max-width:280px;overflow-wrap:anywhere}
+/* Retire residual light table surfaces and dim legacy labels in the dark design. */
+body.theme-dark .table-wrap,body.theme-dark table,body.theme-dark thead,body.theme-dark tbody,body.theme-dark tr,body.theme-dark td,body.theme-dark th{background:#141c29!important;color:#f1f5fa!important;border-color:#40516a!important}
+body.theme-dark th,body.theme-dark .panel span,body.theme-dark .empty-row,body.theme-dark #researchSourceDetail,body.theme-dark .metric-card span,body.theme-dark .metric-card small,body.theme-dark .control-card small,body.theme-dark .simple-account small{color:#b4c1d3!important;opacity:1!important}
+body.theme-dark .sidebar small,body.theme-dark .brand-block span,body.theme-dark .nav-icon{color:#b4c1d3!important}
+body.theme-dark .nav-btn{color:#c4d0e2!important}body.theme-dark .nav-btn.active{color:#fff!important}
+body.theme-dark .bot-wallet-summary{opacity:1!important}
+body.theme-dark input::placeholder,body.theme-dark textarea::placeholder{color:#a9b8cd!important;opacity:1}
+.trade-tab{min-height:44px!important}
 </style>
 </body>
 </html>
