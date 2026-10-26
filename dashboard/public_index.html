@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Myles AI Dashboard</title>
+    <style>
+        body { font-family: sans-serif; padding: 20px; background: #f4f4f9; }
+        .card { background: white; padding: 15px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); margin-bottom: 10px; }
+        h1 { color: #333; }
+        .status { color: green; font-weight: bold; }
+    </style>
+</head>
+<body>
+    <h1>Myles AI Runtime Dashboard</h1>
+    <div class="card">
+        <h2>System Status</h2>
+        <p><strong>Environment:</strong> Local / Cloud Ready</p>
+        <p><strong>Runtime Directory:</strong> C:\Users\Joshu\.myles\runtime</p>
+        <p><strong>Data Binding:</strong> Verified (Sanitized)</p>
+    </div>
+    <div class="card">
+        <h2>Live Feed Simulation</h2>
+        <p>Status: <span class="status">ONLINE</span></p>
+        <p>Last Update: <span id="timestamp"></span></p>
+        <script>
+            document.getElementById('timestamp').textContent = new Date().toLocaleTimeString();
+        </script>
+    </div>
+</body>
+</html>

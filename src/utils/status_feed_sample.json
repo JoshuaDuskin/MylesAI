@@ -1,0 +1,1 @@
+[{"id":"feed_001","timestamp":"2023-10-27T10:00:00Z","service":"api-gateway","health":"healthy","latency_ms":45},{"id":"feed_002","timestamp":"2023-10-27T10:01:00Z","service":"user-service","health":"degraded","latency_ms":120},{"id":"feed_003","timestamp":"2023-10-27T10:02:00Z","service":"payment-service","health":"healthy","latency_ms":89}]

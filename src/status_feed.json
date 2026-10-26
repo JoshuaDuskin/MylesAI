@@ -1,0 +1,10 @@
+{
+  "status": "operational",
+  "timestamp": "2023-10-27T14:30:00Z",
+  "healthy_components": [
+    "api_gateway",
+    "database",
+    "cache_layer"
+  ],
+  "message": "All systems nominal."
+}

@@ -1,0 +1,140 @@
+/* Dashboard Layout & Grid */
+.dashboard-container {
+    display: grid;
+    grid-template-columns: 250px 1fr;
+    grid-template-rows: auto 1fr;
+    gap: 20px;
+    padding: 20px;
+    background-color: #f4f6f8;
+    min-height: 100vh;
+}
+
+/* Sidebar Styling */
+.dashboard-sidebar {
+    grid-row: 1 / -1;
+    background-color: #ffffff;
+    border-radius: 8px;
+    padding: 20px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+}
+
+/* Main Content Area */
+.dashboard-main {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 20px;
+    align-content: start;
+}
+
+/* Metric Cards */
+.metric-card {
+    background: white;
+    padding: 20px;
+    border-radius: 8px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+}
+
+.metric-value {
+    font-size: 2rem;
+    font-weight: bold;
+    color: #333;
+}
+
+.metric-label {
+    color: #666;
+    font-size: 0.9rem;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+
+/* Status Dots */
+.status-indicator {
+    display: inline-flex;
+    align-items: center;
+    margin-right: 8px;
+}
+
+.status-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    display: inline-block;
+    margin-right: 6px;
+}
+
+.status-online { background-color: #2ecc71; box-shadow: 0 0 5px #2ecc71; }
+.status-offline { background-color: #e74c3c; }
+.status-pending { background-color: #f1c40f; }
+.status-warning { background-color: #f39c12; }
+
+/* Feed List */
+.feed-list {
+    grid-column: 1 / -1;
+    background: white;
+    border-radius: 8px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+    overflow: hidden;
+}
+
+.feed-header {
+    padding: 15px 20px;
+    border-bottom: 1px solid #eee;
+    font-weight: 600;
+    color: #333;
+}
+
+.feed-item {
+    display: flex;
+    align-items: center;
+    padding: 15px 20px;
+    border-bottom: 1px solid #f9f9f9;
+    transition: background-color 0.2s ease;
+}
+
+.feed-item:hover {
+    background-color: #fafafa;
+}
+
+.feed-item:last-child {
+    border-bottom: none;
+}
+
+.feed-avatar {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    background-color: #ddd;
+    margin-right: 15px;
+    flex-shrink: 0;
+}
+
+.feed-content {
+    flex-grow: 1;
+}
+
+.feed-text {
+    color: #333;
+    font-size: 0.95rem;
+    line-height: 1.4;
+    margin-bottom: 4px;
+}
+
+.feed-meta {
+    font-size: 0.8rem;
+    color: #999;
+}
+
+/* Responsive Breakpoint */
+@media (max-width: 768px) {
+    .dashboard-container {
+        grid-template-columns: 1fr;
+    }
+    
+    .dashboard-sidebar {
+        max-height: 200px;
+        overflow-y: auto;
+    }
+}

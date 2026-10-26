@@ -1,0 +1,41 @@
+{
+  "archive_id": "sanitized_feed_v1",
+  "timestamp": "2023-10-27T14:30:00Z",
+  "status": "LOCKED",
+  "feed_logic": {
+    "source": "raw_input_stream",
+    "filter_chain": [
+      "remove_null_bytes",
+      "strip_control_chars",
+      "validate_schema_v2"
+    ],
+    "output_format": "json_lines"
+  },
+  "sample_data": [
+    {
+      "id": 101,
+      "type": "status_update",
+      "content": "System initialized successfully.",
+      "timestamp": "2023-10-27T14:25:00Z"
+    },
+    {
+      "id": 102,
+      "type": "config_sync",
+      "content": "Configuration pulled from remote repository.",
+      "timestamp": "2023-10-27T14:26:00Z"
+    }
+  ],
+  "deployment_blocker": {
+    "error_code": "OWNER_REPO_LOCK",
+    "message": "Live deployment is blocked because the owner repository has been locked for write operations.",
+    "details": "The current user does not have sufficient permissions to push changes to the target branch due to repository protection rules or lock status."
+  },
+  "manual_enablement_instructions": {
+    "step_1": "Navigate to the GitHub repository settings.",
+    "step_2": "Go to the 'Settings' tab and select 'Pages' from the left sidebar.",
+    "step_3": "Ensure the source is set to 'Deploy from a branch' (usually main or gh-pages).",
+    "step_4": "If locked, unlock the repository by changing the protection rules or removing the lock status in 'Settings > Actions > General > Workflow permissions'.",
+    "step_5": "Commit the sanitized feed logic changes to trigger a new build.",
+    "note": "Ensure your local environment is synchronized before pushing."
+  }
+}
