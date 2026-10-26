@@ -85,6 +85,14 @@ jobs:
       - name: Test household guest permission isolation
         run: python -m unittest discover -s tests -p test_guest_chat_permissions.py -v
 
+      - name: Test immediate chat display and asynchronous acknowledgments
+        run: |
+          python -m unittest discover -s tests -p test_chat_delivery.py -v
+          python -m unittest discover -s tests -p test_chat_streaming.py -v
+          python -m unittest discover -s tests -p test_managed_worker_scope.py -v
+          python -m unittest discover -s tests -p test_bridge_manifest_encoding.py -v
+          node tests/test_chat_optimistic.cjs
+
       - name: Run MYLES regression self-test
         run: python self_test.py
 

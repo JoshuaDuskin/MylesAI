@@ -1,8 +1,9 @@
 import test from 'node:test';
+import {researchStatistics} from '../quant/research_statistics.mjs';
 import assert from 'node:assert/strict';
 import {paperAccounting,liquidationEstimate} from '../quant/paper_accounting.mjs';
 import {researchFeeds,normalizeGmx,providerState,researchCandles,completedCandles} from '../quant/research_providers.mjs';
-import {normalizeConfig,createPaperState,updatePaper,validatePaperOrder} from '../quant/quant_service.mjs';
+import {normalizeConfig,createPaperState,updatePaper,validatePaperOrder,backtest,higherTimeframeBias} from '../quant/quant_service.mjs';
 import {simulatePredictionPaper} from '../quant/polymarket_paper_service.mjs';
 
 test('positive unrealized P&L does not create a winning closed trade',()=>{
@@ -97,4 +98,27 @@ test('explicit minute windows avoid stale provider default-range responses',asyn
   const stale=fresh.map(r=>[r[0]-1200,...r.slice(1)]);
   const rows=await researchCandles('XRP',{timeframe:'1m',now,fetcher:async url=>({ok:true,json:async()=>url.includes('&start=')&&url.includes('&end=')?fresh:stale})});
   assert.equal(rows.at(-1).timestamp,minute-60);
+});
+
+test('research statistics do not invent confidence or zero profit factor from no evidence',()=>{
+ const empty=researchStatistics([],[],60);assert.equal(empty.expectancy_usd,null);assert.equal(empty.profit_factor,null);assert.equal(empty.sharpe,null);
+ const small=researchStatistics([{pnl:20},{pnl:-10}],[{timestamp:0,equity:1000},{timestamp:60,equity:1010}],60);assert.equal(small.expectancy_usd,5);assert.equal(small.profit_factor,2);assert.equal(small.sharpe,null);
+});
+test('drawdown includes the starting account before trading costs are deducted',()=>{
+ const config=normalizeConfig({timeframe:'1h'}),bars=Array.from({length:100},(_,i)=>({timestamp:1700000000+i*3600,open:100+i*.1,close:100+i*.1,high:101+i*.1,low:99+i*.1}));
+ const result=backtest(bars,'trend_momentum',config);assert.equal(result.equity_curve[0].equity,config.starting_equity);
+});
+test('per-strategy exposure cannot exceed an explicitly configured cap',()=>{
+ const config=normalizeConfig({risk:{max_strategy_exposure_pct:20,max_position_usd:1000,max_market_allocation_pct:100,max_risk_per_trade_pct:5,max_notional_leverage:5}});
+ const order={equity:1000,usedMargin:0,margin:50,leverage:2,stopPct:1,openCount:0,config,strategyExposure:150};
+ assert.throws(()=>validatePaperOrder(order),/strategy exposure/);
+ assert.equal(validatePaperOrder({...order,strategyExposure:0}).notional,100);
+});
+
+test('higher-timeframe confirmation cannot read a candle before it closes',()=>{
+ const bars=Array.from({length:60},(_,i)=>({timestamp:i*3600,close:100+i}));
+ const asOf=50*3600,before=higherTimeframeBias(bars,3600,asOf);assert.equal(before,1);
+ const futureChanged=bars.map((r,i)=>i>=50?{...r,close:1}:r);
+ assert.equal(higherTimeframeBias(futureChanged,3600,asOf),before);
+ assert.equal(higherTimeframeBias(bars,3600,49*3600),0);
 });

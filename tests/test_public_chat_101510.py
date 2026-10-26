@@ -71,13 +71,14 @@ class PublicChatTests(unittest.TestCase):
 
     def test_frontend_ordinary_link_and_existing_owner_pairing(self):
         from pathlib import Path
-        src=(Path(__file__).resolve().parents[1]/"index.html").read_text()
+        src=(Path(__file__).resolve().parents[1]/"index.html").read_text(encoding="utf-8")
         self.assertIn("dashboard/public-chat/messages",src)
-        self.assertIn("sessionStorage.setItem('myles_public_chat_history'",src)
+        self.assertIn("myles_chat_public_v2",src)
+        self.assertIn("persistChatHistory",src)
         self.assertIn("await exchangePair(false)",src)
         self.assertIn("if(!hasOwnerTrust){await initPublicApp();return;}",src)
         self.assertNotIn("Capability link required",src)
-        gateway_src=(Path(__file__).resolve().parents[1]/"bin"/"public_gateway_v074.py").read_text()
+        gateway_src=(Path(__file__).resolve().parents[1]/"bin"/"public_gateway_v074.py").read_text(encoding="utf-8")
         self.assertIn("dashboard/public-chat/messages",gateway_src)
         self.assertIn('path == "/dashboard/guest/messages" and not',gateway_src)
 

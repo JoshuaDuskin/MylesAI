@@ -327,6 +327,24 @@ def http_ok(url: str, headers: dict | None = None, timeout: int = 5) -> bool:
         return False
 
 
+def managed_process_args(args):
+    """Match real canonical script arguments, never a shell mentioning a filename."""
+    if not args:
+        return False
+    executable=str(args[0]).replace('\\','/').rsplit('/',1)[-1].lower()
+    if executable in {'ollama.exe','ollama','cloudflared.exe','cloudflared'}:
+        return True
+    if executable not in {'python.exe','pythonw.exe','python','pythonw','node.exe','node'} or len(args)<2:
+        return False
+    script=str(args[1]);base=str(ROOT).replace('\\','/').rstrip('/').casefold()+'/'
+    if not script.replace('\\','/').casefold().startswith(base) or not script.lower().endswith(('.py','.mjs')):
+        return False
+    try:
+        return Path(script).resolve().is_relative_to(ROOT.resolve())
+    except (OSError,ValueError):
+        return False
+
+
 def process_rows():
     try:
         import psutil
@@ -334,7 +352,9 @@ def process_rows():
         rows = []
         for process in psutil.process_iter(["pid", "cmdline"]):
             try:
-                rows.append((int(process.info["pid"]), " ".join(process.info.get("cmdline") or [])))
+                arguments=process.info.get("cmdline") or []
+                if managed_process_args(arguments):
+                    rows.append((int(process.info["pid"]), " ".join(arguments)))
             except Exception:
                 pass
         return rows
@@ -759,7 +779,7 @@ def ensure_tailscale_funnel(read: str) -> str:
 def bridge_manifest_matches(url: str, read: str) -> bool:
     """Compare live state with the canonical checkout without invoking Git."""
     try:
-        value = json.loads((ROOT / "bridge.json").read_text(encoding="utf-8", errors="replace"))
+        value = json.loads((ROOT / "bridge.json").read_text(encoding="utf-8-sig", errors="replace"))
         manifest_url = str(value.get("url") or value.get("bridge_url") or "").rstrip("/")
         manifest_read = str(value.get("read_token") or "").strip()
         return manifest_url == str(url or "").rstrip("/") and manifest_read == str(read or "").strip()

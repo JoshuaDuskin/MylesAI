@@ -103,7 +103,7 @@ def public_app_reply(prompt: str) -> tuple[int, dict] | None:
 
 def read(path: Path) -> dict:
     try:
-        if path.stat().st_size > 200_000:
+        if path.stat().st_size > (2_000_000 if path in {HISTORY,PUBLIC_HISTORY} else 200_000):
             return {}
         value = json.loads(path.read_text(encoding="utf-8-sig"))
         return value if isinstance(value, dict) else {}
@@ -191,7 +191,7 @@ def public_messages() -> dict:
                 "messages": rows[-MAX_HISTORY:]}
 
 
-def public_send(text: str, history=None) -> tuple[int, dict]:
+def public_send(text: str, history=None, on_delta=None) -> tuple[int, dict]:
     """Shared conversation with owner-approved, fixed basic app launches."""
     prompt = str(text or "").strip()
     if not prompt or len(prompt)>MAX_TEXT:
@@ -236,7 +236,11 @@ def public_send(text: str, history=None) -> tuple[int, dict]:
         from myles_common import load_config
         from myles_model_runtime import model_chat
         from myles_conversation import unfinished_model_reply
-        answer=model_chat(load_config(),context,tools=None,temperature=0.3,timeout=70)
+        if on_delta is not None:
+            from myles_model_runtime import model_chat_stream
+            answer=model_chat_stream(load_config(),context,lambda text:on_delta(text[:MAX_TEXT]),temperature=0.3,timeout=70)
+        else:
+            answer=model_chat(load_config(),context,tools=None,temperature=0.3,timeout=70)
         text=str((answer.get("message") or {}).get("content") or "").strip()
         if not text or unfinished_model_reply(answer,text):
             return 503, {"ok":False,"error":"Local model response was incomplete"}
@@ -247,6 +251,8 @@ def public_send(text: str, history=None) -> tuple[int, dict]:
         ])[-MAX_HISTORY:]
         try:
             with LOCK:
+                # Another visitor may have finished while this inference ran.
+                updated=(public_messages()["messages"]+updated[-2:])[-MAX_HISTORY:]
                 save(PUBLIC_HISTORY, {"messages": updated})
         except OSError:
             # A read-only test/runtime directory should not turn a valid

@@ -57,12 +57,12 @@ export async function researchFeeds(options={}) {
     feed('kraken',async fetcher=>{
       const raw=await publicJson('https://api.kraken.com/0/public/Ticker?pair=XBTUSD,ETHUSD,SOLUSD,XRPUSD,TAOUSD',{fetcher});
       if(raw.error?.length)throw new Error(raw.error.join('; '));
-      return Object.fromEntries(RESEARCH_ASSETS.map(a=>{const r=raw.result?.[krakenPairs[a]];return[a,r?quote(a,r.c?.[0],r.b?.[0],r.a?.[0],null):null];}).filter(([,v])=>v));
+      return Object.fromEntries(RESEARCH_ASSETS.map(a=>{const r=raw.result?.[krakenPairs[a]];return[a,r?quote(a,r.c?.[0],r.b?.[0],r.a?.[0],null,{volume_24h_base:finite(r.v?.[1]),volume_unit:a}):null];}).filter(([,v])=>v));
     },options),
     feed('coinbase',async fetcher=>{
       const rows=await Promise.allSettled(RESEARCH_ASSETS.map(async a=>{
         const r=await publicJson(`https://api.exchange.coinbase.com/products/${a}-USD/ticker`,{fetcher});
-        const q=quote(a,r.price,r.bid,r.ask,r.time);if(!q)throw new Error('Invalid ticker');
+        const q=quote(a,r.price,r.bid,r.ask,r.time,{volume_24h_base:finite(r.volume),volume_unit:a});if(!q)throw new Error('Invalid ticker');
         if(!Number.isFinite(Date.parse(r.time))||now-Date.parse(r.time)>300000)throw new Error('Stale Coinbase trade timestamp');
         return[a,q];
       }));

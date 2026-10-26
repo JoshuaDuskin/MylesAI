@@ -274,6 +274,40 @@ def model_chat(
     ) from last_error
 
 
+def model_chat_stream(cfg, messages, on_delta, *, temperature=0.3, timeout=70):
+    """Stream real text-only Ollama content; never expose thinking or fake done."""
+    from myles_game_guard import game_is_active
+    if game_is_active():
+        raise ModelRuntimeError("game_performance_mode: inference paused")
+    health=ensure_model_runtime(cfg)
+    if not health.available:
+        raise ModelRuntimeError("Local model unavailable")
+    payload={"model":health.model,"messages":messages,"stream":True,"think":False,
+             "options":{"temperature":float(temperature)},"keep_alive":"0" if cfg.get("light_mode") else "10m"}
+    request=urllib.request.Request(_ollama_chat_url(cfg),data=json.dumps(payload).encode("utf-8"),headers={"Content-Type":"application/json"},method="POST")
+    content="";deadline=time.monotonic()+timeout
+    with urllib.request.urlopen(request,timeout=timeout) as response:
+        for line in response:
+            if game_is_active():
+                raise ModelRuntimeError("game_performance_mode: stream interrupted for gameplay")
+            if time.monotonic()>deadline:
+                raise ModelRuntimeError("Local model stream timed out")
+            if not line.strip():
+                continue
+            item=json.loads(line)
+            if item.get("error"):
+                raise ModelRuntimeError("Local model stream failed")
+            delta=str((item.get("message") or {}).get("content") or "")
+            if delta:
+                content+=delta
+                if len(content)>20000:
+                    raise ModelRuntimeError("Local model response exceeded the conversation limit")
+                on_delta(content)
+            if item.get("done") is True:
+                return {**item,"message":{"role":"assistant","content":content}}
+    raise ModelRuntimeError("Local model stream ended without completion")
+
+
 def model_health_dict(cfg: dict[str, Any], *, refresh: bool = False) -> dict[str, Any]:
     health = ensure_model_runtime(cfg, force=refresh)
     return {

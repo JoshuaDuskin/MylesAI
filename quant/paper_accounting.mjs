@@ -21,7 +21,7 @@ export function paperAccounting(state,equity) {
   const detailed=trades.filter(t=>Number.isFinite(t.entry_fee)&&Number.isFinite(t.exit_fee));
   const strategyStats={};
   for(const t of trades){const key=t.strategy||'unknown',row=strategyStats[key]??={strategy:key,closed_trades:0,wins:0,losses:0,net_pnl_usd:0};row.closed_trades++;row.net_pnl_usd+=number(t.pnl);if(number(t.pnl)>0)row.wins++;else row.losses++;}
-  return {strategy_performance:Object.values(strategyStats),retained_closed_trade_count:trades.length,starting_equity:start,cash,realized_net_pnl:realized,unrealized_pnl:unrealized,open_entry_fees:openFees,
+  return {daily_return_pct:state.day_start_equity>0?(equity/state.day_start_equity-1)*100:null,daily_period_utc:state.day_key||null,total_return_pct:start>0?(equity/start-1)*100:null,strategy_performance:Object.values(strategyStats),retained_closed_trade_count:trades.length,starting_equity:start,cash,realized_net_pnl:realized,unrealized_pnl:unrealized,open_entry_fees:openFees,
     equity,identity:'equity = cash + unrealized P&L; cash includes paid entry fees',
     reconciliation_residual:residual,reconciled:Math.abs(residual)<.05,
     closed_trade_count:number(state.wins)+number(state.losses),winning_closed_trades:number(state.wins),losing_closed_trades:number(state.losses),

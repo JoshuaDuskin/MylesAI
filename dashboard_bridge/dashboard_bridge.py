@@ -52,6 +52,27 @@ PAIR_CODE_FILE: Path | None = None
 _GUEST_CHAT_MODULE = None
 
 
+_CHAT_DELIVERY=None
+_CHAT_DELIVERY_LOCK=threading.Lock()
+def chat_delivery():
+    global _CHAT_DELIVERY
+    with _CHAT_DELIVERY_LOCK:
+        if _CHAT_DELIVERY is None:
+            try:
+                from dashboard_bridge.chat_delivery import DeliveryQueue
+            except ImportError:
+                from chat_delivery import DeliveryQueue
+            _CHAT_DELIVERY=DeliveryQueue(ROOT/'data')
+        return _CHAT_DELIVERY
+
+def delivery_jobs(job_id):
+    from myles_common import get_job
+    return get_job(job_id)
+
+def send_owner_delivery(text):
+    code,data,route=send_to_myles(text)
+    return code,data
+
 def guest_chat_module():
     """Load the sibling guest-chat module without colliding with this script name."""
     global _GUEST_CHAT_MODULE
@@ -477,6 +498,7 @@ def save_quant_config(payload: Any) -> dict[str, Any]:
     cfg["risk"] = {
         "profile": str(risk_new.get("profile",risk_old.get("profile","custom"))) if str(risk_new.get("profile",risk_old.get("profile","custom"))) in {"custom","conservative","balanced","aggressive"} else "custom",
         "margin_mode": "isolated",
+        "max_strategy_exposure_pct": clamp_num(risk_new.get("max_strategy_exposure_pct",risk_old.get("max_strategy_exposure_pct",0)),0,1000,0),
         "max_position_usd": clamp_num(risk_new.get("max_position_usd",risk_old.get("max_position_usd",0)),0,1000000,0),
         "trailing_stop_pct": clamp_num(risk_new.get("trailing_stop_pct",risk_old.get("trailing_stop_pct",0)),0,15,0),
         "max_risk_per_trade_pct": clamp_num(risk_new.get("max_risk_per_trade_pct", risk_old.get("max_risk_per_trade_pct", .5)), .05, 5, .5),
@@ -1126,7 +1148,7 @@ class Handler(BaseHTTPRequestHandler):
                 return self.deny(403, "Origin not allowed")
             if not guest_request_rate(self, False):
                 return self.deny(429, "Public chat rate limit")
-            return self.json_response(200, guest_chat_module().public_messages())
+            return self.json_response(200, {**guest_chat_module().public_messages(), "deliveries":chat_delivery().snapshot("public")})
         if path == "/dashboard/guest/messages":
             origin = self.headers.get("Origin","")
             if (origin and origin not in ALLOWED_ORIGINS
@@ -1168,7 +1190,7 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/dashboard/messages":
             code, data = core_json("/api/messages", timeout=6.0)
             if code == 200:
-                self.json_response(200, data)
+                self.json_response(200, {**data,"deliveries":chat_delivery().snapshot("owner",delivery_jobs)})
             else:
                 self.json_response(502, {"error": "Could not read Myles message history", "core_status": code, "detail": data})
             return
@@ -1228,6 +1250,9 @@ class Handler(BaseHTTPRequestHandler):
             if len(text.strip()) > 6000:
                 return self.deny(400, "Message is too long")
 
+            if body.get("client_request_id"):
+                code,payload=chat_delivery().submit("public",body["client_request_id"],text.strip(),lambda prompt,delta:guest_chat_module().public_send(prompt,on_delta=delta),streaming=True)
+                return self.json_response(code,payload)
             code, payload = guest_chat_module().public_send(text.strip())
             return self.json_response(code, payload)
         # Guest pairing/chat is a wholly separate capability from owner pairing.
@@ -1475,6 +1500,9 @@ class Handler(BaseHTTPRequestHandler):
         if len(text) > 6000:
             self.deny(400, "Message is too long")
             return
+        if payload.get("client_request_id"):
+            code,data=chat_delivery().submit("owner",payload["client_request_id"],text,send_owner_delivery)
+            return self.json_response(code,data)
         code, data, route = send_to_myles(text)
         if 200 <= code < 300:
             if isinstance(data, dict):

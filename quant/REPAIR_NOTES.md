@@ -97,3 +97,39 @@ respect selected time ranges without falling back to older data. Retained closed
 trades provide strategy totals. Live order previews are calculations only and
 reject stale quotes; all execution remains locked. Cross margin is unavailable
 in this isolated paper simulator and is not advertised as supported.
+
+## Chat and evidence upgrade, core 10.15.19
+
+Outgoing messages render and persist before a network wait. Per-request client
+identifiers reconcile local pending messages, shared history and durable delivery
+states. New requests receive a bounded asynchronous 202 acknowledgment. GET polls
+read delivery state separately from inference/action execution. Requests remain
+idempotent after reconnect; uncertain interrupted actions fail explicitly and are
+not silently repeated. Owner requests remain owner-authenticated, public requests
+use only the existing public app allowlist. Known durable owner jobs resume status
+tracking after bridge restart. Local history caches are separated by access scope.
+Public text responses use real Ollama streaming chunks, observed by the dashboard
+through its short progress polls. Incomplete streams fail explicitly, and gameplay
+interrupts inference. Existing owner/core conversation calls remain non-streaming.
+The browser never simulates tokens or invents progress.
+
+Research drawdown includes starting capital. Historical entry/equity timestamps
+reflect completed candle closes. Expanded spot-proxy research applies hour/day
+EMA context only from higher-period candles already closed at each decision, with
+no future-data access. Expectancy, profit factor and sample counts are retained.
+Sharpe/Sortino are null for insufficient or irregular samples; they are descriptive
+statistics, not confidence probabilities. Per-strategy exposure caps are optional
+and owner-configurable; previous risk settings and paper history are preserved.
+New equity observations retain realized/unrealized P&L and exposure summaries;
+missing historical components are never reconstructed. Kraken/Coinbase volumes
+retain their base-asset unit rather than being mislabeled as dollar volume.
+
+The dashboard starts dark before its first paint, improves text contrast and focus
+states, separates Live and Predictions, and retains expanded detail state. Plain
+research findings precede advanced tables. A BOM-aware manifest comparison avoids
+Windows-authored bridge.json being falsely treated as stale on every supervisor
+cycle. Fortnite pause, controller services, wallet data and live execution locks
+are unchanged. No actual historical order-book/funding data or unsupported cross
+margin is implied by the new statistics.
+
+Worker discovery now checks executable/script arguments and canonical containment rather than matching filenames mentioned in arbitrary command lines. Public history size bounds account for encoded Unicode rather than silently discarding a valid retained conversation.
