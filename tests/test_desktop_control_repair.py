@@ -4,6 +4,13 @@ import myles_windows as windows
 from myles_runtime_v9 import desktop_action_request
 
 class DesktopControlRepair(unittest.TestCase):
+    def test_visible_identified_app_is_open_even_if_foreground_is_denied(self):
+        row=self.row(title='Calculator',process='ApplicationFrameHost.exe')
+        with patch.object(windows.os,'name','nt'), patch.object(windows,'_matching_visible_windows',return_value=[row]), patch.object(windows,'_activate_window',return_value=False):
+            result=windows.launch_app_verified('Calculator')
+        self.assertTrue(result.startswith('DESKTOP_APP_LAUNCH_VERIFIED'))
+        self.assertIn('FOREGROUND_NOT_GRANTED',result)
+
     def row(self, handle=100, title='Unsaved document — Notepad', process='notepad.exe'):
         return {'Handle':handle,'Id':42,'MainWindowTitle':title,'ProcessName':process}
 

@@ -1682,7 +1682,7 @@ def handle_owner_message(text: str, source: str) -> dict[str, Any]:
         if kind == "launch":
             result = launch_app_verified(str(target), timeout_seconds=20)
             if result.startswith("DESKTOP_APP_LAUNCH_VERIFIED:"):
-                final = f"{target} is open."
+                final = f"{target} is open." + (" Windows verified its window but did not allow it to take foreground focus." if "FOREGROUND_NOT_GRANTED" in result else "")
             elif result.startswith("DESKTOP_APP_LAUNCH_ERROR:"):
                 final = "I couldn't open it: " + result.split(":", 1)[1].strip()
             else:

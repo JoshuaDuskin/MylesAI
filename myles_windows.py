@@ -365,6 +365,18 @@ def _activate_window(row: dict[str, object]) -> bool:
         if int(user32.GetForegroundWindow() or 0) == hwnd:
             return True
         time.sleep(0.1)
+    # Restore the explicit-focus retry used by the previous desktop tool.
+    # Always release ALT and verify the actual foreground handle afterward.
+    try:
+        user32.keybd_event(0x12, 0, 0, 0)
+        user32.keybd_event(0x12, 0, 0x0002, 0)
+        user32.SetForegroundWindow(hwnd)
+        for _ in range(5):
+            if int(user32.GetForegroundWindow() or 0) == hwnd:
+                return True
+            time.sleep(0.1)
+    except Exception:
+        pass
     return False
 
 
@@ -395,8 +407,9 @@ def launch_app_verified(app_name: str, timeout_seconds: int = 20) -> str:
     if requested.casefold() in {"start", "start menu", "windows start menu"}:
         return _open_start_menu()
     existing = _matching_visible_windows(requested)
-    if existing and _activate_window(existing[0]):
-        return f"DESKTOP_APP_LAUNCH_VERIFIED: {requested} is already visibly open; window={existing[0].get('MainWindowTitle')}."
+    if existing and existing[0].get('MainWindowTitle') and existing[0].get('ProcessName'):
+        focused = _activate_window(existing[0])
+        return f"DESKTOP_APP_LAUNCH_VERIFIED: {requested} is already visibly open; window={existing[0].get('MainWindowTitle')}; process={existing[0].get('ProcessName')}; focus={'verified' if focused else 'FOREGROUND_NOT_GRANTED'}."
 
     before_pids = {int(row.get("Id") or 0) for row in visible_windows()}
     deadline = time.time() + max(5, min(int(timeout_seconds), 45))
@@ -421,10 +434,11 @@ def launch_app_verified(app_name: str, timeout_seconds: int = 20) -> str:
         matches = _matching_visible_windows(requested)
         if matches:
             row = next((item for item in matches if int(item.get("Id") or 0) not in before_pids), matches[0])
-            if not _activate_window(row):
-                time.sleep(0.75)
+            if not row.get('MainWindowTitle') or not row.get('ProcessName'):
+                time.sleep(.25)
                 continue
-            return f"DESKTOP_APP_LAUNCH_VERIFIED: Opened {requested}; visible window={row.get('MainWindowTitle')}; process={row.get('ProcessName')}; method={launch_evidence}."
+            focused = _activate_window(row)
+            return f"DESKTOP_APP_LAUNCH_VERIFIED: Opened {requested}; visible window={row.get('MainWindowTitle')}; process={row.get('ProcessName')}; method={launch_evidence}; focus={'verified' if focused else 'FOREGROUND_NOT_GRANTED'}."
         time.sleep(0.75)
     if not catalog_match:
         _tap_key(0x1B)
