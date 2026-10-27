@@ -29,6 +29,17 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      # Publishing must fail if an edit replaces the dashboard with a placeholder.
+      # Runtime validation is a separate workflow and cannot protect Pages itself.
+      - name: Verify dashboard before publishing
+        run: |
+          node tests/test_dashboard_quant_status.cjs
+          node tests/test_chat_optimistic.cjs
+
       - name: Prepare dashboard artifact
         shell: bash
         run: |
