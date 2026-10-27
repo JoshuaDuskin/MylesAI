@@ -24,7 +24,9 @@ _START_APPS_CACHE: tuple[float, list[dict[str, str]]] = (0.0, [])
 def _normalized_app_name(value: str) -> str:
     name = re.sub(r"\s+", " ", str(value or "").strip())
     name = re.sub(r"(?i)^(?:the\s+)", "", name)
-    return re.sub(r"(?i)\s+(?:app|application|program)$", "", name).strip()
+    name = re.sub(r"(?i)\s+(?:app|application|program)$", "", name).strip()
+    name = re.sub(r"(?i)\.exe$", "", name)
+    return "ChatGPT" if re.sub(r"\s+", "", name).casefold() == "chatgpt" else name
 
 
 def _native_process_rows() -> list[tuple[int, str]]:
@@ -151,6 +153,7 @@ def _meaningful_tokens(value: str) -> list[str]:
 
 
 def _matching_visible_windows(requested: str) -> list[dict[str, object]]:
+    requested = _normalized_app_name(requested)
     tokens = _meaningful_tokens(requested)
     if not tokens:
         return []
@@ -162,13 +165,71 @@ def _matching_visible_windows(requested: str) -> list[dict[str, object]]:
             if process == "xboxpcapp" or (process == "applicationframehost" and title.strip() == "xbox"):
                 matches.append(row)
             continue
-        process_match = any(token in process for token in tokens)
+        process_match = re.sub(r"[^a-z0-9]", "", requested.casefold()) == re.sub(r"[^a-z0-9]", "", process)
         title_match = all(token in title for token in tokens)
         browser_host = process in {"chrome", "msedge", "firefox", "brave", "opera", "vivaldi"}
         requested_is_browser = any(token in {"chrome", "edge", "firefox", "brave", "opera", "vivaldi"} for token in tokens)
         if process_match or (title_match and (not browser_host or requested_is_browser)):
             matches.append(row)
     return matches
+
+
+def desktop_operation(action: str, target: str = "", *, window_handle: int = 0,
+                      force: bool = False, timeout: float = 3.0) -> dict:
+    """Bounded native owner operations. Never discard a document or terminate a process."""
+    if os.name != "nt":
+        return {"ok": False, "state": "unavailable", "reply": "Windows desktop control requires the Windows tower."}
+    try:
+        rows = visible_windows()
+        if action == "windows":
+            return {"ok": True, "state": "observed", "windows": rows,
+                    "reply": "Open windows:\n" + ("\n".join(f"{x['MainWindowTitle']} — {x['ProcessName']} (window {x['Handle']})" for x in rows) or "No visible application windows.")}
+        user32 = ctypes.WinDLL("user32", use_last_error=True)
+        user32.GetForegroundWindow.restype = wintypes.HWND
+        user32.IsWindow.argtypes = [wintypes.HWND]
+        user32.IsIconic.argtypes = [wintypes.HWND]
+        user32.ShowWindow.argtypes = [wintypes.HWND, ctypes.c_int]
+        user32.PostMessageW.argtypes = [wintypes.HWND, wintypes.UINT, wintypes.WPARAM, wintypes.LPARAM]
+        matches = _matching_visible_windows(target) if target else rows if window_handle else [r for r in rows if r['Handle'] == int(user32.GetForegroundWindow() or 0)]
+        if window_handle:
+            matches = [r for r in matches if r['Handle'] == int(window_handle)]
+        if not matches:
+            return {"ok": False, "state": "not_found", "reply": f"No matching visible window for {target or 'the current application'}. No action was performed."}
+        if len(matches) != 1:
+            return {"ok": False, "state": "choice_required", "windows": matches,
+                    "reply": "More than one window matches. Specify its full title or window number:\n" + "\n".join(f"{r['MainWindowTitle']} (window {r['Handle']})" for r in matches)}
+        row = matches[0]; hwnd = int(row['Handle']); pid = int(row['Id'])
+        current = next((r for r in visible_windows() if r['Handle'] == hwnd and r['Id'] == pid), None)
+        if not current:
+            return {"ok": False, "state": "changed", "reply": "The target window changed before execution. No action was performed."}
+        if force:
+            return {"ok": False, "state": "confirmation_required", "window": row,
+                    "reply": "Force termination could discard unsaved work. It requires separate owner confirmation; I have not terminated anything. Save or close the application's prompt first."}
+        if action == "focus":
+            ok = _activate_window(row)
+            return {"ok": ok, "state": "focused" if ok else "permission_denied", "window": row,
+                    "reply": f"Focused {row['MainWindowTitle']}." if ok else "Windows did not allow this window to become the foreground application."}
+        if action == "minimize":
+            user32.ShowWindow(hwnd, 6)
+            ok = bool(user32.IsIconic(hwnd))
+            return {"ok": ok, "state": "minimized" if ok else "not_verified", "window": row,
+                    "reply": f"Minimized {row['MainWindowTitle']}." if ok else "Windows did not verify the window was minimized."}
+        if action != "close":
+            return {"ok": False, "state": "unsupported", "reply": "This desktop action is not supported by the current runtime."}
+        if not user32.PostMessageW(hwnd, 0x0010, 0, 0):
+            return {"ok": False, "state": "permission_denied", "reply": f"Windows rejected the close request (error {ctypes.get_last_error()}). The application was not verified closed."}
+        deadline = time.monotonic() + min(10, max(0.1, timeout))
+        while time.monotonic() < deadline:
+            after = visible_windows()
+            if not user32.IsWindow(hwnd):
+                remaining = [r for r in _matching_visible_windows(target) if r['Handle'] != hwnd] if target else []
+                return {"ok": True, "state": "window_closed", "window": row, "remaining_windows": remaining,
+                        "reply": f"Closed the {row['MainWindowTitle']} window." + (" Other matching windows remain open." if remaining else "")}
+            time.sleep(.1)
+        return {"ok": False, "state": "waiting_on_application", "window": row,
+                "reply": "The window is still open. It may be waiting for unsaved-work confirmation or be unresponsive. I have not forced it closed or discarded anything."}
+    except Exception as exc:
+        return {"ok": False, "state": "tool_error", "reply": f"Windows desktop operation failed: {type(exc).__name__}. No closure was verified."}
 
 
 def _tap_key(vk: int) -> None:

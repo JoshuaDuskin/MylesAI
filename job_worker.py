@@ -54,7 +54,8 @@ TOOL_DEFS = [
     {"type":"function","function":{"name":"launch_fortnite","description":"Launch Fortnite through the installed Epic Games Launcher and return success only after a Fortnite process is verified.","parameters":{"type":"object","properties":{},"additionalProperties":False}}},
     {"type":"function","function":{"name":"desktop_launch_app","description":"Launch any named Windows application through Windows Search. Returns success only after a matching visible window is observed; background helpers never count as completion.","parameters":{"type":"object","properties":{"app_name":{"type":"string","description":"The application name exactly as the owner described it."},"timeout_seconds":{"type":"integer","minimum":5,"maximum":45}},"required":["app_name"]}}},
     {"type":"function","function":{"name":"desktop_windows","description":"List the real visible top-level Windows desktop windows with titles, handles, process IDs, and bounds. Use before targeting an existing app.","parameters":{"type":"object","properties":{}}}},
-    {"type":"function","function":{"name":"desktop_close_app","description":"Close a visible Windows application by window-title text without opening a console, then verify that matching windows are gone. Use for requests such as close Xbox, quit Notepad, or close an app.","parameters":{"type":"object","properties":{"title_contains":{"type":"string","description":"Distinctive text from the application window title, such as Xbox or Notepad."},"force":{"type":"boolean","description":"After a normal close request, terminate only the matched window processes if they remain. Defaults to true."}},"required":["title_contains"]}}},
+    {"type":"function","function":{"name":"desktop_close_app","description":"Gracefully close one uniquely matched Windows application using title and process discovery without opening a console, then verify that matching windows are gone. Use for requests such as close Xbox, quit Notepad, or close an app.","parameters":{"type":"object","properties":{"title_contains":{"type":"string","description":"Distinctive text from the application window title, such as Xbox or Notepad."},"force":{"type":"boolean","description":"Defaults to false. A true value only requests a confirmation-required result; this tool never force-terminates or discards work."}},"required":["title_contains"]}}},
+    {"type":"function","function":{"name":"desktop_minimize_window","description":"Minimize the current or uniquely named Windows window and verify its minimized state. Uses real window/process discovery.","parameters":{"type":"object","properties":{"title_contains":{"type":"string"},"window_handle":{"type":"integer"}}}}},
     {"type":"function","function":{"name":"desktop_activate_window","description":"Restore and focus a visible Windows application by a unique substring of its title.","parameters":{"type":"object","properties":{"title_contains":{"type":"string"}},"required":["title_contains"]}}},
     {"type":"function","function":{"name":"desktop_screenshot","description":"Capture the real interactive Windows desktop. The PNG is attached to the next local model turn for visual reasoning. Observe before coordinate actions and again afterward to verify the result.","parameters":{"type":"object","properties":{"path":{"type":"string"}}}}},
     {"type":"function","function":{"name":"desktop_click","description":"Move the real Windows pointer and click an observed screen coordinate. Never guess coordinates; use desktop_screenshot first and verify afterward.","parameters":{"type":"object","properties":{"x":{"type":"integer"},"y":{"type":"integer"},"button":{"type":"string","enum":["left","right","middle"]},"clicks":{"type":"integer","minimum":1,"maximum":3}},"required":["x","y"]}}},
@@ -253,6 +254,8 @@ launch_fortnite: {}
 desktop_launch_app: {"app_name": string, "timeout_seconds": integer optional}
 desktop_windows: {}
 desktop_activate_window: {"title_contains": string}
+desktop_close_app: {"title_contains": string, "force": false}
+desktop_minimize_window: {"title_contains": string}
 desktop_screenshot: {"path": string optional}
 desktop_click: {"x": integer, "y": integer, "button": "left"|"right"|"middle" optional, "clicks": integer optional}
 desktop_key: {"keys": string}
@@ -287,7 +290,7 @@ def call_execution_bridge(job_id: str, job_prompt: str, workspace: Path, last_te
         # The fallback planner may observe, operate, or use a targeted Windows
         # command, but artifact-generation tools cannot satisfy the request.
         allowed &= {
-            "desktop_windows", "desktop_activate_window", "desktop_screenshot",
+            "desktop_windows", "desktop_activate_window", "desktop_minimize_window", "desktop_screenshot",
             "desktop_click", "desktop_key", "desktop_type", "run_powershell",
             "desktop_launch_app", "launch_fortnite", "system_status",
         }
@@ -663,7 +666,7 @@ def _looks_truncated(text: str) -> bool:
 def _prompt_requires_desktop_action(prompt: str) -> bool:
     t = str(prompt or "").lower()
     return bool(desktop_action_request(prompt)) or any(marker in t for marker in (
-        "desktop_windows", "desktop_screenshot", "desktop_activate_window",
+        "desktop_windows", "desktop_screenshot", "desktop_activate_window", "desktop_minimize_window",
         "observe-act-observe", "mouse control", "use the xbox app",
         "xboxpcapp.exe", "real desktop", "visible window",
     )) or bool(re.search(
@@ -694,7 +697,7 @@ def _desktop_action_evidence(job_id: str) -> tuple[int, int]:
         if tool in {"desktop_windows", "desktop_screenshot", "desktop_close_app", "desktop_launch_app", "launch_fortnite"}:
             observations += 1
         if tool in {
-            "desktop_activate_window", "desktop_click", "desktop_key", "desktop_type",
+            "desktop_activate_window", "desktop_minimize_window", "desktop_click", "desktop_key", "desktop_type",
             "desktop_close_app", "desktop_launch_app", "launch_fortnite",
         }:
             actions += 1
@@ -1001,7 +1004,7 @@ MUTATING_TOOLS = {
     "run_powershell", "write_text_file", "write_generated_file", "apply_text_patch",
     "download_file", "git_command", "github_pages_publish",
     "install_python_packages", "browser_automation",
-    "self_clone_candidate", "self_promote_candidate", "desktop_activate_window", "desktop_close_app",
+    "self_clone_candidate", "self_promote_candidate", "desktop_activate_window", "desktop_minimize_window", "desktop_close_app",
     "desktop_click", "desktop_key", "desktop_type", "desktop_launch_app", "launch_fortnite",
 }
 
@@ -1226,7 +1229,7 @@ def main() -> int:
                     result, outcome = execute_with_internal_retry(
                         job_id,
                         "desktop_close_app",
-                        {"title_contains": close_target, "force": True},
+                        {"title_contains": close_target, "force": False},
                     )
                     tool_calls_made += 1
                     if outcome.ok:
@@ -1245,15 +1248,17 @@ def main() -> int:
                             "Continue only if the requested application is still visibly open."
                         ),
                     })
-                if direct_desktop and direct_desktop.get("kind") in {"focus", "key", "type"}:
+                if direct_desktop and direct_desktop.get("kind") in {"focus", "minimize", "key", "type"}:
                     kind = str(direct_desktop.get("kind"))
                     tool_name = {
                         "focus": "desktop_activate_window",
+                        "minimize": "desktop_minimize_window",
                         "key": "desktop_key",
                         "type": "desktop_type",
                     }[kind]
                     tool_args = {
                         "focus": {"title_contains": direct_desktop.get("target")},
+                        "minimize": {"title_contains": direct_desktop.get("target") or ""},
                         "key": {"keys": direct_desktop.get("keys")},
                         "type": {"text": direct_desktop.get("text")},
                     }[kind]

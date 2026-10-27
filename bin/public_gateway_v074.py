@@ -288,8 +288,8 @@ def owner_read_ok(headers) -> bool:
     supplied = headers.get("X-Myles-Token", "") or headers.get("x-myles-token", "")
     if not supplied:
         authorization = headers.get("Authorization", "") or headers.get("authorization", "")
-        supplied = authorization.removeprefix("Bearer ").strip()
-    return supplied == expected
+        supplied = authorization[7:].strip() if authorization.lower().startswith("bearer ") else ""
+    return bool(supplied) and hmac.compare_digest(supplied, expected)
 
 
 def public_read_ok(headers) -> bool:
@@ -417,6 +417,10 @@ class Handler(BaseHTTPRequestHandler):
         path = self.path.split("?", 1)[0]
         if path != "/dashboard/public-chat/messages" or self.command not in {"GET", "POST"}:
             return self.send_json(405, {"ok": False, "error": "Public chat method not allowed"})
+        # A valid owner credential must never be stripped into a visitor request.
+        if owner_read_ok(self.headers):
+            self.path = '/dashboard/messages'
+            return self.proxy()
         if self.command == "GET":
             status, response_headers, raw = request_local(path, "GET", None, {
                 "Accept": "application/json",

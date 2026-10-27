@@ -23,7 +23,7 @@ from urllib.parse import parse_qs, quote, urlparse
 ROOT = Path(os.environ.get("LOCALAPPDATA", str(Path.home() / "AppData" / "Local"))) / "MylesAI"
 # This module runs as a standalone Windows script and also as a test package.
 import sys
-if str(ROOT) not in sys.path:
+if not __package__ and str(ROOT) not in sys.path:
     sys.path.insert(0,str(ROOT))
 CORE = "http://127.0.0.1:8766"
 HOST = "127.0.0.1"
@@ -972,14 +972,14 @@ def guest_request_rate(handler: BaseHTTPRequestHandler, is_post: bool) -> bool:
     """Do not let shared 127.0.0.1 gateway IP bypass guest throttling."""
     token = handler.headers.get("X-Myles-Guest", "")
     ident = hashlib.sha256(token.encode("utf-8")).hexdigest()[:24]
-    key = "guest-chat:" + ident
+    key = "guest-chat:" + ident + (":post" if is_post else ":get")
     # A separate, conservative 20/minute guest quota.
     now = time.monotonic()
     with RATE_LOCK:
         q = RATE[key]
         while q and q[0] < now - RATE_WINDOW:
             q.popleft()
-        if len(q) >= (20 if is_post else 80):
+        if len(q) >= (20 if is_post else 180):
             return False
         q.append(now)
     return True
@@ -1018,7 +1018,7 @@ def rate_ok(client: str, is_post: bool) -> bool:
     limit = POST_LIMIT if is_post else GET_LIMIT
     now = time.monotonic()
     with RATE_LOCK:
-        q = RATE[client]
+        q = RATE[client + (":post" if is_post else ":get")]
         while q and q[0] < now - RATE_WINDOW:
             q.popleft()
         if len(q) >= limit:
@@ -1043,7 +1043,7 @@ def send_to_myles(text: str) -> tuple[int, Any, str]:
         diagnostics.append(f"{path}:{code}")
         if 200 <= code < 300:
             return code, payload, path
-        if code not in {400, 404, 405, 415, 422, 599}:
+        if code not in {404, 405, 415}:
             return code, payload, path
     return 502, {"error": "Myles did not expose a compatible dashboard chat POST route", "attempts": diagnostics}, ""
 
@@ -1152,6 +1152,8 @@ class Handler(BaseHTTPRequestHandler):
         path = urlparse(self.path).path
         if path.startswith("/dashboard/device-access/"):
             return self.device_access()
+        if path == "/dashboard/public-chat/messages" and authorized(self):
+            path = "/dashboard/messages"
         if path == "/dashboard/public-chat/messages":
             # Public chat has its own history and no owner tools or data.
             origin = self.headers.get("Origin", "")
@@ -1177,7 +1179,7 @@ class Handler(BaseHTTPRequestHandler):
         if not self.preflight(False):
             return
         parsed = urlparse(self.path)
-        path = parsed.path
+        path = "/dashboard/messages" if parsed.path == "/dashboard/public-chat/messages" and authorized(self) else parsed.path
         query = parse_qs(parsed.query)
         if path == "/dashboard/health":
             # Bridge health is intentionally independent from Myles core health.
@@ -1203,7 +1205,7 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/dashboard/messages":
             code, data = core_json("/api/messages", timeout=6.0)
             if code == 200:
-                self.json_response(200, {**data,"deliveries":chat_delivery().snapshot("owner",delivery_jobs)})
+                self.json_response(200, {**data,"role":"owner","deliveries":chat_delivery().snapshot("owner",delivery_jobs)})
             else:
                 self.json_response(502, {"error": "Could not read Myles message history", "core_status": code, "detail": data})
             return
@@ -1237,14 +1239,14 @@ class Handler(BaseHTTPRequestHandler):
         path = self.path.split("?", 1)[0]
         if path.startswith("/dashboard/device-access/"):
             return self.device_access()
+        if path == "/dashboard/public-chat/messages" and authorized(self):
+            path = "/dashboard/messages"
         if path == "/dashboard/public-chat/messages":
             origin = self.headers.get("Origin", "")
             if (origin and origin != "null" and origin not in ALLOWED_ORIGINS
                     and not origin.startswith("http://127.0.0.1:")
                     and not origin.startswith("http://localhost:")):
                 return self.deny(403, "Origin not allowed")
-            if not guest_request_rate(self, True):
-                return self.deny(429, "Public chat rate limit")
             try:
                 size = int(self.headers.get("Content-Length", "0"))
             except ValueError:
@@ -1264,8 +1266,10 @@ class Handler(BaseHTTPRequestHandler):
                 return self.deny(400, "Message is too long")
 
             if body.get("client_request_id"):
-                code,payload=chat_delivery().submit("public",body["client_request_id"],text.strip(),lambda prompt,delta:guest_chat_module().public_send(prompt,on_delta=delta),streaming=True)
+                code,payload=chat_delivery().submit("public",body["client_request_id"],text.strip(),lambda prompt,delta:guest_chat_module().public_send(prompt,on_delta=delta),streaming=True,admit=lambda:guest_request_rate(self,True))
                 return self.json_response(code,payload)
+            if not guest_request_rate(self,True):
+                return self.deny(429,"Public chat rate limit")
             code, payload = guest_chat_module().public_send(text.strip())
             return self.json_response(code, payload)
         # Guest pairing/chat is a wholly separate capability from owner pairing.

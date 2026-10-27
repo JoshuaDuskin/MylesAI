@@ -92,6 +92,8 @@ jobs:
           python -m unittest discover -s tests -p test_chat_streaming.py -v
           python -m unittest discover -s tests -p test_managed_worker_scope.py -v
           python -m unittest discover -s tests -p test_bridge_manifest_encoding.py -v
+          python -m unittest discover -s tests -p test_chat_route_repair.py -v
+          python -m unittest discover -s tests -p test_desktop_control_repair.py -v
           node tests/test_chat_optimistic.cjs
 
       - name: Run MYLES regression self-test

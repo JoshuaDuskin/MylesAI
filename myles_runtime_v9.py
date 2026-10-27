@@ -216,6 +216,15 @@ def desktop_action_request(text: str) -> dict[str, str] | None:
     value = _strip_owner_action_framing(text)
     if re.fullmatch(r"(?is)(?:show|go\s+to|open)\s+(?:the\s+)?desktop", value):
         return {"kind": "key", "keys": "WIN+D", "label": "Show desktop"}
+    if re.fullmatch(r"(?is)(?:show(?: me)?|list|what are) (?:my |the )?(?:open |running )?(?:windows|applications|apps)", value):
+        return {"kind": "windows"}
+    if re.fullmatch(r"(?is)minimi[sz]e(?: the)?(?: current| active| focused)?(?: window| application| app)?", value):
+        return {"kind": "minimize"}
+    if re.fullmatch(r"(?is)switch to (?:another|a different) (?:app|application|window)", value):
+        return {"kind": "windows"}
+    forced = re.fullmatch(r"(?is)force (?:close|quit|terminate) (.+)", value)
+    if forced:
+        return {"kind": "close", "target": forced.group(1), "force": True}
     launch = app_launch_target(text)
     if launch:
         return {"kind": "launch", "target": launch}

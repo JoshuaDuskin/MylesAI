@@ -1246,129 +1246,31 @@ def desktop_windows(job_id: str) -> str:
     return out
 
 
-def desktop_close_app(job_id: str, title_contains: str, force: bool = True) -> str:
-    """Close matching visible windows without spawning a console, then verify."""
-    if os.name != "nt":
-        return "TOOL_ERROR: desktop control is only available on the Windows tower."
-    _enable_windows_dpi_awareness()
-    needle = str(title_contains or "").strip().lower()
-    if len(needle) < 2:
-        return "TOOL_ERROR: title_contains must contain at least two characters."
-
-    user32 = ctypes.windll.user32
-    enum_type = ctypes.WINFUNCTYPE(ctypes.c_bool, ctypes.c_void_p, ctypes.c_void_p)
-
-    def matching_windows() -> list[dict[str, Any]]:
-        rows: list[dict[str, Any]] = []
-
-        @enum_type
-        def collect(hwnd, _lparam):
-            try:
-                if not user32.IsWindowVisible(hwnd):
-                    return True
-                length = int(user32.GetWindowTextLengthW(hwnd))
-                if length <= 0:
-                    return True
-                title = ctypes.create_unicode_buffer(length + 1)
-                user32.GetWindowTextW(hwnd, title, length + 1)
-                if needle not in title.value.lower():
-                    return True
-                pid = ctypes.c_ulong()
-                user32.GetWindowThreadProcessId(hwnd, ctypes.byref(pid))
-                rows.append({"handle": int(hwnd), "pid": int(pid.value), "title": title.value})
-            except Exception:
-                pass
-            return True
-
-        user32.EnumWindows(collect, 0)
-        return rows
-
-    before = matching_windows()
-    for row in before:
-        try:
-            user32.PostMessageW(int(row["handle"]), 0x0010, 0, 0)
-        except Exception:
-            pass
-    if before:
-        time.sleep(2)
-
-    remaining = matching_windows()
-    if remaining and bool(force):
-        kernel32 = ctypes.windll.kernel32
-        kernel32.OpenProcess.restype = wintypes.HANDLE
-        for pid in sorted({int(row["pid"]) for row in remaining if int(row.get("pid") or 0) > 0}):
-            handle = kernel32.OpenProcess(0x0001, False, pid)
-            if handle:
-                try:
-                    kernel32.TerminateProcess(handle, 1)
-                finally:
-                    kernel32.CloseHandle(handle)
-        time.sleep(2)
-        remaining = matching_windows()
-
-    payload = {
-        "marker": "DESKTOP_APP_CLOSE_VERIFIED" if not remaining else "DESKTOP_APP_CLOSE_FAILED",
-        "target": str(title_contains).strip(),
-        "state": "already_closed" if not before else ("closed" if not remaining else "still_open"),
-        "matched_before": before,
-        "matched_after": remaining,
-    }
-    out = json.dumps(payload, ensure_ascii=False, indent=2)
-    ok = not remaining
-    trace(job_id, "tool.result", out[:12000], tool="desktop_close_app", ok=ok)
-    if ok:
-        set_job(job_id, material_progress_at=now_iso())
+def desktop_close_app(job_id: str, title_contains: str, force: bool = False, window_handle: int = 0) -> str:
+    from myles_windows import desktop_operation
+    data = desktop_operation('close', title_contains, force=force, window_handle=window_handle)
+    data['marker'] = 'DESKTOP_APP_CLOSE_VERIFIED' if data.get('ok') else 'DESKTOP_APP_CLOSE_FAILED'
+    out = json.dumps(data, ensure_ascii=False)
+    trace(job_id, 'tool.result', out, tool='desktop_close_app', ok=bool(data.get('ok')))
     return out
 
 
-def desktop_activate_window(job_id: str, title_contains: str) -> str:
-    """Restore and focus the first visible window whose title contains text."""
-    if os.name != "nt":
-        return "TOOL_ERROR: desktop control is only available on the Windows tower."
-    _enable_windows_dpi_awareness()
-    needle = str(title_contains or "").strip().lower()
-    if not needle:
-        return "TOOL_ERROR: title_contains is required."
-    user32 = ctypes.windll.user32
-    found: list[tuple[int, str]] = []
-    enum_type = ctypes.WINFUNCTYPE(ctypes.c_bool, ctypes.c_void_p, ctypes.c_void_p)
+def desktop_activate_window(job_id: str, title_contains: str, window_handle: int = 0) -> str:
+    from myles_windows import desktop_operation
+    data = desktop_operation('focus', title_contains, window_handle=window_handle)
+    row = data.get('window') or {}
+    data.update(activated=bool(data.get('ok')), handle=row.get('Handle'), title=row.get('MainWindowTitle'))
+    out = json.dumps(data, ensure_ascii=False)
+    trace(job_id, 'tool.result', out, tool='desktop_activate_window', ok=bool(data.get('ok')))
+    return out
 
-    @enum_type
-    def collect(hwnd, _lparam):
-        try:
-            if not user32.IsWindowVisible(hwnd):
-                return True
-            length = int(user32.GetWindowTextLengthW(hwnd))
-            title = ctypes.create_unicode_buffer(length + 1)
-            user32.GetWindowTextW(hwnd, title, length + 1)
-            if needle in title.value.lower():
-                found.append((int(hwnd), title.value))
-                return False
-        except Exception:
-            pass
-        return True
 
-    user32.EnumWindows(collect, 0)
-    if not found:
-        result = f"TOOL_ERROR: no visible window title contains {title_contains!r}."
-        trace(job_id, "tool.result", result, tool="desktop_activate_window", ok=False)
-        return result
-    hwnd, title = found[0]
-    user32.ShowWindow(hwnd, 9)  # SW_RESTORE
-    user32.BringWindowToTop(hwnd)
-    ok = bool(user32.SetForegroundWindow(hwnd))
-    if not ok:
-        # Windows normally prevents arbitrary foreground stealing. A harmless
-        # ALT press grants the current interactive process one retry without
-        # opening a helper shell or leaving the modifier held down.
-        user32.keybd_event(0x12, 0, 0, 0)
-        user32.keybd_event(0x12, 0, 0x0002, 0)
-        ok = bool(user32.SetForegroundWindow(hwnd))
-    result = json.dumps({"activated": ok, "handle": hwnd, "title": title}, ensure_ascii=False)
-    trace(job_id, "tool.result", result, tool="desktop_activate_window", ok=ok)
-    if ok:
-        set_job(job_id, material_progress_at=now_iso())
-    return result
+def desktop_minimize_window(job_id: str, title_contains: str = '', window_handle: int = 0) -> str:
+    from myles_windows import desktop_operation
+    data = desktop_operation('minimize', title_contains, window_handle=window_handle)
+    out = json.dumps(data, ensure_ascii=False)
+    trace(job_id, 'tool.result', out, tool='desktop_minimize_window', ok=bool(data.get('ok')))
+    return out
 
 
 def desktop_screenshot(job_id: str, path: str = "") -> str:

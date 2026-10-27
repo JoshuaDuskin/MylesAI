@@ -150,7 +150,7 @@ class GuestRoleTests(unittest.TestCase):
         self.assertIn("['shared','guest','owner']", html)
         self.assertIn("history.replaceState", html)
         self.assertIn("function dashboardUrl(){return location.origin+(location.pathname||'/');}", html)
-        self.assertIn("if(state.bridge.healthy&&state.bridge.token)state.publicMode=false", html)
+        self.assertIn("if(state.bridge.healthy&&state.bridge.token&&state.publicMode)", html)
 
 
 if __name__=="__main__":

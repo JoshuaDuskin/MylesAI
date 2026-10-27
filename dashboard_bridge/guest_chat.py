@@ -216,6 +216,10 @@ def public_send(text: str, history=None, on_delta=None) -> tuple[int, dict]:
     app_reply = public_app_reply(prompt)
     if app_reply is not None:
         return app_reply
+    from myles_runtime_v9 import desktop_action_request
+    if desktop_action_request(prompt):
+        return 403, {"ok":False,"error":"Owner access required for this desktop action",
+                     "reply":"General Windows application controls are installed on the tower, but this visitor session is not owner-authorized. Connect your owner device to use window discovery, close, focus and minimize controls."}
     with LOCK:
         existing = public_messages()["messages"]
     context=[{"role":"system","content":

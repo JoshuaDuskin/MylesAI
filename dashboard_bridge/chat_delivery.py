@@ -7,7 +7,8 @@ from pathlib import Path
 class DeliveryQueue:
     def __init__(self, directory):
         self.directory=Path(directory); self.lock=threading.RLock()
-        self.executor=ThreadPoolExecutor(max_workers=2,thread_name_prefix="myles-chat")
+        self.executor=ThreadPoolExecutor(max_workers=4,thread_name_prefix="myles-chat")
+        self.scope_locks={scope:threading.Lock() for scope in ("public","owner")}
         self.records={}
         for scope in ("public","owner"):
             try: rows=json.loads(self.path(scope).read_text(encoding="utf-8")).get("deliveries",[])
@@ -21,7 +22,7 @@ class DeliveryQueue:
         self.directory.mkdir(parents=True,exist_ok=True)
         p=self.path(scope);tmp=p.with_suffix(".tmp")
         tmp.write_text(json.dumps({"deliveries":self.records[scope][-100:]}),encoding="utf-8");os.replace(tmp,p)
-    def submit(self,scope,request_id,message,handler,streaming=False):
+    def submit(self,scope,request_id,message,handler,streaming=False,admit=None):
         if scope not in {"owner","public"} or not re.fullmatch(r"[A-Za-z0-9_-]{16,80}",str(request_id)):
             return 400,{"ok":False,"error":"Invalid chat request identifier"}
         with self.lock:
@@ -30,6 +31,10 @@ class DeliveryQueue:
             if existing:
                 if existing["message"]!=message:return 409,{"ok":False,"error":"Request identifier already belongs to another message"}
                 return 202,{"ok":True,"delivery":dict(existing)}
+            if admit is not None and not admit():
+                return 429,{"ok":False,"error":"Public chat rate limit; wait before sending a new message."}
+            if scope=='public' and sum(r['status'] in {'Sent','Running'} for r in rows)>=2:
+                return 429,{"ok":False,"error":"Public chat is busy. Please wait."}
             if sum(r["status"] in {"Sent","Running"} for values in self.records.values() for r in values)>=4:
                 return 429,{"ok":False,"error":"Myles is processing the current messages. Please wait."}
             row={"client_id":request_id,"message":message,"status":"Sent","accepted_at":time.time()}
@@ -37,6 +42,9 @@ class DeliveryQueue:
             self.executor.submit(self.execute,scope,row,handler,streaming)
             return 202,{"ok":True,"delivery":dict(row)}
     def execute(self,scope,row,handler,streaming=False):
+        with self.scope_locks[scope]:
+            return self._execute(scope,row,handler,streaming)
+    def _execute(self,scope,row,handler,streaming=False):
         with self.lock:
             row.update(status="Running",started_at=time.time());self.save(scope)
         try:
@@ -45,7 +53,7 @@ class DeliveryQueue:
             reply=str(data.get("reply") or "")
             failed=not 200<=code<300 or data.get("ok") is False or reply.lower().startswith(("i couldn't", "i couldn’t", "i could not", "unable to", "failed to")) or any(x in reply.lower() for x in ["couldn't verify","couldn't launch","haven't verified","could not verify"])
             with self.lock:
-                row.update(status="Failed" if failed else "Running" if data.get("job_id") else "Completed",reply=reply[:6000],job_id=data.get("job_id"),finished_at=None if data.get("job_id") and not failed else time.time())
+                row.update(status="Failed" if failed else "Running" if data.get("job_id") else "Completed",reply=reply[:6000],reply_message_id=data.get("message_id"),user_message_id=data.get("user_message_id"),job_id=data.get("job_id"),finished_at=None if data.get("job_id") and not failed else time.time())
                 if failed:row["error"]=str(data.get("error") or reply or "Command failed")[:1000]
                 self.save(scope)
         except Exception as exc:
@@ -68,6 +76,8 @@ class DeliveryQueue:
                     if state in {"done","completed","succeeded","failed","cancelled","blocked_auth"}:
                         row.update(status="Completed" if state in {"done","completed","succeeded"} else "Failed",finished_at=time.time())
                         if row["status"]=="Failed":row["error"]=str(job.get("error") or job.get("last_error") or state)[:1000]
+                        if job.get('result'):
+                            row['reply']=str(job['result'])[:6000]
                         changed=True
             if changed:self.save(scope)
             return [dict(r) for r in self.records[scope][-100:]]
