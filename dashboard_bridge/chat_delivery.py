@@ -8,7 +8,7 @@ class DeliveryQueue:
     def __init__(self, directory):
         self.directory=Path(directory); self.lock=threading.RLock()
         self.executor=ThreadPoolExecutor(max_workers=4,thread_name_prefix="myles-chat")
-        self.scope_locks={scope:threading.Lock() for scope in ("public","owner")}
+        self.order=threading.Condition();self.pending={scope:[] for scope in ("public","owner")}
         self.records={}
         for scope in ("public","owner"):
             try: rows=json.loads(self.path(scope).read_text(encoding="utf-8")).get("deliveries",[])
@@ -39,11 +39,17 @@ class DeliveryQueue:
                 return 429,{"ok":False,"error":"Myles is processing the current messages. Please wait."}
             row={"client_id":request_id,"message":message,"status":"Sent","accepted_at":time.time()}
             rows.append(row);active=[r for r in rows if r["status"] in {"Sent","Running"}];terminal=[r for r in rows if r["status"] not in {"Sent","Running"}];self.records[scope]=sorted(active+terminal[-(100-len(active)):],key=lambda r:r["accepted_at"]);self.save(scope)
+            with self.order:self.pending[scope].append(request_id)
             self.executor.submit(self.execute,scope,row,handler,streaming)
             return 202,{"ok":True,"delivery":dict(row)}
     def execute(self,scope,row,handler,streaming=False):
-        with self.scope_locks[scope]:
+        with self.order:
+            while self.pending[scope][0]!=row['client_id']:self.order.wait()
+        try:
             return self._execute(scope,row,handler,streaming)
+        finally:
+            with self.order:
+                self.pending[scope].pop(0);self.order.notify_all()
     def _execute(self,scope,row,handler,streaming=False):
         with self.lock:
             row.update(status="Running",started_at=time.time());self.save(scope)

@@ -3,6 +3,17 @@ from pathlib import Path
 from dashboard_bridge.chat_delivery import DeliveryQueue
 
 class ChatDeliveryTests(unittest.TestCase):
+ def test_commands_execute_in_request_order_and_public_work_does_not_block_owner(self):
+  with tempfile.TemporaryDirectory() as folder:
+   q=DeliveryQueue(folder);release=threading.Event();entered=threading.Event();owner_done=threading.Event();calls=[]
+   def public(text):entered.set();release.wait(3);return 200,{'reply':'Public done'}
+   q.submit('public','public_request_12345','slow',public)
+   self.assertTrue(entered.wait(1))
+   def owner(text):calls.append(text);owner_done.set();return 200,{'reply':text}
+   for i,text in enumerate(['first','second','third']):q.submit('owner','owner_request_1234'+str(i),text,owner)
+   self.assertTrue(owner_done.wait(1),'Public inference must not starve owner commands')
+   release.set();q.executor.shutdown(wait=True);self.assertEqual(calls,['first','second','third'])
+
  def test_ack_is_independent_of_execution_and_retry_is_idempotent(self):
   with tempfile.TemporaryDirectory() as folder:
    q=DeliveryQueue(folder);entered=threading.Event();release=threading.Event();calls=[]
