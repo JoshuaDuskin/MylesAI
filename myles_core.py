@@ -1541,7 +1541,8 @@ def _direct_fortnite_close() -> str:
         return "Fortnite is not running. No game process was closed."
     if evidence.startswith("FORTNITE_CLOSE_NOT_VERIFIED:"):
         return ("I tried to close Fortnite, but couldn't verify it exited. "
-                "I didn't close the Xbox app or unrelated processes.")
+                "I did not force termination or touch Xbox or unrelated processes. "
+                "Force termination requires separate owner confirmation.")
     if evidence.startswith("FORTNITE_CLOSE_UNAVAILABLE:"):
         return "I can't access Windows game processes from this environment."
     return "The Fortnite close attempt did not produce a verified result."

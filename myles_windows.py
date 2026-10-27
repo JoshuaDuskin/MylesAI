@@ -521,8 +521,8 @@ def _terminate_exact_fortnite_client(pid: int) -> bool:
 def close_fortnite_verified(timeout_seconds: int = 12) -> str:
     """Execute explicit owner CLOSE even during Game Mode, without model/worker.
 
-    Attempt WM_CLOSE on verified game windows first, then terminate only
-    confirmed Fortnite client executables. Success requires actual disappearance.
+    Attempt WM_CLOSE on verified game windows only. Forced termination requires
+    separate owner confirmation. Success requires actual process disappearance.
     """
     if os.name != "nt":
         return "FORTNITE_CLOSE_UNAVAILABLE: Windows tower required."
@@ -546,16 +546,8 @@ def close_fortnite_verified(timeout_seconds: int = 12) -> str:
         if not _fortnite_client_still_present():
             return "FORTNITE_CLOSED_VERIFIED: Fortnite game client has exited."
         time.sleep(0.3)
-    # Explicit "close Fortnite" authorizes targeting the game client itself,
-    # but not force-closing Xbox, other games, game launchers, or services.
-    for pid in _fortnite_client_pids() & targets:
-        _terminate_exact_fortnite_client(pid)
-    deadline = time.monotonic() + min(6, max(1, int(timeout_seconds) // 2))
-    while time.monotonic() < deadline:
-        if not _fortnite_client_still_present():
-            return "FORTNITE_CLOSED_VERIFIED: Fortnite game client has exited."
-        time.sleep(0.3)
-    return "FORTNITE_CLOSE_NOT_VERIFIED: Fortnite is still running or Windows denied closing its verified game process."
+    return "FORTNITE_CLOSE_NOT_VERIFIED: Fortnite is still running after a graceful close. Force termination could discard progress and requires separate owner confirmation. No process was terminated."
+
 
 def launch_fortnite_verified(timeout_seconds: int = 40) -> str:
     """Launch the installed Fortnite edition and verify its foreground game window."""

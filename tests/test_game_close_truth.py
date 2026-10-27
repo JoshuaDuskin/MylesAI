@@ -15,6 +15,13 @@ from bin import remote_deploy_agent as deploy
 
 
 class FortniteCloseTests(unittest.TestCase):
+    def test_graceful_timeout_never_forces_game_termination(self):
+        with patch.object(windows.os,'name','nt'), patch.object(windows,'_fortnite_client_pids',return_value={122}), patch.object(windows,'visible_windows',return_value=[]), patch.object(windows,'_fortnite_client_still_present',return_value=True), patch.object(windows.time,'monotonic',side_effect=[0,10]), patch.object(windows,'_terminate_exact_fortnite_client') as kill:
+            result=windows.close_fortnite_verified()
+            self.assertTrue(result.startswith('FORTNITE_CLOSE_NOT_VERIFIED'))
+            self.assertIn('confirmation',result)
+            kill.assert_not_called()
+
     def test_explicit_commands_are_narrowly_accepted(self):
         for command in ("Close Fortnite", "I said close Fortnite",
                         "please quit Fortnite", "can you close Fortnite?",
