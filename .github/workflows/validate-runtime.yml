@@ -68,6 +68,7 @@ jobs:
       - name: Verify consistent phone paper and research telemetry
         run: |
           python -m unittest discover -s tests -p 'test_quant_dashboard_status.py'
+          python -m unittest discover -s tests -p 'test_prediction_controls.py'
           node tests/test_dashboard_quant_status.cjs
 
       - name: Verify public basic app launch scope

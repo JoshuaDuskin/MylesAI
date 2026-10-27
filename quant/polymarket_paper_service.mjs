@@ -67,7 +67,7 @@ function signalsFor(markets) {
   }).sort((a, b) => b.liquidity_score - a.liquidity_score).slice(0, 12);
 }
 
-export function simulatePredictionPaper(previous,markets,history,now=Date.now()) {
+export function simulatePredictionPaper(previous,markets,history,now=Date.now(),enabled=true) {
   const paper=previous.paper_simulation||{cash_usd:n(previous.paper_equity_usd,1000),positions:[],trades:[]};
   const rows=structuredClone(paper),byId=new Map(markets.map(m=>[m.id,m]));
   const fee=.01; // Explicit conservative paper assumption; not a provider fee quote.
@@ -81,6 +81,7 @@ export function simulatePredictionPaper(previous,markets,history,now=Date.now())
   }
   rows.positions=rows.positions.filter(p=>!p.closed);
   for(const m of markets){
+    if(!enabled)break; // Pausing entries preserves positions and still manages exits.
     if(rows.positions.length>=2)break;
     if(rows.positions.some(p=>p.market_id===m.id)||m.liquidity_usd<10000||!(m.best_ask>0&&m.best_ask<1&&m.best_bid>0)||m.spread>.05)continue;
     const h=history[m.id]||[],o=m.outcomes[0];if(!o||h.length<3)continue;
@@ -107,7 +108,9 @@ export async function runPolymarketPaperCycle({ limit = 30 } = {}) {
   const history=previous.price_history&&typeof previous.price_history==='object'?previous.price_history:{};
   for(const m of markets){history[m.id]=[...(Array.isArray(history[m.id])?history[m.id]:[]),{at:generated,outcomes:m.outcomes.map(x=>({outcome:x.outcome,price:x.price}))}].slice(-96);}
   const activeHistory=Object.fromEntries(markets.slice(0,20).map(m=>[m.id,history[m.id]]));
-  const paperSimulation=simulatePredictionPaper(previous,markets,history);
+  const config=readJson(path.join(DATA,'prediction_paper_config.json'),{enabled:true});
+  const paperEnabled=config.enabled===true;
+  const paperSimulation=simulatePredictionPaper(previous,markets,history,Date.now(),paperEnabled);
   const providerChecks=await Promise.allSettled([
     fetch('https://polymarket.com/api/geoblock',{signal:AbortSignal.timeout(8000)}).then(async r=>{if(!r.ok)throw new Error('Geographic check HTTP '+r.status);const x=await r.json();return {blocked:x.blocked===true,country:x.country||null};}),
     fetch('https://api.polymarket.us/v1/markets?active=true&closed=false&limit=20',{headers:{accept:'application/json'},signal:AbortSignal.timeout(8000)}).then(async r=>{if(!r.ok)throw new Error('Polymarket US HTTP '+r.status+'; authorized market-data account may be required');return r.json();})
@@ -129,6 +132,8 @@ export async function runPolymarketPaperCycle({ limit = 30 } = {}) {
     price_history:activeHistory,
     paper_strategy_status:'Paper momentum simulation waits for three observed probability snapshots, quoted bid/ask, and liquidity. No live orders.',
     paper_simulation:paperSimulation,
+    paper_enabled:paperEnabled,
+    paper_control_applied_at:generated,
     news_correlation_status:'Not available: no verified news feed is configured',
     mode: 'paper_watchlist',
     live_locked: true,

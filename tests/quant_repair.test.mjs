@@ -55,8 +55,13 @@ test('prediction paper waits for evidence and uses observed quotes with costs',(
   assert.equal(simulatePredictionPaper({paper_equity_usd:1000},[m],{},1000000).positions.length,0);
   const h={test:[{outcomes:[{outcome:'Yes',price:.50}]},{outcomes:[{outcome:'Yes',price:.52}]},{outcomes:[{outcome:'Yes',price:.55}]}]};
   const opened=simulatePredictionPaper({paper_equity_usd:1000},[m],h,1000000);
+  const paused=simulatePredictionPaper({paper_equity_usd:1000},[m],h,1000000,false);
+  assert.equal(paused.positions.length,0,'Paused prediction paper must not enter');
+  assert.equal(paused.cash_usd,1000);
   assert.equal(opened.positions.length,1);assert.ok(opened.equity_usd<1000);assert.equal(opened.cash_usd,975);
   const closed=simulatePredictionPaper({paper_simulation:opened},[{...m,best_bid:.62,best_ask:.63,outcomes:[{outcome:'Yes',price:.62}]}],{},1001000);
+  const managed=simulatePredictionPaper({paper_simulation:opened},[{...m,best_bid:.62,best_ask:.63,outcomes:[{outcome:'Yes',price:.62}]}],{},1001000,false);
+  assert.equal(managed.trades.length,1,'Paused entries must still manage an existing position');
   assert.equal(closed.trades.length,1);assert.ok(closed.trades[0].exit_fee>0);
 });
 

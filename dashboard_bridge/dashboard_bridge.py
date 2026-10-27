@@ -687,9 +687,22 @@ def copy_status() -> dict[str, Any]:
 
 def polymarket_status() -> dict[str, Any]:
     cached = load_json(POLYMARKET_STATUS)
+    config = load_json(ROOT / "data" / "prediction_paper_config.json") or {}
     if isinstance(cached, dict):
-        return cached
+        return {**cached, "paper_enabled": config.get("enabled", True) is True, "live_locked": True}
     return {"ok": True, "version": "0.1.0-paper-only", "mode": "paper_watchlist", "live_locked": True, "markets": [], "signals": [], "safety_note": "Read-only paper monitor; no orders or funds."}
+
+
+def save_prediction_paper_config(payload: dict[str, Any]) -> dict[str, Any]:
+    if set(payload) != {"enabled"} or type(payload.get("enabled")) is not bool:
+        raise ValueError("Only a boolean paper enabled setting is supported. Live orders remain locked.")
+    config = {"enabled": payload["enabled"], "updated_at": now_iso()}
+    target = ROOT / "data" / "prediction_paper_config.json"
+    target.parent.mkdir(parents=True, exist_ok=True)
+    temporary = target.with_suffix(f".{threading.get_ident()}.tmp")
+    temporary.write_text(json.dumps(config), encoding="utf-8")
+    temporary.replace(target)
+    return {"ok": True, "paper_enabled": config["enabled"], "live_locked": True}
 
 
 def live_status() -> dict[str, Any]:
@@ -1355,6 +1368,13 @@ class Handler(BaseHTTPRequestHandler):
             return
         if not isinstance(payload, dict):
             self.deny(400, "JSON object required")
+            return
+
+        if path == "/dashboard/polymarket/paper-config":
+            try:
+                self.json_response(200, save_prediction_paper_config(payload))
+            except ValueError as exc:
+                self.deny(400, str(exc))
             return
 
         if path == "/dashboard/guest/invite":
