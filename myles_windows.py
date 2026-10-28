@@ -159,7 +159,7 @@ def taskbar_attention_detected(*, samples: int = 3, interval: float = 0.32) -> t
     if os.name != "nt":
         return False, "Windows taskbar observation requires the tower."
     try:
-        from PIL import Image, ImageChops, ImageStat
+        from PIL import Image, ImageChops
     except Exception:
         return False, "The local image reader is unavailable."
     paths: list[Path] = []
@@ -183,12 +183,13 @@ def taskbar_attention_detected(*, samples: int = 3, interval: float = 0.32) -> t
         scores: list[float] = []
         for first, second in zip(crops, crops[1:]):
             diff = ImageChops.difference(first, second)
-            mean = sum(ImageStat.Stat(diff).mean) / 3.0
-            # Cursor movement and clock ticks are small; a flashing button
-            # changes a compact, high-contrast region repeatedly.
-            scores.append(mean)
-        detected = len(scores) >= 2 and max(scores) >= 2.2 and min(scores) >= 0.35
-        return detected, f"taskbar_change_scores={','.join(f'{score:.2f}' for score in scores)}"
+            raw = diff.tobytes()
+            changed = sum(1 for index in range(0, len(raw), 3) if max(raw[index:index + 3]) >= 35)
+            scores.append(changed / max(1, len(raw) // 3))
+        # A flashing button changes a compact, high-contrast region repeatedly;
+        # cursor movement and clock ticks affect far fewer pixels.
+        detected = len(scores) >= 2 and max(scores) >= 0.006 and min(scores) >= 0.001
+        return detected, f"taskbar_changed_pixel_ratios={','.join(f'{score:.4f}' for score in scores)}"
     except Exception as exc:
         return False, f"taskbar observation failed: {type(exc).__name__}"
     finally:
