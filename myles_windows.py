@@ -246,7 +246,7 @@ def desktop_operation(action: str, target: str = "", *, window_handle: int = 0,
             detected, evidence = taskbar_attention_detected()
             return {"ok": True, "state": "observed", "windows": rows,
                     "taskbar_attention_detected": detected, "taskbar_evidence": evidence,
-                    "reply": (("I detected a taskbar attention animation. Visible apps: " if detected else "I did not detect a taskbar attention animation. Visible apps: ") + ", ".join(names[:20]) + (f" and {len(names)-20} more" if len(names)>20 else "") + ". I cannot safely map the animated taskbar button to a process without clicking or changing focus.") if rows else ("I detected taskbar activity, but no visible application window is available to identify." if detected else "No visible application windows or taskbar attention animation was detected.")}
+                    "reply": (("I detected a taskbar attention animation. Visible apps: " if detected else "I did not detect a taskbar attention animation. Visible apps: ") + ", ".join(names[:20]) + (f" and {len(names)-20} more" if len(names)>20 else "") + (". I cannot safely map the animated taskbar button to a process without clicking or changing focus." if detected else ".")) if rows else ("I detected taskbar activity, but no visible application window is available to identify." if detected else "No visible application windows or taskbar attention animation was detected.")}
         if action == "windows_detail":
             return {"ok": True, "state": "observed", "windows": rows,
                     "reply": "Open windows:\n" + ("\n".join(f"{x['MainWindowTitle']} — {x['ProcessName']} (window {x['Handle']})" for x in rows) or "No visible application windows.")}
