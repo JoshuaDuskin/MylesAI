@@ -45,6 +45,24 @@ class PublicBasicApps(unittest.TestCase):
                     self.assertEqual(out["reply"], f"{app} is open on the tower.")
                     launch.assert_called_with(app, timeout_seconds=20)
 
+    def test_visible_basic_app_aliases_are_allowlisted(self):
+        with patch("myles_windows.launch_app_verified", return_value="DESKTOP_APP_LAUNCH_VERIFIED: private title") as launch:
+            for prompt, app in (("Open VS Code", "Visual Studio Code"),
+                                ("Open Windows Media Player", "Windows Media Player Legacy"),
+                                ("Open Chat GPT", "ChatGPT")):
+                with self.subTest(prompt=prompt):
+                    status, out = guest_chat.public_app_reply(prompt)
+                    self.assertEqual(status, 200)
+                    self.assertEqual(out["reply"], f"{app} is open on the tower.")
+                    launch.assert_called_with(app, timeout_seconds=20)
+
+    def test_disabled_marker_never_reaches_windows_file_association(self):
+        import myles_windows as w
+        self.assertEqual(w._normalized_app_name("Myles.disabled"), "Myles")
+        with patch.object(w.os, "name", "nt"), patch.object(w.ctypes, "windll", create=True):
+            self.assertEqual(w._shell_open("C:\\Users\\Joshu\\Desktop\\Myles.disabled"),
+                             (False, "refused disabled marker target"))
+
     def test_unverified_launch_does_not_claim_success_or_disclose_error(self):
         with patch("myles_windows.launch_app_verified", return_value="DESKTOP_APP_LAUNCH_ERROR: C:/private/path"):
             status, out = guest_chat.public_app_reply("Open Calculator")

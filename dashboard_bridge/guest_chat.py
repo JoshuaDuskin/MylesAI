@@ -32,6 +32,12 @@ PUBLIC_APPS = {
     "chrome": "Google Chrome", "google chrome": "Google Chrome",
     "edge": "Microsoft Edge", "microsoft edge": "Microsoft Edge",
     "spotify": "Spotify",
+    "visual studio code": "Visual Studio Code", "vs code": "Visual Studio Code",
+    "code": "Visual Studio Code",
+    "windows media player": "Windows Media Player Legacy",
+    "windows media player legacy": "Windows Media Player Legacy",
+    "media player": "Windows Media Player Legacy",
+    "chatgpt": "ChatGPT", "chat gpt": "ChatGPT",
     "powershell": "Windows PowerShell", "windows powershell": "Windows PowerShell",
     "xbox": "Xbox", "fortnite": "Fortnite",
 }

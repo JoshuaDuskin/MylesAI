@@ -26,6 +26,12 @@ def _normalized_app_name(value: str) -> str:
     name = re.sub(r"\s+", " ", str(value or "").strip())
     name = re.sub(r"(?i)^(?:the\s+)", "", name)
     name = re.sub(r"(?i)\s+(?:app|application|program)$", "", name).strip()
+    # Deployment and shortcut repair jobs may leave a disabled marker beside
+    # an app entry.  Never pass that marker to ShellExecute/Windows Search:
+    # Windows treats ``foo.disabled`` as an unknown document type and opens
+    # the "Select an app" chooser.  For an app request, the marker is not the
+    # application name, so resolve the base name instead.
+    name = re.sub(r"(?i)\.disabled$", "", name).strip()
     name = re.sub(r"(?i)\.exe$", "", name)
     return "ChatGPT" if re.sub(r"\s+", "", name).casefold() == "chatgpt" else name
 
@@ -91,6 +97,11 @@ def epic_launcher_executable() -> Path | None:
 
 
 def _shell_open(target: str, parameters: str = "") -> tuple[bool, str]:
+    # A .disabled file is a deployment marker, not an executable or app link.
+    # Refuse it before ShellExecute can invoke the Windows file-association
+    # chooser.  The caller can then report a verified launch failure.
+    if re.search(r"(?i)\.disabled(?:$|[\\/])", str(target)):
+        return False, "refused disabled marker target"
     try:
         result = int(ctypes.windll.shell32.ShellExecuteW(None, "open", str(target), str(parameters) if parameters else None, None, 1))
         return result > 32, f"ShellExecuteW={result}"
@@ -471,6 +482,13 @@ def launch_app_verified(app_name: str, timeout_seconds: int = 20) -> str:
     requested = _normalized_app_name(app_name)
     if not requested or requested.casefold() in {"app", "application", "program", "it", "this"}:
         return "DESKTOP_APP_LAUNCH_ERROR: A specific application name is required."
+    # Generic app control must never hand a document/marker path to Windows
+    # Search or ShellExecute.  That is the source of the `.disabled` chooser
+    # shown in the tower screenshot.  Installed apps are resolved by display
+    # name/AppID below; explicit executable *names* remain valid, but paths and
+    # disabled/document targets are refused instead of opening a file handler.
+    if re.search(r"[\\/]", requested) or re.search(r"(?i)\.(?:disabled|lnk|url|txt|pdf|docx?|xlsx?|html?)$", requested):
+        return "DESKTOP_APP_LAUNCH_ERROR: The request names a file or marker, not an installed application."
     if requested.casefold() in {"start", "start menu", "windows start menu"}:
         return _open_start_menu()
     existing = _matching_visible_windows(requested)
