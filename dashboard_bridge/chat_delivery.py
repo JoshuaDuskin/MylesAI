@@ -96,7 +96,11 @@ class DeliveryQueue:
         with self.lock:
             changed=False
             for row in self.records[scope]:
-                limit = 20 if row.get('lane') == 'owner_fast' else 900 if row.get('job_id') else 180
+                # A graceful Fortnite close can legitimately wait through its
+                # loading client (the direct control allows up to 45 seconds).
+                # Keep the fast lane bounded, but do not mark that request
+                # failed at 20 seconds while Windows is still closing it.
+                limit = 75 if row.get('lane') == 'owner_fast' else 900 if row.get('job_id') else 180
                 if row.get('status') in {'Sent','Running'} and time.time()-row.get('started_at',row['accepted_at']) > limit:
                     row.update(status='Failed',error='Execution deadline exceeded; completion is unconfirmed. This request will not be executed again on retry.',finished_at=time.time(),deadline_exceeded=True)
                     changed=True
