@@ -1510,7 +1510,7 @@ html,body{max-width:100%;overflow-x:clip}
     const client_id=retryId||'chat_'+(crypto.randomUUID?crypto.randomUUID():Date.now().toString(36)+Math.random().toString(36).slice(2));
     const started=performance.now(),message=state.messages.find(x=>x.client_id===client_id)||{id:client_id,client_id,role:'user',text,ts:new Date().toISOString()};
     message.status='Sending';delete message.error;
-    if(!state.messages.includes(message))state.messages.push(message);renderMessages();persistChatHistory();
+    if(!state.messages.includes(message))state.messages.push(message);renderMessages();const sentBox=$('chatMessages');if(sentBox)sentBox.scrollTop=sentBox.scrollHeight;persistChatHistory();
     message.render_latency_ms=performance.now()-started;
     document.querySelector('[data-chat-client-id="'+client_id+'"]')?.setAttribute('data-render-latency-ms',String(message.render_latency_ms));
     try{
