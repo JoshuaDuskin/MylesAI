@@ -273,6 +273,48 @@ class MediaAssistant:
         self.playing_until=time.monotonic()+45 if playing else 0
         return playing
 
+    def _youtube_first_result(self):
+        """Return the first real watch link across desktop/mobile YouTube DOMs."""
+        try:
+            self.page.wait_for_selector('a#video-title, a[href*="/watch?v="]', timeout=7000)
+        except Exception:
+            pass
+        selectors = ('a#video-title', 'ytd-video-renderer a[href*="/watch?v="]',
+                     'a[href*="/watch?v="]')
+        for selector in selectors:
+            try:
+                links = self.page.locator(selector)
+                for index in range(min(links.count(), 8)):
+                    link = links.nth(index)
+                    href = str(link.get_attribute('href') or '')
+                    title = (link.inner_text(timeout=1500) or '').strip()
+                    if '/watch' in href and title:
+                        return link, title
+            except Exception:
+                continue
+        return None, ''
+
+    def _play_youtube_first(self):
+        link, selected = self._youtube_first_result()
+        if link is None:
+            return {'ok':False,'reply':'YouTube search loaded, but no playable video result was exposed. No subscription check was involved and no video was started.'}
+        try:
+            link.click(timeout=5000)
+            self.page.wait_for_timeout(900)
+            video=self.page.locator('video').first
+            if not video.count():
+                return {'ok':False,'reply':'YouTube opened the selected result, but no video player appeared. Playback was not verified.'}
+            video.evaluate('v=>v.play().catch(()=>null)')
+            before=video.evaluate('v=>({paused:v.paused,time:v.currentTime,ready:v.readyState})')
+            self.page.wait_for_timeout(1100)
+            after=video.evaluate('v=>({paused:v.paused,time:v.currentTime,ready:v.readyState})')
+            if not after['paused'] and after['ready'] >= 2 and after['time'] > before['time'] + .1:
+                self.playing_until=time.monotonic()+45
+                return {'ok':True,'reply':f"Started the first YouTube result: {selected[:180]}",'media_state':'playing'}
+            return {'ok':False,'reply':'YouTube opened the selected result, but playback did not advance. The browser may need one visible click; no subscription was assumed.'}
+        except Exception as exc:
+            return {'ok':False,'reply':f'YouTube result selection failed ({type(exc).__name__}); no subscription check was involved and playback was not verified.'}
+
     def _browser_command(self,command):
         action=command.get('action');kind=command['kind']
         if kind=='control' and (not self.page or self.page.is_closed()):
@@ -283,26 +325,7 @@ class MediaAssistant:
             host=(urlsplit(self.page.url).hostname or '').removeprefix('www.')
             if host != 'youtube.com' or '/results' not in (urlsplit(self.page.url).path or ''):
                 return {'ok':False,'reply':'The previous YouTube results page is no longer open. Ask me to find the video again; no unrelated page was changed.'}
-            try:
-                link=self.page.locator('a#video-title').first
-                if not link.count():
-                    return {'ok':False,'reply':'The YouTube results page did not expose a selectable video result. No video was started.'}
-                selected=(link.inner_text(timeout=3000) or '').strip()
-                link.click(timeout=5000)
-                self.page.wait_for_timeout(900)
-                video=self.page.locator('video').first
-                if not video.count():
-                    return {'ok':False,'reply':'Opened the selected YouTube result, but no video player appeared. Playback was not verified.'}
-                video.evaluate('v=>v.play().catch(()=>null)')
-                before=video.evaluate('v=>({paused:v.paused,time:v.currentTime,ready:v.readyState})')
-                self.page.wait_for_timeout(1100)
-                after=video.evaluate('v=>({paused:v.paused,time:v.currentTime,ready:v.readyState})')
-                if not after['paused'] and after['ready'] >= 2 and after['time'] > before['time'] + .1:
-                    self.playing_until=time.monotonic()+45
-                    return {'ok':True,'reply':f"Started the first YouTube result: {selected[:180]}" if selected else 'Started the first YouTube result.','media_state':'playing'}
-                return {'ok':False,'reply':'Opened the selected YouTube result, but playback was not verified. The page may require owner interaction.'}
-            except Exception as exc:
-                return {'ok':False,'reply':f'YouTube result selection failed ({type(exc).__name__}); playback was not verified.'}
+            return self._play_youtube_first()
         if kind!='control':
             url=command['url']
             # YouTube searches are built locally; all other navigation must be official.
@@ -312,9 +335,8 @@ class MediaAssistant:
                 return {'ok':False,'reply':f'The official page did not finish loading ({type(exc).__name__}). The browser remains available for another request; playback is unconfirmed.'}
             if not safe_url(self.page.url):return {'ok':False,'reply':'The provider redirected outside supported official sites. Owner review is required; no playback action was sent.'}
             if kind=='youtube':
-                link=self.page.locator('a#video-title').first
                 if not command.get('play'):return {'ok':True,'reply':'Opened YouTube search results in the media browser. No video is claimed playing.'}
-                if link.count():link.click(timeout=3000)
+                return self._play_youtube_first()
             if kind=='service_search':
                 return {'ok':True,'reply':f"Opened {command.get('service','the service')} search results for {command.get('title','the requested title')}. Playback was not claimed; the service may require sign-in or owner selection.",'media_state':'opened'}
             if kind=='web_search':
