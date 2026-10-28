@@ -1536,7 +1536,7 @@ def _fortnite_close_followup(raw: str, source: str) -> bool:
 
 
 def _direct_fortnite_close() -> str:
-    evidence = close_fortnite_verified(timeout_seconds=12)
+    evidence = close_fortnite_verified(timeout_seconds=45)
     if evidence.startswith("FORTNITE_CLOSED_VERIFIED:"):
         return "Fortnite is closed. I verified the game client exited."
     if evidence.startswith("FORTNITE_NOT_RUNNING:"):
@@ -1638,6 +1638,17 @@ def handle_owner_message(text: str, source: str) -> dict[str, Any]:
         message_id = add_message(source, "assistant", final, None)
         return {"kind": "conversation", "reply": final, "message_id": message_id}
 
+    # Explicit media requests must outrank the generic "open <app>" parser:
+    # phrases like "Open YouTube and play a video called ..." contain an app
+    # launch prefix but are actually a search/play request.
+    from myles_media import media_request, assistant as media_assistant
+    media = media_request(raw)
+    if media:
+        user_id = add_message(source, 'user', raw, None)
+        result = media_assistant().handle(media)
+        message_id = add_message(source, 'assistant', result['reply'], None)
+        return {'kind':'conversation', **result, 'message_id':message_id, 'user_message_id':user_id}
+
     desktop = desktop_action_request(raw)
     if desktop and desktop.get('kind') in {'close', 'focus', 'minimize', 'windows', 'windows_detail', 'windows_attention', 'app_status'}:
         from myles_windows import desktop_operation
@@ -1675,18 +1686,6 @@ def handle_owner_message(text: str, source: str) -> dict[str, Any]:
         final = owner_job_report(raw)
         message_id = add_message(source, "assistant", final, None)
         return {"kind": "conversation", "reply": final, "message_id": message_id}
-
-    from myles_media import media_request, assistant as media_assistant
-    media = media_request(raw)
-    if media:
-        user_id = add_message(source, 'user', raw, None)
-        if game_is_active():
-            final = "Fortnite is running, so Myles has paused media actions to protect game performance. Close the game before controlling playback."
-            message_id = add_message(source, 'assistant', final, None)
-            return {'kind':'conversation', 'ok':False, 'reply':final, 'message_id':message_id, 'user_message_id':user_id}
-        result = media_assistant().handle(media)
-        message_id = add_message(source, 'assistant', result['reply'], None)
-        return {'kind':'conversation', **result, 'message_id':message_id, 'user_message_id':user_id}
 
     direct_desktop = desktop_action_request(raw)
     if direct_desktop:

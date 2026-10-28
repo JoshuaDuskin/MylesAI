@@ -10,13 +10,21 @@ import threading
 import time
 from concurrent.futures import ThreadPoolExecutor, TimeoutError
 from pathlib import Path
-from urllib.parse import urlsplit, urlunsplit, urlencode
+from urllib.parse import urlsplit, urlunsplit, urlencode, quote_plus
 
 SERVICES = {'paramount+': 'https://www.paramountplus.com/',
             'south park studios': 'https://www.southparkstudios.com/',
             'disney+': 'https://www.disneyplus.com/', 'hulu': 'https://www.hulu.com/',
             'netflix': 'https://www.netflix.com/', 'youtube': 'https://www.youtube.com/',
             'tubi': 'https://tubitv.com/', 'pluto tv': 'https://pluto.tv/'}
+SEARCH_URLS = {
+    'youtube': 'https://www.youtube.com/results?search_query=',
+    'hulu': 'https://www.hulu.com/search?q=',
+    'netflix': 'https://www.netflix.com/search?q=',
+    'disney+': 'https://www.disneyplus.com/search?q=',
+    'paramount+': 'https://www.paramountplus.com/search/?q=',
+}
+WEB_SEARCH_HOSTS = ('google.com', 'bing.com', 'duckduckgo.com')
 DOMAINS = tuple(urlsplit(u).hostname.removeprefix('www.') for u in SERVICES.values()) + ('southparkstudios.nu',)
 TEST_VIDEO = 'https://interactive-examples.mdn.mozilla.net/media/cc0-videos/flower.mp4'
 OFFICIAL_CATALOGS = {
@@ -34,7 +42,8 @@ def safe_url(url):
     host = p.hostname or ''
     if p.scheme != 'https' or p.username or p.password or p.port not in (None, 443):
         return ''
-    if not any(host == d or host.endswith('.'+d) for d in DOMAINS) and url != TEST_VIDEO:
+    if not (any(host == d or host.endswith('.'+d) for d in DOMAINS)
+            or any(host == d or host.endswith('.'+d) for d in WEB_SEARCH_HOSTS)) and url != TEST_VIDEO:
         return ''
     # No session-bearing queries are persisted or returned in chat.
     return urlunsplit((p.scheme, p.netloc, p.path, '', ''))
@@ -66,12 +75,49 @@ def media_request(text):
     if follow: return {'kind':'discover', 'follow':True, 'episode': follow[1], 'play':True}
     if lower == 'find a free legal episode':
         return {'kind':'discover', 'follow':True, 'free':True, 'play':False}
-    service = next((s for s in SERVICES if lower.startswith('open '+s)), None)
-    if service: return {'kind':'service','service':service,'play': 'continue' in lower}
+    # Preserve the title in natural requests such as "Open YouTube and play
+    # a video called ...". The old service-prefix branch discarded the title.
+    multi = re.fullmatch(
+        r'open\s+(youtube|hulu|netflix|disney(?:\+| plus)|paramount\+?)\s+and\s+'
+        r'(?:play|watch|find|search(?:\s+for)?)\s+(?:a\s+)?'
+        r'(?:video|song|movie|show|episode|article)?\s*'
+        r'(?:called|titled|about|on|for)?\s*(.+)', value, re.I)
+    if multi:
+        service = multi[1].casefold().replace('disney plus', 'disney+')
+        if service not in SERVICES and service.rstrip('+') + '+' in SERVICES:
+            service = service.rstrip('+') + '+'
+        title = multi[2].strip(' .?!')
+        if service == 'youtube':
+            return {'kind':'youtube','title':title,'play':True}
+        if service in SERVICES and title:
+            return {'kind':'service_search','service':service,'title':title,'play':True}
+    on_service = re.fullmatch(
+        r'(?:watch|play|find|search for)\s+(?:a\s+)?(?:movie|show|episode|video)?\s*(.+?)\s+on\s+'
+        r'(youtube|hulu|netflix|disney(?:\+| plus)|paramount\+?)', value, re.I)
+    if on_service:
+        service = on_service[2].casefold().replace('disney plus', 'disney+')
+        if service not in SERVICES and service.rstrip('+') + '+' in SERVICES:
+            service = service.rstrip('+') + '+'
+        title = on_service[1].strip(' .?!')
+        if service == 'youtube':
+            return {'kind':'youtube','title':title,'play':True}
+        if service in SERVICES:
+            return {'kind':'service_search','service':service,'title':title,'play':True}
+    article = re.fullmatch(
+        r'(?:find|search for|look up|show me|open)\s+(?:an?\s+)?'
+        r'(?:article|story|news|web page|page)\s+(?:about|on|for)?\s*(.+)', value, re.I)
+    if article and article[1].strip():
+        return {'kind':'web_search','title':article[1].strip(' .?!')}
+    service = next((s for s in SERVICES if lower == 'open '+s), None)
+    if service: return {'kind':'service','service':service,'play':False}
     youtube = re.fullmatch(r'(?:find|play|search for) (?:a )?youtube video (?:about |explaining )?(.+)', value, re.I)
     if youtube: return {'kind':'youtube','title':youtube[1], 'play': lower.startswith('play')}
     find = re.fullmatch(r'(find|play|watch|start)\s+(.+)', value, re.I)
-    if not find: return None
+    if not find:
+        general_search = re.fullmatch(r'(?:search for|look up)\s+(.+)', value, re.I)
+        if general_search and general_search[1].strip():
+            return {'kind':'web_search','title':general_search[1].strip(' .?!')}
+        return None
     title = find[2]
     # Only media-shaped finds; leave general file/project requests to existing tools.
     if find[1].lower() == 'find' and not re.search(r'(?i)movie|film|episode|show|south park|night at the museum|\band (?:play|start)',title):
@@ -142,6 +188,18 @@ class MediaAssistant:
                     self.context={'kind':'youtube','title':request['title'],'url':'https://www.youtube.com/results','checked_at':time.time()}
                     self._save('media_context.json',self.context)
             return result
+        if kind=='service_search':
+            service=request.get('service','')
+            if service not in SEARCH_URLS:
+                return {'ok':False,'reply':'That streaming service is not supported by the controlled browser.'}
+            result=self._call({**request,'url':SEARCH_URLS[service]+quote_plus(request.get('title',''))})
+            if result.get('ok'):
+                with self.lock:
+                    self.context={'kind':'service_search','service':service,'title':request.get('title',''),'url':SEARCH_URLS[service],'checked_at':time.time()}
+                    self._save('media_context.json',self.context)
+            return result
+        if kind=='web_search':
+            return self._call({**request,'url':'https://www.google.com/search?q='+quote_plus(request.get('title',''))})
         if kind=='youtube_follow':
             with self.lock:
                 context=dict(self.context)
@@ -257,6 +315,10 @@ class MediaAssistant:
                 link=self.page.locator('a#video-title').first
                 if not command.get('play'):return {'ok':True,'reply':'Opened YouTube search results in the media browser. No video is claimed playing.'}
                 if link.count():link.click(timeout=3000)
+            if kind=='service_search':
+                return {'ok':True,'reply':f"Opened {command.get('service','the service')} search results for {command.get('title','the requested title')}. Playback was not claimed; the service may require sign-in or owner selection.",'media_state':'opened'}
+            if kind=='web_search':
+                return {'ok':True,'reply':f"Opened web search results for {command.get('title','the requested topic')}.",'media_state':'opened'}
             if command.get('play'):
                 episode=command.get('episode');season=command.get('season')
                 if episode or season:

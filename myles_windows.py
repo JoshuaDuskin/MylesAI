@@ -643,7 +643,10 @@ def close_fortnite_verified(timeout_seconds: int = 12) -> str:
                     user32.PostMessageW(hwnd, 0x0010, 0, 0)  # WM_CLOSE
     except Exception:
         pass
-    grace_end = time.monotonic() + min(5, max(1, int(timeout_seconds) // 2))
+    # Fortnite can remain in its loading client for several seconds before it
+    # processes WM_CLOSE. Keep the close graceful, but wait through that
+    # loading transition instead of reporting a premature failure.
+    grace_end = time.monotonic() + min(30, max(3, int(timeout_seconds) // 2))
     while time.monotonic() < grace_end:
         if not _fortnite_client_still_present():
             return "FORTNITE_CLOSED_VERIFIED: Fortnite game client has exited."
