@@ -33,6 +33,11 @@ def _normalized_app_name(value: str) -> str:
     # application name, so resolve the base name instead.
     name = re.sub(r"(?i)\.disabled$", "", name).strip()
     name = re.sub(r"(?i)\.exe$", "", name)
+    compact = re.sub(r"[^a-z0-9]", "", name.casefold())
+    if compact in {"edge", "microsoftedge", "msedge"}:
+        return "msedge"
+    if compact in {"chrome", "googlechrome"}:
+        return "chrome"
     return "ChatGPT" if re.sub(r"\s+", "", name).casefold() == "chatgpt" else name
 
 
@@ -266,6 +271,7 @@ def desktop_operation(action: str, target: str = "", *, window_handle: int = 0,
         user32.GetForegroundWindow.restype = wintypes.HWND
         user32.IsWindow.argtypes = [wintypes.HWND]
         user32.IsIconic.argtypes = [wintypes.HWND]
+        user32.IsZoomed.argtypes = [wintypes.HWND]
         user32.ShowWindow.argtypes = [wintypes.HWND, ctypes.c_int]
         user32.PostMessageW.argtypes = [wintypes.HWND, wintypes.UINT, wintypes.WPARAM, wintypes.LPARAM]
         matches = _matching_visible_windows(target) if target else rows if window_handle else [r for r in rows if r['Handle'] == int(user32.GetForegroundWindow() or 0)]
@@ -292,6 +298,12 @@ def desktop_operation(action: str, target: str = "", *, window_handle: int = 0,
             ok = bool(user32.IsIconic(hwnd))
             return {"ok": ok, "state": "minimized" if ok else "not_verified", "window": row,
                     "reply": f"Minimized {row['MainWindowTitle']}." if ok else "Windows did not verify the window was minimized."}
+        if action == "maximize":
+            user32.ShowWindow(hwnd, 3)
+            time.sleep(.15)
+            ok = bool(user32.IsZoomed(hwnd))
+            return {"ok": ok, "state": "maximized" if ok else "not_verified", "window": row,
+                    "reply": f"Maximized {row['MainWindowTitle']} and verified the browser window." if ok else "Windows did not verify the browser window was maximized."}
         if action != "close":
             return {"ok": False, "state": "unsupported", "reply": "This desktop action is not supported by the current runtime."}
         if not user32.PostMessageW(hwnd, 0x0010, 0, 0):

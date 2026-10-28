@@ -17,6 +17,7 @@ SERVICES = {'paramount+': 'https://www.paramountplus.com/',
             'disney+': 'https://www.disneyplus.com/', 'hulu': 'https://www.hulu.com/',
             'netflix': 'https://www.netflix.com/', 'youtube': 'https://www.youtube.com/',
             'tubi': 'https://tubitv.com/', 'pluto tv': 'https://pluto.tv/'}
+MEDIA_BROWSER_CHANNEL = 'chrome'
 SEARCH_URLS = {
     'youtube': 'https://www.youtube.com/results?search_query=',
     'hulu': 'https://www.hulu.com/search?q=',
@@ -90,8 +91,8 @@ def media_request(text):
     if pref: return {'kind': 'preferences', 'services': pref[1]}
     region = re.fullmatch(r'set media region (US|GB|CA|AU|DE|FR|MX)', value, re.I)
     if region: return {'kind': 'preferences', 'region': region[1].upper()}
-    browser = re.fullmatch(r'use (edge|chrome) for media', lower)
-    if browser: return {'kind': 'preferences', 'browser': 'msedge' if browser[1]=='edge' else 'chrome'}
+    browser = re.fullmatch(r'use (edge|chrome|google chrome) for media', lower)
+    if browser: return {'kind': 'preferences', 'browser': MEDIA_BROWSER_CHANNEL}
     if lower == 'play the test video': return {'kind':'test', 'play':True}
     if lower in {'play the song', 'play it', 'play that', 'play this', 'play the first result', 'play the first video'}:
         return {'kind':'youtube_follow', 'selection':'first', 'play':True}
@@ -164,7 +165,11 @@ class MediaAssistant:
         self.context=self._load('media_context.json',{})
         self.preferences=self._load('media_preferences.json',{})
         self.preferences={k:v for k,v in self.preferences.items() if k in {'region','services','browser'}}
-        self.preferences.setdefault('region','US');self.preferences.setdefault('services',[]);self.preferences.setdefault('browser','msedge')
+        self.preferences.setdefault('region','US');self.preferences.setdefault('services',[])
+        # Media automation is intentionally pinned to the owner's preferred
+        # browser. Do not resurrect a stale Edge preference from an older
+        # installation or let a model request switch the controlled browser.
+        self.preferences['browser']=MEDIA_BROWSER_CHANNEL
 
     def _load(self,name,default):
         try: return json.loads((self.directory/name).read_text(encoding='utf-8'))
@@ -197,10 +202,11 @@ class MediaAssistant:
             with self.lock:
                 if 'services' in request:
                     self.preferences['services']=[s for s in SERVICES if s in request['services'].lower()]
-                for key in ('region','browser'):
+                for key in ('region',):
                     if key in request:self.preferences[key]=request[key]
+                self.preferences['browser']=MEDIA_BROWSER_CHANNEL
                 self._save('media_preferences.json',self.preferences)
-                return {'ok':True,'reply':f"Media region: {self.preferences['region']}. Preferred services: {', '.join(self.preferences['services']) or 'none saved'}. Browser: {self.preferences['browser']}. These preferences do not prove you are signed in. Sign in directly in Myles' media browser; passwords and cookies stay out of chat."}
+                return {'ok':True,'reply':f"Media region: {self.preferences['region']}. Preferred services: {', '.join(self.preferences['services']) or 'none saved'}. Browser: Google Chrome. These preferences do not prove you are signed in. Sign in directly in Myles' media browser; passwords and cookies stay out of chat."}
         if kind=='control':return self._call(request)
         if kind=='test':return self._call({**request,'url':TEST_VIDEO})
         if kind=='service':return self._call({**request,'url':SERVICES[request['service']]})
@@ -268,10 +274,13 @@ class MediaAssistant:
         from playwright.sync_api import sync_playwright
         if not self.pw:self.pw=sync_playwright().start()
         # Reuse only this controlled profile, never copy/export another browser's cookies.
-        profile=str(self.directory/'media_browser_profile')
+        # Keep Chrome's controlled profile separate from the old Edge profile.
+        # This prevents Edge-only locks/extensions from poisoning the Chrome
+        # player while keeping any legacy profile recoverable.
+        profile=str(self.directory/'media_browser_profile_chrome')
         try:
             self.browser=self.pw.chromium.launch_persistent_context(profile,
-                channel=self.preferences['browser'],headless=False,viewport=None,
+                channel=MEDIA_BROWSER_CHANNEL,headless=False,viewport=None,
                 args=['--autoplay-policy=no-user-gesture-required'])
         except Exception:
             # A managed Edge/Chrome channel may be absent on a clean tower. The

@@ -228,6 +228,16 @@ def desktop_action_request(text: str) -> dict[str, str] | None:
         return {"kind": "windows"}
     if re.fullmatch(r"(?is)minimi[sz]e(?: the| this)?(?: current| active| focused)?(?: window| application| app)?", value):
         return {"kind": "minimize"}
+    maximize = re.fullmatch(
+        r"(?is)(?:maximize|expand)\s+(?:the\s+)?(.+?)(?:\s+window)?|"
+        r"(?:put|make|set)\s+(?:the\s+)?(.+?)\s+(?:in|to)\s+(?:full\s*screen|fullscreen|maximi[sz]ed)(?:\s+as\s+well)?"
+    , value)
+    if maximize:
+        target = next((part for part in maximize.groups() if part), "").strip()
+        if target and target.casefold() not in {"it", "this", "that", "the browser"}:
+            return {"kind": "maximize", "target": target}
+        if target.casefold() == "the browser":
+            return {"kind": "maximize", "target": "Chrome"}
     if re.fullmatch(r"(?is)switch to (?:another|a different) (?:app|application|window)", value):
         return {"kind": "windows"}
     forced = re.fullmatch(r"(?is)force (?:close|quit|terminate) (.+)", value)

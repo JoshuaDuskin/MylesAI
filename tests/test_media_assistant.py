@@ -59,6 +59,12 @@ class MediaAssistantParsingTests(unittest.TestCase):
         self.assertEqual(result["reply"], "MEDIA_OK")
         self.assertEqual(fake.request["kind"], "youtube")
 
+    def test_browser_window_fullscreen_is_a_verified_desktop_action(self):
+        self.assertEqual(desktop_action_request("Put Microsoft edge in full screen as well"),
+                         {"kind": "maximize", "target": "Microsoft edge"})
+        self.assertEqual(desktop_action_request("Maximize Chrome"),
+                         {"kind": "maximize", "target": "Chrome"})
+
 
 if __name__ == "__main__":
     unittest.main()
