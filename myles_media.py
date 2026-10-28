@@ -85,6 +85,8 @@ def media_request(text):
                 'turn off fullscreen': 'exit_fullscreen',
                 'turn off full screen': 'exit_fullscreen'}
     if lower in controls: return {'kind': 'control', 'action': controls[lower]}
+    if re.fullmatch(r'(?:make|put|set)\s+(?:the\s+)?(?:youtube\s+)?(?:video|player)\s+full\s*screen', lower):
+        return {'kind': 'control', 'action': 'fullscreen'}
     if lower in {"it's still playing", 'it is still playing', 'is it still playing',
                  'did it pause', 'did it stop', 'what is playing', "what's playing"}:
         return {'kind': 'control', 'action': 'status'}

@@ -14,6 +14,7 @@ class MediaAssistantParsingTests(unittest.TestCase):
         self.assertEqual(media_request("Play video"), {"kind": "control", "action": "resume"})
         self.assertEqual(media_request("It's still playing"), {"kind": "control", "action": "status"})
         self.assertEqual(media_request("Make it fullscreen"), {"kind": "control", "action": "fullscreen"})
+        self.assertEqual(media_request("Make YouTube video full screen"), {"kind": "control", "action": "fullscreen"})
         self.assertEqual(media_request("Go full screen"), {"kind": "control", "action": "fullscreen"})
         self.assertEqual(media_request("Take it out of full screen"), {"kind": "control", "action": "exit_fullscreen"})
         self.assertEqual(media_request("Skip the ad"), {"kind": "control", "action": "skip_ad"})
@@ -72,6 +73,8 @@ class MediaAssistantParsingTests(unittest.TestCase):
                          {"kind": "maximize", "target": "Microsoft edge"})
         self.assertEqual(desktop_action_request("Maximize Chrome"),
                          {"kind": "maximize", "target": "Chrome"})
+        self.assertEqual(desktop_action_request("Make chrome full screen"),
+                         {"kind": "maximize", "target": "chrome"})
 
 
 if __name__ == "__main__":

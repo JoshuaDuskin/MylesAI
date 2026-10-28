@@ -230,7 +230,7 @@ def desktop_action_request(text: str) -> dict[str, str] | None:
         return {"kind": "minimize"}
     maximize = re.fullmatch(
         r"(?is)(?:maximize|expand)\s+(?:the\s+)?(.+?)(?:\s+window)?|"
-        r"(?:put|make|set)\s+(?:the\s+)?(.+?)\s+(?:in|to)\s+(?:full\s*screen|fullscreen|maximi[sz]ed)(?:\s+as\s+well)?"
+        r"(?:put|make|set)\s+(?:the\s+)?(.+?)\s+(?:(?:in|to)\s+)?(?:full\s*screen|fullscreen|maximi[sz]ed)(?:\s+as\s+well)?"
     , value)
     if maximize:
         target = next((part for part in maximize.groups() if part), "").strip()
