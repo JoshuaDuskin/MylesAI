@@ -181,7 +181,15 @@ def desktop_operation(action: str, target: str = "", *, window_handle: int = 0,
         return {"ok": False, "state": "unavailable", "reply": "Windows desktop control requires the Windows tower."}
     try:
         rows = visible_windows()
+        if action == "app_status":
+            matches = _matching_visible_windows(target)
+            return {"ok": True, "state": "observed", "windows": matches,
+                    "reply": f"{target} has {len(matches)} visible window(s) open." if matches else f"No visible {target} window is open. Background processes are separate."}
         if action == "windows":
+            names = sorted({str(x['ProcessName']).removesuffix('.exe') for x in rows}, key=str.casefold)
+            return {"ok": True, "state": "observed", "windows": rows,
+                    "reply": ("Visible apps: " + ", ".join(names[:20]) + (f" and {len(names)-20} more" if len(names)>20 else "") + ". Ask ‘show my windows in detail’ for window titles.") if rows else "No visible application windows. Background processes are separate."}
+        if action == "windows_detail":
             return {"ok": True, "state": "observed", "windows": rows,
                     "reply": "Open windows:\n" + ("\n".join(f"{x['MainWindowTitle']} — {x['ProcessName']} (window {x['Handle']})" for x in rows) or "No visible application windows.")}
         user32 = ctypes.WinDLL("user32", use_last_error=True)
@@ -229,7 +237,7 @@ def desktop_operation(action: str, target: str = "", *, window_handle: int = 0,
         return {"ok": False, "state": "waiting_on_application", "window": row,
                 "reply": "The window is still open. It may be waiting for unsaved-work confirmation or be unresponsive. I have not forced it closed or discarded anything."}
     except Exception as exc:
-        return {"ok": False, "state": "tool_error", "reply": f"Windows desktop operation failed: {type(exc).__name__}. No closure was verified."}
+        return {"ok": False, "state": "tool_error", "reply": f"Windows desktop operation failed: {type(exc).__name__}: {str(exc)[:200]}. No closure was verified."}
 
 
 def _tap_key(vk: int) -> None:

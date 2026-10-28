@@ -214,11 +214,16 @@ def app_launch_target(text: str) -> str:
 def desktop_action_request(text: str) -> dict[str, str] | None:
     """Recognize broad basic desktop actions without an application catalog."""
     value = _strip_owner_action_framing(text)
+    if re.fullmatch(r"(?is)(?:what(?:'s| is| are) (?:still )?(?:open|running)(?: still)?|what (?:programs|apps|applications|windows) (?:are )?(?:open|running)(?: still)?|show(?: me)? (?:my |the )?(?:open |running )?(?:windows|applications|apps)(?: in detail)?|list (?:my |the )?(?:open |running )?(?:windows|applications|apps)(?: in detail)?)", value):
+        return {"kind": "windows_detail" if value.endswith("in detail") else "windows"}
+    status = re.fullmatch(r"(?is)is (.+?) (?:still )?(?:open|running)", value)
+    if status and 1 < len(status.group(1)) <= 100:
+        return {"kind": "app_status", "target": status.group(1)}
     if re.fullmatch(r"(?is)(?:show|go\s+to|open)\s+(?:the\s+)?desktop", value):
         return {"kind": "key", "keys": "WIN+D", "label": "Show desktop"}
     if re.fullmatch(r"(?is)(?:show(?: me)?|list|what are) (?:my |the )?(?:open |running )?(?:windows|applications|apps)", value):
         return {"kind": "windows"}
-    if re.fullmatch(r"(?is)minimi[sz]e(?: the)?(?: current| active| focused)?(?: window| application| app)?", value):
+    if re.fullmatch(r"(?is)minimi[sz]e(?: the| this)?(?: current| active| focused)?(?: window| application| app)?", value):
         return {"kind": "minimize"}
     if re.fullmatch(r"(?is)switch to (?:another|a different) (?:app|application|window)", value):
         return {"kind": "windows"}

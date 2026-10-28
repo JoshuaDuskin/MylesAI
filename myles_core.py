@@ -1639,7 +1639,7 @@ def handle_owner_message(text: str, source: str) -> dict[str, Any]:
         return {"kind": "conversation", "reply": final, "message_id": message_id}
 
     desktop = desktop_action_request(raw)
-    if desktop and desktop.get('kind') in {'close', 'focus', 'minimize', 'windows'}:
+    if desktop and desktop.get('kind') in {'close', 'focus', 'minimize', 'windows', 'windows_detail', 'app_status'}:
         from myles_windows import desktop_operation
         user_id = add_message(source, 'user', raw, None)
         target = str(desktop.get('target') or '')
@@ -1675,6 +1675,18 @@ def handle_owner_message(text: str, source: str) -> dict[str, Any]:
         final = owner_job_report(raw)
         message_id = add_message(source, "assistant", final, None)
         return {"kind": "conversation", "reply": final, "message_id": message_id}
+
+    from myles_media import media_request, assistant as media_assistant
+    media = media_request(raw)
+    if media:
+        user_id = add_message(source, 'user', raw, None)
+        if game_is_active():
+            final = "Fortnite is running, so Myles has paused media actions to protect game performance. Close the game before controlling playback."
+            message_id = add_message(source, 'assistant', final, None)
+            return {'kind':'conversation', 'ok':False, 'reply':final, 'message_id':message_id, 'user_message_id':user_id}
+        result = media_assistant().handle(media)
+        message_id = add_message(source, 'assistant', result['reply'], None)
+        return {'kind':'conversation', **result, 'message_id':message_id, 'user_message_id':user_id}
 
     direct_desktop = desktop_action_request(raw)
     if direct_desktop:
@@ -2225,7 +2237,8 @@ def monitor_loop() -> None:
                     recover_job(active["id"], reason=f"Automatic recovery: {reason}")
                 continue
 
-            if not CHAT_BUSY.is_set():
+            from myles_media import assistant as media_assistant
+            if not CHAT_BUSY.is_set() and not media_assistant().active():
                 _continuous_program_tick()
                 pending = next_pending_job()
                 if pending:

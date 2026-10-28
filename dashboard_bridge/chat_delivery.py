@@ -4,11 +4,30 @@ import json, os, re, threading, time
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
+def fast_owner_command(message):
+    from myles_runtime_v9 import desktop_action_request
+    from myles_media import media_request
+    media = media_request(message)
+    if media and media.get('kind') in {'control','preferences'}: return True
+    command = desktop_action_request(message) or {}
+    return command.get('kind') in {'windows', 'windows_detail', 'app_status', 'minimize', 'focus', 'close'}
+
+class DeliveryExecutors:
+    """Reserve a worker for short owner controls even while inference is blocked."""
+    def __init__(self):
+        self.regular = ThreadPoolExecutor(max_workers=4, thread_name_prefix='myles-chat')
+        self.fast = ThreadPoolExecutor(max_workers=1, thread_name_prefix='myles-owner-control')
+    def submit(self, fn, scope, row, *args):
+        return (self.fast if row.get('lane') == 'owner_fast' else self.regular).submit(fn, scope, row, *args)
+    def shutdown(self, wait=True):
+        self.regular.shutdown(wait=wait)
+        self.fast.shutdown(wait=wait)
+
 class DeliveryQueue:
     def __init__(self, directory):
         self.directory=Path(directory); self.lock=threading.RLock()
-        self.executor=ThreadPoolExecutor(max_workers=4,thread_name_prefix="myles-chat")
-        self.order=threading.Condition();self.pending={scope:[] for scope in ("public","owner")}
+        self.executor=DeliveryExecutors()
+        self.order=threading.Condition();self.pending={scope:[] for scope in ("public","owner","owner_fast")}
         self.records={}
         for scope in ("public","owner"):
             try: rows=json.loads(self.path(scope).read_text(encoding="utf-8")).get("deliveries",[])
@@ -26,6 +45,7 @@ class DeliveryQueue:
         if scope not in {"owner","public"} or not re.fullmatch(r"[A-Za-z0-9_-]{16,80}",str(request_id)):
             return 400,{"ok":False,"error":"Invalid chat request identifier"}
         with self.lock:
+            lane = 'owner_fast' if scope == 'owner' and fast_owner_command(message) else scope
             rows=self.records[scope]
             existing=next((r for r in rows if r["client_id"]==request_id),None)
             if existing:
@@ -35,21 +55,23 @@ class DeliveryQueue:
                 return 429,{"ok":False,"error":"Public chat rate limit; wait before sending a new message."}
             if scope=='public' and sum(r['status'] in {'Sent','Running'} for r in rows)>=2:
                 return 429,{"ok":False,"error":"Public chat is busy. Please wait."}
-            if sum(r["status"] in {"Sent","Running"} for values in self.records.values() for r in values)>=4:
+            active_rows = [r for values in self.records.values() for r in values if r['status'] in {'Sent','Running'}]
+            if (lane == 'owner_fast' and sum(r.get('lane') == lane for r in active_rows)>=2) or (lane != 'owner_fast' and sum(r.get('lane') != 'owner_fast' for r in active_rows)>=4):
                 return 429,{"ok":False,"error":"Myles is processing the current messages. Please wait."}
-            row={"client_id":request_id,"message":message,"status":"Sent","accepted_at":time.time()}
+            row={"client_id":request_id,"message":message,"status":"Sent","accepted_at":time.time(),"lane":lane}
             rows.append(row);active=[r for r in rows if r["status"] in {"Sent","Running"}];terminal=[r for r in rows if r["status"] not in {"Sent","Running"}];self.records[scope]=sorted(active+terminal[-(100-len(active)):],key=lambda r:r["accepted_at"]);self.save(scope)
-            with self.order:self.pending[scope].append(request_id)
+            with self.order:self.pending[lane].append(request_id)
             self.executor.submit(self.execute,scope,row,handler,streaming)
             return 202,{"ok":True,"delivery":dict(row)}
     def execute(self,scope,row,handler,streaming=False):
+        lane = row.get('lane', scope)
         with self.order:
-            while self.pending[scope][0]!=row['client_id']:self.order.wait()
+            while self.pending[lane][0]!=row['client_id']:self.order.wait()
         try:
             return self._execute(scope,row,handler,streaming)
         finally:
             with self.order:
-                self.pending[scope].pop(0);self.order.notify_all()
+                self.pending[lane].pop(0);self.order.notify_all()
     def _execute(self,scope,row,handler,streaming=False):
         with self.lock:
             row.update(status="Running",started_at=time.time());self.save(scope)
@@ -74,6 +96,10 @@ class DeliveryQueue:
         with self.lock:
             changed=False
             for row in self.records[scope]:
+                limit = 20 if row.get('lane') == 'owner_fast' else 900 if row.get('job_id') else 180
+                if row.get('status') in {'Sent','Running'} and time.time()-row.get('started_at',row['accepted_at']) > limit:
+                    row.update(status='Failed',error='Execution deadline exceeded; completion is unconfirmed. This request will not be executed again on retry.',finished_at=time.time(),deadline_exceeded=True)
+                    changed=True
                 receipt=result_reader(row['client_id']) if result_reader and not row.get('core_result_adopted') else None
                 if receipt and receipt.get('message')==row['message'] and isinstance(receipt.get('result'),dict):
                     result=receipt['result'];reply=str(result.get('reply') or '')
