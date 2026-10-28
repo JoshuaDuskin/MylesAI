@@ -36,6 +36,14 @@ class MediaAssistantParsingTests(unittest.TestCase):
         self.assertEqual(media_request("Find an article about Windows 11 updates"),
                          {"kind": "web_search", "title": "Windows 11 updates"})
 
+    def test_open_youtube_latest_phrases_bypass_generic_research(self):
+        self.assertEqual(media_request("Open why files on YouTube"),
+                         {"kind": "youtube", "title": "why files", "play": True})
+        self.assertEqual(media_request("Open newest why files video on YouTube"),
+                         {"kind": "youtube", "title": "why files", "play": True, "selection": "latest"})
+        self.assertEqual(media_request("Open the latest video from Why Files on YouTube"),
+                         {"kind": "youtube", "title": "Why Files", "play": True, "selection": "latest"})
+
     def test_only_allowlisted_official_urls_are_navigable(self):
         self.assertTrue(safe_url("https://www.paramountplus.com/shows/south-park/"))
         self.assertTrue(safe_url("https://www.southparkstudios.nu/episodes"))

@@ -49,6 +49,15 @@ def safe_url(url):
     # No session-bearing queries are persisted or returned in chat.
     return urlunsplit((p.scheme, p.netloc, p.path, '', ''))
 
+
+def _clean_youtube_title(title: str) -> str:
+    """Normalize conversational newest/latest YouTube requests into a search title."""
+    cleaned = re.sub(r'(?i)\b(?:latest|newest|most recent)\b', ' ', str(title))
+    cleaned = re.sub(r'(?i)\b(?:youtube|video|videos)\b', ' ', cleaned)
+    cleaned = re.sub(r'(?i)^\s*(?:the\s+)?(?:video\s+)?(?:from|by)\s+', '', cleaned)
+    cleaned = re.sub(r'\s+', ' ', cleaned).strip(' .?!-')
+    return cleaned or str(title).strip(' .?!')
+
 def media_request(text):
     value = re.sub(r'(?i)^(?:myles[, ]+|please\s+)', '', str(text).strip()).strip(' .?!')
     lower = value.casefold()
@@ -113,11 +122,15 @@ def media_request(text):
             service = service.rstrip('+') + '+'
         title = multi[2].strip(' .?!')
         if service == 'youtube':
-            return {'kind':'youtube','title':title,'play':True}
+            selection = 'latest' if re.search(r'(?i)\b(?:latest|newest|most recent)\b', title) else None
+            title = _clean_youtube_title(title)
+            result = {'kind':'youtube','title':title,'play':True}
+            if selection: result['selection'] = selection
+            return result
         if service in SERVICES and title:
             return {'kind':'service_search','service':service,'title':title,'play':True}
     on_service = re.fullmatch(
-        r'(?:watch|play|find|search for)\s+(?:a\s+)?(?:movie|show|episode|video)?\s*(.+?)\s+on\s+'
+        r'(?:open|watch|play|find|search for)\s+(?:a\s+)?(?:movie|show|episode|video)?\s*(.+?)\s+on\s+'
         r'(youtube|hulu|netflix|disney(?:\+| plus)|paramount\+?)', value, re.I)
     if on_service:
         service = on_service[2].casefold().replace('disney plus', 'disney+')
@@ -125,7 +138,11 @@ def media_request(text):
             service = service.rstrip('+') + '+'
         title = on_service[1].strip(' .?!')
         if service == 'youtube':
-            return {'kind':'youtube','title':title,'play':True}
+            selection = 'latest' if re.search(r'(?i)\b(?:latest|newest|most recent)\b', title) else None
+            title = _clean_youtube_title(title)
+            result = {'kind':'youtube','title':title,'play':True}
+            if selection: result['selection'] = selection
+            return result
         if service in SERVICES:
             return {'kind':'service_search','service':service,'title':title,'play':True}
     article = re.fullmatch(
@@ -135,8 +152,14 @@ def media_request(text):
         return {'kind':'web_search','title':article[1].strip(' .?!')}
     service = next((s for s in SERVICES if lower == 'open '+s), None)
     if service: return {'kind':'service','service':service,'play':False}
-    youtube = re.fullmatch(r'(?:find|play|search for) (?:a )?youtube video (?:about |explaining )?(.+)', value, re.I)
-    if youtube: return {'kind':'youtube','title':youtube[1], 'play': lower.startswith('play')}
+    youtube = re.fullmatch(r'(?:find|play|open|search for) (?:a )?youtube video (?:about |explaining )?(.+)', value, re.I)
+    if youtube:
+        title = youtube[1].strip(' .?!')
+        selection = 'latest' if re.search(r'(?i)\b(?:latest|newest|most recent)\b', title) else None
+        title = _clean_youtube_title(title)
+        result = {'kind':'youtube','title':title, 'play': lower.startswith(('play','open'))}
+        if selection: result['selection'] = selection
+        return result
     find = re.fullmatch(r'(find|play|watch|start)\s+(.+)', value, re.I)
     if not find:
         general_search = re.fullmatch(r'(?:search for|look up)\s+(.+)', value, re.I)
@@ -211,7 +234,12 @@ class MediaAssistant:
         if kind=='test':return self._call({**request,'url':TEST_VIDEO})
         if kind=='service':return self._call({**request,'url':SERVICES[request['service']]})
         if kind=='youtube':
-            command={**request,'url':'https://www.youtube.com/results?'+urlencode({'search_query':request['title']})}
+            params={'search_query':request['title']}
+            if request.get('selection') == 'latest':
+                # YouTube's upload-date sort is exposed as this stable search
+                # filter. The result is still clicked and playback-verified.
+                params['sp']='CAI%3D'
+            command={**request,'url':'https://www.youtube.com/results?'+urlencode(params)}
             result=self._call(command)
             if result.get('ok') and not request.get('play'):
                 with self.lock:
@@ -449,7 +477,7 @@ class MediaAssistant:
                 continue
         return None, ''
 
-    def _play_youtube_first(self):
+    def _play_youtube_first(self, selection='first'):
         link, selected = self._youtube_first_result()
         if link is None:
             return {'ok':False,'reply':'YouTube search loaded, but no playable video result was exposed. No subscription check was involved and no video was started.'}
@@ -465,7 +493,8 @@ class MediaAssistant:
             after=video.evaluate('v=>({paused:v.paused,time:v.currentTime,ready:v.readyState})')
             if not after['paused'] and after['ready'] >= 2 and after['time'] > before['time'] + .1:
                 self.playing_until=time.monotonic()+45
-                return {'ok':True,'reply':f"Started the first YouTube result: {selected[:180]}",'media_state':'playing'}
+                label = 'latest' if selection == 'latest' else 'first'
+                return {'ok':True,'reply':f"Started the {label} YouTube result: {selected[:180]}",'media_state':'playing'}
             return {'ok':False,'reply':'YouTube opened the selected result, but playback did not advance. The browser may need one visible click; no subscription was assumed.'}
         except Exception as exc:
             return {'ok':False,'reply':f'YouTube result selection failed ({type(exc).__name__}); no subscription check was involved and playback was not verified.'}
@@ -480,7 +509,7 @@ class MediaAssistant:
             host=(urlsplit(self.page.url).hostname or '').removeprefix('www.')
             if host != 'youtube.com' or '/results' not in (urlsplit(self.page.url).path or ''):
                 return {'ok':False,'reply':'The previous YouTube results page is no longer open. Ask me to find the video again; no unrelated page was changed.'}
-            return self._play_youtube_first()
+            return self._play_youtube_first(command.get('selection','first'))
         if kind!='control':
             url=command['url']
             # YouTube searches are built locally; all other navigation must be official.
@@ -491,7 +520,7 @@ class MediaAssistant:
             if not safe_url(self.page.url):return {'ok':False,'reply':'The provider redirected outside supported official sites. Owner review is required; no playback action was sent.'}
             if kind=='youtube':
                 if not command.get('play'):return {'ok':True,'reply':'Opened YouTube search results in the media browser. No video is claimed playing.'}
-                return self._play_youtube_first()
+                return self._play_youtube_first(command.get('selection','first'))
             if kind=='service_search':
                 return {'ok':True,'reply':f"Opened {command.get('service','the service')} search results for {command.get('title','the requested title')}. Playback was not claimed; the service may require sign-in or owner selection.",'media_state':'opened'}
             if kind=='web_search':
