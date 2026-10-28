@@ -51,18 +51,33 @@ def safe_url(url):
 def media_request(text):
     value = re.sub(r'(?i)^(?:myles[, ]+|please\s+)', '', str(text).strip()).strip(' .?!')
     lower = value.casefold()
-    controls = {'pause': 'pause', 'pause the video': 'pause', 'pause playback': 'pause',
-                'resume': 'resume', 'resume playback': 'resume', 'resume the video': 'resume',
-                'play the video': 'resume', 'mute': 'mute', 'mute the video': 'mute',
-                'unmute': 'unmute', 'unmute the video': 'unmute', 'stop playback': 'stop',
-                'stop the video': 'stop', 'make it fullscreen': 'fullscreen',
+    controls = {'pause': 'pause', 'pause video': 'pause', 'pause the video': 'pause',
+                'pause playback': 'pause', 'pause the playback': 'pause',
+                'resume': 'resume', 'resume video': 'resume', 'resume the video': 'resume',
+                'resume playback': 'resume', 'resume the playback': 'resume',
+                'play': 'resume', 'play video': 'resume', 'play the video': 'resume',
+                'playback': 'status', 'check playback': 'status',
+                'mute': 'mute', 'mute video': 'mute', 'mute the video': 'mute',
+                'unmute': 'unmute', 'unmute video': 'unmute', 'unmute the video': 'unmute',
+                'stop playback': 'stop', 'stop the playback': 'stop',
+                'stop video': 'stop', 'stop the video': 'stop',
+                'make it fullscreen': 'fullscreen',
                 'make it full screen': 'fullscreen', 'fullscreen': 'fullscreen',
                 'full screen': 'fullscreen', 'go fullscreen': 'fullscreen',
                 'go full screen': 'fullscreen', 'go to full screen': 'fullscreen',
                 'go to fullscreen': 'fullscreen', 'enter fullscreen': 'fullscreen',
                 'enter full screen': 'fullscreen', 'put it in fullscreen': 'fullscreen',
-                'put it in full screen': 'fullscreen'}
+                'put it in full screen': 'fullscreen',
+                'exit fullscreen': 'exit_fullscreen', 'exit full screen': 'exit_fullscreen',
+                'leave fullscreen': 'exit_fullscreen', 'leave full screen': 'exit_fullscreen',
+                'take it out of fullscreen': 'exit_fullscreen',
+                'take it out of full screen': 'exit_fullscreen',
+                'turn off fullscreen': 'exit_fullscreen',
+                'turn off full screen': 'exit_fullscreen'}
     if lower in controls: return {'kind': 'control', 'action': controls[lower]}
+    if lower in {"it's still playing", 'it is still playing', 'is it still playing',
+                 'did it pause', 'did it stop', 'what is playing', "what's playing"}:
+        return {'kind': 'control', 'action': 'status'}
     if re.fullmatch(r'(?:make|put|switch)\s+(?:the\s+)?(?:video\s+)?(?:it\s+)?full\s*screen', lower):
         return {'kind': 'control', 'action': 'fullscreen'}
     if re.fullmatch(r'(?:skip|dismiss)\s+(?:(?:the|this|current|an?)\s+)?(?:ad|ads|advert|advertisement|advertisements)', lower):
@@ -347,6 +362,35 @@ class MediaAssistant:
             pass
         return self._fullscreen_verified(player)
 
+    def _exit_fullscreen(self, frame, player):
+        """Exit provider fullscreen with its toggle, then a normal Escape key."""
+        if not self._fullscreen_verified(player):
+            return True
+        try:
+            player.hover(timeout=1500)
+        except Exception:
+            pass
+        self.page.wait_for_timeout(200)
+        clicked = self._click_visible(
+            frame,
+            ('.ytp-fullscreen-button', 'button[aria-label*="Exit full screen"]',
+             'button[aria-label*="Exit fullscreen"]',
+             'button[title*="Exit full screen"]',
+             'button[title*="Exit fullscreen"]'),
+            role_name=r'exit\s+full\s*screen',
+            timeout=2500,
+        )
+        if clicked:
+            self.page.wait_for_timeout(500)
+            if not self._fullscreen_verified(player):
+                return True
+        try:
+            self.page.keyboard.press('Escape')
+            self.page.wait_for_timeout(500)
+        except Exception:
+            pass
+        return not self._fullscreen_verified(player)
+
     def _skip_visible_ad(self):
         """Click only a provider-exposed Skip ad control; never bypass an ad."""
         selectors = ('.ytp-ad-skip-button-modern', '.ytp-ad-skip-button',
@@ -487,11 +531,27 @@ class MediaAssistant:
         if action=='fullscreen':
             verified=self._enter_fullscreen(frame,player)
             return {'ok':verified,'reply':'Fullscreen verified.' if verified else 'The player did not expose a working fullscreen control. No other window was changed.'}
+        if action=='exit_fullscreen':
+            verified=self._exit_fullscreen(frame,player)
+            return {'ok':verified,'reply':'Fullscreen exited and verified.' if verified else 'The player remained fullscreen; its exit control did not verify.'}
         scripts={'pause':'v=>v.pause()','stop':'v=>{v.pause();v.currentTime=0}',
                  'resume':'v=>v.play()','mute':'v=>v.muted=true','unmute':'v=>v.muted=false',
                  'volume':'(v,n)=>v.volume=n'}
         if action not in scripts:return {'ok':False,'reply':'Unsupported media control.'}
-        try:player.evaluate(scripts[action],command.get('volume'))
+        try:
+            if action in {'pause', 'resume'}:
+                try: player.hover(timeout=1500)
+                except Exception: pass
+                button_selectors = {
+                    'pause': ('.ytp-pause-button', 'button[aria-label*="Pause"]', 'button[title*="Pause"]'),
+                    'resume': ('.ytp-play-button', 'button[aria-label*="Play"]', 'button[title*="Play"]'),
+                }[action]
+                clicked = self._click_visible(frame, button_selectors, role_name=action, timeout=2500)
+                if not clicked:
+                    player.evaluate(scripts[action],command.get('volume'))
+            else:
+                player.evaluate(scripts[action],command.get('volume'))
+            self.page.wait_for_timeout(350)
         except Exception:return {'ok':False,'reply':'The player rejected this control. Playback was not verified.'}
         observed=player.evaluate('v=>({paused:v.paused,muted:v.muted,volume:v.volume,time:v.currentTime})')
         verified=self._verify_playing() if action=='resume' else observed['paused'] if action=='pause' else observed['paused'] and observed['time']<1 if action=='stop' else observed['muted']==(action=='mute') if action in {'mute','unmute'} else abs(observed['volume']-command['volume'])<.01

@@ -9,8 +9,13 @@ import myles_core as core
 class MediaAssistantParsingTests(unittest.TestCase):
     def test_controls_and_followups_are_fast_commands(self):
         self.assertEqual(media_request("Pause the video"), {"kind": "control", "action": "pause"})
+        self.assertEqual(media_request("Pause video"), {"kind": "control", "action": "pause"})
+        self.assertEqual(media_request("Play"), {"kind": "control", "action": "resume"})
+        self.assertEqual(media_request("Play video"), {"kind": "control", "action": "resume"})
+        self.assertEqual(media_request("It's still playing"), {"kind": "control", "action": "status"})
         self.assertEqual(media_request("Make it fullscreen"), {"kind": "control", "action": "fullscreen"})
         self.assertEqual(media_request("Go full screen"), {"kind": "control", "action": "fullscreen"})
+        self.assertEqual(media_request("Take it out of full screen"), {"kind": "control", "action": "exit_fullscreen"})
         self.assertEqual(media_request("Skip the ad"), {"kind": "control", "action": "skip_ad"})
         self.assertEqual(media_request("Play the first episode"), {"kind": "discover", "follow": True, "episode": "first", "play": True})
         self.assertEqual(media_request("Play the song"), {"kind": "youtube_follow", "selection": "first", "play": True})
