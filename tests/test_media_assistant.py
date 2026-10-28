@@ -1,6 +1,7 @@
 import unittest
 
 from myles_media import media_request, safe_url
+from myles_runtime_v9 import desktop_action_request
 
 
 class MediaAssistantParsingTests(unittest.TestCase):
@@ -20,6 +21,9 @@ class MediaAssistantParsingTests(unittest.TestCase):
         self.assertTrue(safe_url("https://www.southparkstudios.nu/episodes"))
         self.assertFalse(safe_url("https://example.invalid/watch?token=secret"))
         self.assertFalse(safe_url("http://www.paramountplus.com/"))
+
+    def test_attention_question_uses_native_fast_path(self):
+        self.assertEqual(desktop_action_request("What's still open and flashing at me"), {"kind": "windows_attention"})
 
 
 if __name__ == "__main__":

@@ -214,6 +214,8 @@ def app_launch_target(text: str) -> str:
 def desktop_action_request(text: str) -> dict[str, str] | None:
     """Recognize broad basic desktop actions without an application catalog."""
     value = _strip_owner_action_framing(text)
+    if re.fullmatch(r"(?is)(?:what(?:'s| is) (?:still )?(?:open|running) and (?:flashing|blinking)(?: at me)?|what(?:'s| is) (?:flashing|blinking) at me)", value):
+        return {"kind": "windows_attention"}
     if re.fullmatch(r"(?is)(?:what(?:'s| is| are) (?:still )?(?:open|running)(?: still)?|what (?:programs|apps|applications|windows) (?:are )?(?:open|running)(?: still)?|show(?: me)? (?:my |the )?(?:open |running )?(?:windows|applications|apps)(?: in detail)?|list (?:my |the )?(?:open |running )?(?:windows|applications|apps)(?: in detail)?)", value):
         return {"kind": "windows_detail" if value.endswith("in detail") else "windows"}
     status = re.fullmatch(r"(?is)is (.+?) (?:still )?(?:open|running)", value)

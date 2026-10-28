@@ -189,6 +189,10 @@ def desktop_operation(action: str, target: str = "", *, window_handle: int = 0,
             names = sorted({str(x['ProcessName']).removesuffix('.exe') for x in rows}, key=str.casefold)
             return {"ok": True, "state": "observed", "windows": rows,
                     "reply": ("Visible apps: " + ", ".join(names[:20]) + (f" and {len(names)-20} more" if len(names)>20 else "") + ". Ask ‘show my windows in detail’ for window titles.") if rows else "No visible application windows. Background processes are separate."}
+        if action == "windows_attention":
+            names = sorted({str(x['ProcessName']).removesuffix('.exe') for x in rows}, key=str.casefold)
+            return {"ok": True, "state": "observed", "windows": rows,
+                    "reply": ("Visible apps right now: " + ", ".join(names[:20]) + (f" and {len(names)-20} more" if len(names)>20 else "") + ". Windows does not expose a reliable read-only taskbar-flashing flag, so I cannot verify which one is flashing. Ask for detailed windows to inspect titles.") if rows else "No visible application windows, and no flashing window was verified."}
         if action == "windows_detail":
             return {"ok": True, "state": "observed", "windows": rows,
                     "reply": "Open windows:\n" + ("\n".join(f"{x['MainWindowTitle']} — {x['ProcessName']} (window {x['Handle']})" for x in rows) or "No visible application windows.")}

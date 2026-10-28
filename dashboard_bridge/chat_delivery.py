@@ -10,7 +10,7 @@ def fast_owner_command(message):
     media = media_request(message)
     if media and media.get('kind') in {'control','preferences'}: return True
     command = desktop_action_request(message) or {}
-    return command.get('kind') in {'windows', 'windows_detail', 'app_status', 'minimize', 'focus', 'close'}
+    return command.get('kind') in {'windows', 'windows_detail', 'windows_attention', 'app_status', 'minimize', 'focus', 'close'}
 
 class DeliveryExecutors:
     """Reserve a worker for short owner controls even while inference is blocked."""

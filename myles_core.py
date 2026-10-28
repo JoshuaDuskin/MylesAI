@@ -1639,7 +1639,7 @@ def handle_owner_message(text: str, source: str) -> dict[str, Any]:
         return {"kind": "conversation", "reply": final, "message_id": message_id}
 
     desktop = desktop_action_request(raw)
-    if desktop and desktop.get('kind') in {'close', 'focus', 'minimize', 'windows', 'windows_detail', 'app_status'}:
+    if desktop and desktop.get('kind') in {'close', 'focus', 'minimize', 'windows', 'windows_detail', 'windows_attention', 'app_status'}:
         from myles_windows import desktop_operation
         user_id = add_message(source, 'user', raw, None)
         target = str(desktop.get('target') or '')
