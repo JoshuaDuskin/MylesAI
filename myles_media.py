@@ -19,6 +19,15 @@ SERVICES = {'paramount+': 'https://www.paramountplus.com/',
             'tubi': 'https://tubitv.com/', 'pluto tv': 'https://pluto.tv/'}
 DOMAINS = tuple(urlsplit(u).hostname.removeprefix('www.') for u in SERVICES.values()) + ('southparkstudios.nu',)
 TEST_VIDEO = 'https://interactive-examples.mdn.mozilla.net/media/cc0-videos/flower.mp4'
+OFFICIAL_CATALOGS = {
+    'south park': (
+        'https://www.paramountplus.com/shows/south-park/',
+        'https://www.southparkstudios.com/episodes',
+    ),
+    'night at the museum': (
+        'https://www.disneyplus.com/browse/entity-29c89abf-b956-4893-add2-804ce0dbe5d7',
+    ),
+}
 
 def safe_url(url):
     p = urlsplit(str(url))
@@ -141,6 +150,11 @@ class MediaAssistant:
             query='South Park full episodes (site:paramountplus.com OR site:southparkstudios.com) '+self.preferences['region']
         evidence=web_search(query,max_results=8)
         urls=list(dict.fromkeys(u for raw in evidence.source_urls if (u:=safe_url(raw))))
+        # Search engines can return consent or anti-bot shells. For named
+        # examples, retain only the canonical official catalog pages we have
+        # explicitly allowlisted; access and playback remain unverified.
+        if not urls:
+            urls=list(OFFICIAL_CATALOGS.get(title.casefold(), ()))
         if request.get('free'):
             urls=[u for u in urls if any(d in urlsplit(u).hostname for d in ('southparkstudios.com','tubitv.com','pluto.tv'))]
         urls.sort(key=lambda u: not any(urlsplit(SERVICES[s]).hostname in urlsplit(u).hostname for s in self.preferences['services']))
