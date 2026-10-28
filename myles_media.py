@@ -231,11 +231,16 @@ class MediaAssistant:
                     return {'ok':False,'reply':'The YouTube results page did not expose a selectable video result. No video was started.'}
                 selected=(link.inner_text(timeout=3000) or '').strip()
                 link.click(timeout=5000)
-                self.page.wait_for_timeout(1200)
-                for frame,index,row in self._observe():
-                    try: frame.locator('video, audio').nth(index).evaluate('v=>v.play().catch(()=>null)')
-                    except Exception: pass
-                if self._verify_playing():
+                self.page.wait_for_timeout(900)
+                video=self.page.locator('video').first
+                if not video.count():
+                    return {'ok':False,'reply':'Opened the selected YouTube result, but no video player appeared. Playback was not verified.'}
+                video.evaluate('v=>v.play().catch(()=>null)')
+                before=video.evaluate('v=>({paused:v.paused,time:v.currentTime,ready:v.readyState})')
+                self.page.wait_for_timeout(1100)
+                after=video.evaluate('v=>({paused:v.paused,time:v.currentTime,ready:v.readyState})')
+                if not after['paused'] and after['ready'] >= 2 and after['time'] > before['time'] + .1:
+                    self.playing_until=time.monotonic()+45
                     return {'ok':True,'reply':f"Started the first YouTube result: {selected[:180]}" if selected else 'Started the first YouTube result.','media_state':'playing'}
                 return {'ok':False,'reply':'Opened the selected YouTube result, but playback was not verified. The page may require owner interaction.'}
             except Exception as exc:
