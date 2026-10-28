@@ -152,6 +152,7 @@ STRONG_ACTION_VERBS = (
 def _strip_owner_action_framing(text: str) -> str:
     """Remove conversational wrappers while preserving the owner's command."""
     value = re.sub(r"\s+", " ", str(text or "").strip())
+    value = value.replace("’", "'").replace("‘", "'")
     value = re.sub(r"[.!?]+$", "", value).strip()
     prefixes = (
         r"^(?:hey\s+)?myles\s*[,;:]?\s*",
