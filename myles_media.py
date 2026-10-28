@@ -60,6 +60,8 @@ def media_request(text):
     browser = re.fullmatch(r'use (edge|chrome) for media', lower)
     if browser: return {'kind': 'preferences', 'browser': 'msedge' if browser[1]=='edge' else 'chrome'}
     if lower == 'play the test video': return {'kind':'test', 'play':True}
+    if lower in {'play the song', 'play it', 'play that', 'play this', 'play the first result', 'play the first video'}:
+        return {'kind':'youtube_follow', 'selection':'first', 'play':True}
     follow = re.fullmatch(r'(?:play|start) (?:the )?(first|latest|next|\d+)(?: episode)?', lower)
     if follow: return {'kind':'discover', 'follow':True, 'episode': follow[1], 'play':True}
     if lower == 'find a free legal episode':
@@ -133,7 +135,19 @@ class MediaAssistant:
         if kind=='test':return self._call({**request,'url':TEST_VIDEO})
         if kind=='service':return self._call({**request,'url':SERVICES[request['service']]})
         if kind=='youtube':
-            return self._call({**request,'url':'https://www.youtube.com/results?'+urlencode({'search_query':request['title']})})
+            command={**request,'url':'https://www.youtube.com/results?'+urlencode({'search_query':request['title']})}
+            result=self._call(command)
+            if result.get('ok') and not request.get('play'):
+                with self.lock:
+                    self.context={'kind':'youtube','title':request['title'],'url':'https://www.youtube.com/results','checked_at':time.time()}
+                    self._save('media_context.json',self.context)
+            return result
+        if kind=='youtube_follow':
+            with self.lock:
+                context=dict(self.context)
+            if context.get('kind') != 'youtube' or not context.get('title'):
+                return {'ok':False,'reply':'There is no earlier YouTube search in this conversation. Ask me to find a YouTube video first.'}
+            return self._call({'kind':'youtube_follow','title':context['title'],'selection':request.get('selection','first'),'play':True})
         with self.lock:
             context=dict(self.context)
         if request.get('follow'):
@@ -207,6 +221,25 @@ class MediaAssistant:
             self.playing_until=0
             return {'ok':False,'reply':'No controlled media player is open. Ask me to find a movie or play a video first.'}
         self._ensure_browser()
+        if kind=='youtube_follow':
+            host=(urlsplit(self.page.url).hostname or '').removeprefix('www.')
+            if host != 'youtube.com' or '/results' not in (urlsplit(self.page.url).path or ''):
+                return {'ok':False,'reply':'The previous YouTube results page is no longer open. Ask me to find the video again; no unrelated page was changed.'}
+            try:
+                link=self.page.locator('a#video-title').first
+                if not link.count():
+                    return {'ok':False,'reply':'The YouTube results page did not expose a selectable video result. No video was started.'}
+                selected=(link.inner_text(timeout=3000) or '').strip()
+                link.click(timeout=5000)
+                self.page.wait_for_timeout(1200)
+                for frame,index,row in self._observe():
+                    try: frame.locator('video, audio').nth(index).evaluate('v=>v.play().catch(()=>null)')
+                    except Exception: pass
+                if self._verify_playing():
+                    return {'ok':True,'reply':f"Started the first YouTube result: {selected[:180]}" if selected else 'Started the first YouTube result.','media_state':'playing'}
+                return {'ok':False,'reply':'Opened the selected YouTube result, but playback was not verified. The page may require owner interaction.'}
+            except Exception as exc:
+                return {'ok':False,'reply':f'YouTube result selection failed ({type(exc).__name__}); playback was not verified.'}
         if kind!='control':
             url=command['url']
             # YouTube searches are built locally; all other navigation must be official.

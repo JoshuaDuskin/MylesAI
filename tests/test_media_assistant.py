@@ -9,6 +9,7 @@ class MediaAssistantParsingTests(unittest.TestCase):
         self.assertEqual(media_request("Pause the video"), {"kind": "control", "action": "pause"})
         self.assertEqual(media_request("Make it fullscreen"), {"kind": "control", "action": "fullscreen"})
         self.assertEqual(media_request("Play the first episode"), {"kind": "discover", "follow": True, "episode": "first", "play": True})
+        self.assertEqual(media_request("Play the song"), {"kind": "youtube_follow", "selection": "first", "play": True})
 
     def test_discovery_extracts_title_and_playback_intent(self):
         result = media_request("Find South Park and start an episode")
