@@ -279,6 +279,11 @@ def desktop_operation(action: str, target: str = "", *, window_handle: int = 0,
             matches = [r for r in matches if r['Handle'] == int(window_handle)]
         if not matches:
             return {"ok": False, "state": "not_found", "reply": f"No matching visible window for {target or 'the current application'}. No action was performed."}
+        if action == "maximize" and len(matches) > 1:
+            foreground = int(user32.GetForegroundWindow() or 0)
+            focused = next((r for r in matches if int(r.get('Handle') or 0) == foreground), None)
+            if focused:
+                matches = [focused]
         if len(matches) != 1:
             return {"ok": False, "state": "choice_required", "windows": matches,
                     "reply": "More than one window matches. Specify its full title or window number:\n" + "\n".join(f"{r['MainWindowTitle']} (window {r['Handle']})" for r in matches)}
