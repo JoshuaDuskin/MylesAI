@@ -15,6 +15,7 @@ import struct
 import subprocess
 import time
 import zlib
+import tempfile
 from pathlib import Path
 
 
@@ -147,6 +148,57 @@ def visible_windows() -> list[dict[str, object]]:
     return rows
 
 
+def taskbar_attention_detected(*, samples: int = 3, interval: float = 0.32) -> tuple[bool, str]:
+    """Watch only the taskbar pixels for a short attention animation.
+
+    Windows exposes no read-only FlashWindowEx state. Comparing two local GDI
+    captures lets us detect the actual taskbar animation without sending the
+    screen to a model or clicking anything. The result deliberately identifies
+    animation presence, while the native window inventory supplies candidates.
+    """
+    if os.name != "nt":
+        return False, "Windows taskbar observation requires the tower."
+    try:
+        from PIL import Image, ImageChops, ImageStat
+    except Exception:
+        return False, "The local image reader is unavailable."
+    paths: list[Path] = []
+    try:
+        for _ in range(max(2, min(4, int(samples)))):
+            with tempfile.NamedTemporaryFile(prefix="myles_taskbar_", suffix=".png", delete=False) as handle:
+                path = Path(handle.name)
+            paths.append(path)
+            capture_desktop_png(path)
+            time.sleep(max(0.12, min(0.8, float(interval))))
+        images = [Image.open(path).convert("RGB") for path in paths]
+        width, height = images[0].size
+        # Normal Windows taskbars are horizontal; support a vertical taskbar too.
+        crops = []
+        if width >= height:
+            box = (0, max(0, height - min(180, height)), width, height)
+        else:
+            box = (max(0, width - min(180, width)), 0, width, height)
+        for image in images:
+            crops.append(image.crop(box))
+        scores: list[float] = []
+        for first, second in zip(crops, crops[1:]):
+            diff = ImageChops.difference(first, second)
+            mean = sum(ImageStat.Stat(diff).mean) / 3.0
+            # Cursor movement and clock ticks are small; a flashing button
+            # changes a compact, high-contrast region repeatedly.
+            scores.append(mean)
+        detected = len(scores) >= 2 and max(scores) >= 2.2 and min(scores) >= 0.35
+        return detected, f"taskbar_change_scores={','.join(f'{score:.2f}' for score in scores)}"
+    except Exception as exc:
+        return False, f"taskbar observation failed: {type(exc).__name__}"
+    finally:
+        for path in paths:
+            try:
+                path.unlink(missing_ok=True)
+            except OSError:
+                pass
+
+
 def _meaningful_tokens(value: str) -> list[str]:
     ignored = {"app", "application", "program", "the", "microsoft", "windows", "please"}
     return [token for token in re.findall(r"[a-z0-9]+", value.casefold()) if len(token) >= 2 and token not in ignored]
@@ -191,8 +243,10 @@ def desktop_operation(action: str, target: str = "", *, window_handle: int = 0,
                     "reply": ("Visible apps: " + ", ".join(names[:20]) + (f" and {len(names)-20} more" if len(names)>20 else "") + ". Ask ‘show my windows in detail’ for window titles.") if rows else "No visible application windows. Background processes are separate."}
         if action == "windows_attention":
             names = sorted({str(x['ProcessName']).removesuffix('.exe') for x in rows}, key=str.casefold)
+            detected, evidence = taskbar_attention_detected()
             return {"ok": True, "state": "observed", "windows": rows,
-                    "reply": ("Visible apps right now: " + ", ".join(names[:20]) + (f" and {len(names)-20} more" if len(names)>20 else "") + ". Windows does not expose a reliable read-only taskbar-flashing flag, so I cannot verify which one is flashing. Ask for detailed windows to inspect titles.") if rows else "No visible application windows, and no flashing window was verified."}
+                    "taskbar_attention_detected": detected, "taskbar_evidence": evidence,
+                    "reply": (("I detected a taskbar attention animation. Visible apps: " if detected else "I did not detect a taskbar attention animation. Visible apps: ") + ", ".join(names[:20]) + (f" and {len(names)-20} more" if len(names)>20 else "") + ". I cannot safely map the animated taskbar button to a process without clicking or changing focus.") if rows else ("I detected taskbar activity, but no visible application window is available to identify." if detected else "No visible application windows or taskbar attention animation was detected.")}
         if action == "windows_detail":
             return {"ok": True, "state": "observed", "windows": rows,
                     "reply": "Open windows:\n" + ("\n".join(f"{x['MainWindowTitle']} — {x['ProcessName']} (window {x['Handle']})" for x in rows) or "No visible application windows.")}
