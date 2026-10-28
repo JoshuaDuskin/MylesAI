@@ -56,8 +56,17 @@ def media_request(text):
                 'play the video': 'resume', 'mute': 'mute', 'mute the video': 'mute',
                 'unmute': 'unmute', 'unmute the video': 'unmute', 'stop playback': 'stop',
                 'stop the video': 'stop', 'make it fullscreen': 'fullscreen',
-                'fullscreen': 'fullscreen', 'enter fullscreen': 'fullscreen'}
+                'make it full screen': 'fullscreen', 'fullscreen': 'fullscreen',
+                'full screen': 'fullscreen', 'go fullscreen': 'fullscreen',
+                'go full screen': 'fullscreen', 'go to full screen': 'fullscreen',
+                'go to fullscreen': 'fullscreen', 'enter fullscreen': 'fullscreen',
+                'enter full screen': 'fullscreen', 'put it in fullscreen': 'fullscreen',
+                'put it in full screen': 'fullscreen'}
     if lower in controls: return {'kind': 'control', 'action': controls[lower]}
+    if re.fullmatch(r'(?:make|put|switch)\s+(?:the\s+)?(?:video\s+)?(?:it\s+)?full\s*screen', lower):
+        return {'kind': 'control', 'action': 'fullscreen'}
+    if re.fullmatch(r'(?:skip|dismiss)\s+(?:(?:the|this|current|an?)\s+)?(?:ad|ads|advert|advertisement|advertisements)', lower):
+        return {'kind': 'control', 'action': 'skip_ad'}
     volume = re.fullmatch(r'(?:set |change )?(?:the )?volume (?:to )?(\d{1,3})\s*%?', lower)
     if volume: return {'kind': 'control', 'action': 'volume', 'volume': min(100,int(volume[1]))/100}
     if lower in {'media preferences', 'my streaming services', 'media status'}:
@@ -273,6 +282,99 @@ class MediaAssistant:
         self.playing_until=time.monotonic()+45 if playing else 0
         return playing
 
+    def _click_visible(self, frame, selectors, role_name=None, timeout=3000):
+        """Click one visible, semantic control and report whether it was sent."""
+        for selector in selectors:
+            try:
+                controls = frame.locator(selector)
+                for index in range(min(controls.count(), 8)):
+                    control = controls.nth(index)
+                    if control.is_visible():
+                        control.click(timeout=timeout)
+                        return True
+            except Exception:
+                continue
+        if role_name:
+            try:
+                control = frame.get_by_role('button', name=re.compile(role_name, re.I)).first
+                if control.count() and control.is_visible():
+                    control.click(timeout=timeout)
+                    return True
+            except Exception:
+                pass
+        return False
+
+    def _fullscreen_verified(self, player):
+        try:
+            if bool(self.page.evaluate('!!document.fullscreenElement')):
+                return True
+        except Exception:
+            pass
+        try:
+            return bool(player.evaluate("v => !!(document.fullscreenElement || v.webkitDisplayingFullscreen === true)"))
+        except Exception:
+            return False
+
+    def _enter_fullscreen(self, frame, player):
+        """Use the provider's real fullscreen button, with keyboard fallback."""
+        try:
+            player.hover(timeout=1500)
+        except Exception:
+            pass
+        self.page.wait_for_timeout(250)
+        clicked = self._click_visible(
+            frame,
+            ('.ytp-fullscreen-button', '.vjs-fullscreen-control',
+             '.plyr__control[data-plyr="fullscreen"]',
+             'button[aria-label*="Full screen"]',
+             'button[aria-label*="Fullscreen"]',
+             'button[title*="Full screen"]',
+             'button[title*="Fullscreen"]',
+             '[data-testid*="fullscreen"]'),
+            role_name=r'full\s*screen',
+        )
+        if clicked:
+            self.page.wait_for_timeout(700)
+            if self._fullscreen_verified(player):
+                return True
+        # Some HTML5 players expose only the standard keyboard shortcut after
+        # the player receives focus. This remains a real browser input event.
+        try:
+            player.click(timeout=2000)
+            player.press('f', timeout=2000)
+            self.page.wait_for_timeout(700)
+        except Exception:
+            pass
+        return self._fullscreen_verified(player)
+
+    def _skip_visible_ad(self):
+        """Click only a provider-exposed Skip ad control; never bypass an ad."""
+        selectors = ('.ytp-ad-skip-button-modern', '.ytp-ad-skip-button',
+                     'button[aria-label="Skip ad"]',
+                     'button[aria-label*="Skip ad"]',
+                     'button[title*="Skip ad"]')
+        for frame in self.page.frames:
+            if self._click_visible(frame, selectors, role_name=r'skip\s+ad'):
+                self.page.wait_for_timeout(700)
+                # A successful skip removes the control. If it lingers while
+                # the player transitions, give the page a short bounded wait.
+                deadline = time.monotonic() + 2.0
+                while time.monotonic() < deadline:
+                    visible = False
+                    for selector in selectors:
+                        try:
+                            loc = frame.locator(selector)
+                            visible = any(loc.nth(i).is_visible() for i in range(min(loc.count(), 4)))
+                        except Exception:
+                            continue
+                        if visible:
+                            break
+                    if not visible:
+                        return {'ok': True, 'reply': 'Skipped the visible ad.', 'media_state': 'playing'}
+                    self.page.wait_for_timeout(250)
+                return {'ok': False, 'reply': 'The Skip ad control was clicked, but the ad transition was not verified.'}
+        return {'ok': False, 'reply': 'No visible Skip ad control was found. The current ad may be non-skippable, or no ad is playing.'}
+
     def _youtube_first_result(self):
         """Return the first real watch link across desktop/mobile YouTube DOMs."""
         try:
@@ -377,16 +479,14 @@ class MediaAssistant:
         if action=='status':
             playing=self._verify_playing()
             return {'ok':True,'reply':'The controlled player is playing.' if playing else 'No advancing playback was observed.','media_state':'playing' if playing else 'paused'}
+        if action=='skip_ad':
+            return self._skip_visible_ad()
         players=self._observe()
         if not players:return {'ok':False,'reply':'No supported video or audio player was found in the controlled page. No other application was changed.'}
         frame,index,row=next((v for v in players if not v[2]['paused']),players[0]);player=frame.locator('video, audio').nth(index)
         if action=='fullscreen':
-            try:
-                player.click(timeout=2000)
-                player.evaluate('v=>v.requestFullscreen()')
-                verified=frame.evaluate('!!document.fullscreenElement')
-            except Exception:verified=False
-            return {'ok':verified,'reply':'Fullscreen verified.' if verified else 'The browser did not grant fullscreen. Use the player fullscreen button in the controlled browser.'}
+            verified=self._enter_fullscreen(frame,player)
+            return {'ok':verified,'reply':'Fullscreen verified.' if verified else 'The player did not expose a working fullscreen control. No other window was changed.'}
         scripts={'pause':'v=>v.pause()','stop':'v=>{v.pause();v.currentTime=0}',
                  'resume':'v=>v.play()','mute':'v=>v.muted=true','unmute':'v=>v.muted=false',
                  'volume':'(v,n)=>v.volume=n'}

@@ -10,6 +10,8 @@ class MediaAssistantParsingTests(unittest.TestCase):
     def test_controls_and_followups_are_fast_commands(self):
         self.assertEqual(media_request("Pause the video"), {"kind": "control", "action": "pause"})
         self.assertEqual(media_request("Make it fullscreen"), {"kind": "control", "action": "fullscreen"})
+        self.assertEqual(media_request("Go full screen"), {"kind": "control", "action": "fullscreen"})
+        self.assertEqual(media_request("Skip the ad"), {"kind": "control", "action": "skip_ad"})
         self.assertEqual(media_request("Play the first episode"), {"kind": "discover", "follow": True, "episode": "first", "play": True})
         self.assertEqual(media_request("Play the song"), {"kind": "youtube_follow", "selection": "first", "play": True})
 
