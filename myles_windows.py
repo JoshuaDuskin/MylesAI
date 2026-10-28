@@ -479,7 +479,10 @@ def launch_app_verified(app_name: str, timeout_seconds: int = 20) -> str:
     """
     if os.name != "nt":
         return "DESKTOP_APP_LAUNCH_UNAVAILABLE: Windows launch is only supported on the tower."
-    requested = _normalized_app_name(app_name)
+    raw_requested = str(app_name or "").strip()
+    if re.search(r"(?i)\.disabled(?:$|[\\/])", raw_requested):
+        return "DESKTOP_APP_LAUNCH_ERROR: The request names a disabled marker, not an installed application."
+    requested = _normalized_app_name(raw_requested)
     if not requested or requested.casefold() in {"app", "application", "program", "it", "this"}:
         return "DESKTOP_APP_LAUNCH_ERROR: A specific application name is required."
     # Generic app control must never hand a document/marker path to Windows
