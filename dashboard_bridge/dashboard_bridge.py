@@ -69,8 +69,8 @@ def delivery_jobs(job_id):
     from myles_common import get_job
     return get_job(job_id)
 
-def send_owner_delivery(text):
-    code,data,route=send_to_myles(text)
+def send_owner_delivery(text,request_id=None):
+    code,data,route=send_to_myles(text,request_id)
     return code,data
 
 def guest_chat_module():
@@ -1027,11 +1027,11 @@ def rate_ok(client: str, is_post: bool) -> bool:
         return True
 
 
-def send_to_myles(text: str) -> tuple[int, Any, str]:
+def send_to_myles(text: str,request_id=None) -> tuple[int, Any, str]:
     candidates = [
         # Native Myles owner-message ingress. This is the same core path used
         # by local console/dashboard input and ultimately handle_owner_message().
-        ("/api/send", {"text": text, "source": "dashboard"}),
+        ("/api/send", {"text": text, "source": "dashboard", **({"client_request_id":request_id} if request_id else {})}),
         # Compatibility fallbacks for older experimental builds.
         ("/api/messages", {"message": text, "text": text, "source": "dashboard"}),
         ("/api/chat", {"message": text, "text": text, "source": "dashboard"}),
@@ -1205,7 +1205,8 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/dashboard/messages":
             code, data = core_json("/api/messages", timeout=6.0)
             if code == 200:
-                self.json_response(200, {**data,"role":"owner","deliveries":chat_delivery().snapshot("owner",delivery_jobs)})
+                receipts=load_json(ROOT/"data"/"core_chat_receipts.json") or {}
+                self.json_response(200, {**data,"role":"owner","deliveries":chat_delivery().snapshot("owner",delivery_jobs,lambda identifier:receipts.get(identifier))})
             else:
                 self.json_response(502, {"error": "Could not read Myles message history", "core_status": code, "detail": data})
             return
@@ -1525,7 +1526,7 @@ class Handler(BaseHTTPRequestHandler):
             self.deny(400, "Message is too long")
             return
         if payload.get("client_request_id"):
-            code,data=chat_delivery().submit("owner",payload["client_request_id"],text,send_owner_delivery)
+            code,data=chat_delivery().submit("owner",payload["client_request_id"],text,lambda prompt:send_owner_delivery(prompt,payload["client_request_id"]))
             return self.json_response(code,data)
         code, data, route = send_to_myles(text)
         if 200 <= code < 300:

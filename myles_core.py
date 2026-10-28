@@ -42,6 +42,8 @@ from myles_runtime_v9 import (
     app_launch_target, desktop_action_request, stop_request_scope,
 )
 from myles_agent_contracts import cancel_open_tool_calls
+from myles_chat_receipts import OwnerReceipts
+OWNER_RECEIPTS = OwnerReceipts(ROOT / 'data' / 'core_chat_receipts.json')
 from myles_model_runtime import (
     fallback_conversation, model_chat, model_health_dict, verify_with_jev,
 )
@@ -1598,6 +1600,11 @@ def handle_owner_message(text: str, source: str) -> dict[str, Any]:
     raw = str(text or "").strip()
     if not raw:
         return {"kind": "chat", "reply": ""}
+    if re.fullmatch(r"(?i)(?:hello|hi|hey|are you there|you there)[?!. ]*", raw):
+        user_id=add_message(source,'user',raw,None)
+        reply="I'm here. What would you like me to do?"
+        message_id=add_message(source,'assistant',reply,None)
+        return {'kind':'conversation','reply':reply,'message_id':message_id,'user_message_id':user_id}
 
     # Destructive control always outranks desktop/action parsing. Without this
     # gate, wording such as "quit all queued tasks" can be misread as an app
@@ -2356,7 +2363,16 @@ class ApiHandler(BaseHTTPRequestHandler):
             source = str(body.get("source") or "console")[:32]
             if not text:
                 return self._json(400, {"error": "text required"})
-            return self._json(200, handle_owner_message(text, source))
+            identifier=body.get('client_request_id')
+            if identifier:
+                previous=OWNER_RECEIPTS.begin(identifier,text,source)
+                if previous:return self._json(*previous)
+            try:
+                result=handle_owner_message(text,source)
+            except Exception as exc:
+                result={'ok':False,'reply':'The core could not verify completion: '+type(exc).__name__}
+            if identifier:OWNER_RECEIPTS.finish(identifier,result)
+            return self._json(200,result)
         return self._json(404, {"error": "not found"})
 
 

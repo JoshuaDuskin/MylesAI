@@ -59,7 +59,7 @@ class DeliveryQueue:
             reply=str(data.get("reply") or "")
             failed=not 200<=code<300 or data.get("ok") is False or reply.lower().startswith(("i couldn't", "i couldn’t", "i could not", "unable to", "failed to")) or any(x in reply.lower() for x in ["couldn't verify","couldn't launch","haven't verified","could not verify"])
             with self.lock:
-                row.update(status="Failed" if failed else "Running" if data.get("job_id") else "Completed",reply=reply[:6000],reply_message_id=data.get("message_id"),user_message_id=data.get("user_message_id"),job_id=data.get("job_id"),finished_at=None if data.get("job_id") and not failed else time.time())
+                row.update(status="Failed" if failed else "Running" if data.get("job_id") or data.get("request_pending") else "Completed",reply=reply[:6000],reply_message_id=data.get("message_id"),user_message_id=data.get("user_message_id"),job_id=data.get("job_id"),finished_at=None if (data.get("job_id") or data.get("request_pending")) and not failed else time.time())
                 if failed:row["error"]=str(data.get("error") or reply or "Command failed")[:1000]
                 self.save(scope)
         except Exception as exc:
@@ -70,10 +70,18 @@ class DeliveryQueue:
             now=time.time();row.setdefault("first_token_at",now);row["partial_reply"]=str(text)[:6000];row["phase"]="Responding"
             if now-row.get("last_partial_write",0)>=1.0:
                 row["last_partial_write"]=now;self.save(scope)
-    def snapshot(self,scope,job_reader=None):
+    def snapshot(self,scope,job_reader=None,result_reader=None):
         with self.lock:
             changed=False
             for row in self.records[scope]:
+                receipt=result_reader(row['client_id']) if result_reader and not row.get('core_result_adopted') else None
+                if receipt and receipt.get('message')==row['message'] and isinstance(receipt.get('result'),dict):
+                    result=receipt['result'];reply=str(result.get('reply') or '')
+                    failed=result.get('ok') is False or reply.lower().startswith(("i couldn't", "i couldn’t", "i could not", "unable to", "failed to")) or any(x in reply.lower() for x in ["couldn't verify","couldn't launch","haven't verified","could not verify"])
+                    row.update(core_result_adopted=True,reply=reply[:6000],reply_message_id=result.get('message_id'),user_message_id=result.get('user_message_id'),job_id=result.get('job_id'),status='Failed' if failed else 'Running' if result.get('job_id') else 'Completed',finished_at=receipt.get('finished_at'))
+                    if failed:row['error']=reply[:1000]
+                    else:row.pop('error',None)
+                    changed=True
                 if row.get("status")=="Running" and row.get("job_id") and job_reader:
                     job=job_reader(row["job_id"]) or {};state=job.get("state")
                     if not job:
