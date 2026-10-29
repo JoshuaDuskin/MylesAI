@@ -4,10 +4,35 @@ import http.server
 import threading
 import urllib.request
 import unittest
+import tempfile
+import os
+from pathlib import Path
 from unittest.mock import patch
 from bin import public_gateway_v074 as gateway
 
 class QuantDashboardStatus(unittest.TestCase):
+    def test_stale_paper_snapshot_is_retained_for_read_only_dashboard(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            data = Path(tmp)
+            status = data / "trading_status.json"
+            status.write_text(json.dumps({
+                "generated_at": "2020-01-01T00:00:00Z",
+                "mode": "paper",
+                "account_type": "SIMULATED PAPER",
+                "engine": {"status": "running", "data_source": "Drift / Velocity"},
+                "markets": [{"symbol": "BTC-PERP"}],
+                "equity": 10000,
+            }), encoding="utf-8")
+            old = 1577836800
+            os.utime(status, (old, old))
+            with patch.object(gateway, "DATA", data):
+                snapshot, diagnostics = gateway.local_trading_snapshot()
+            self.assertIsNotNone(snapshot)
+            self.assertFalse(snapshot["_verified"])
+            self.assertEqual(snapshot["_telemetry_state"], "stale")
+            self.assertIn("stale_snapshot", snapshot["_blockers"])
+            self.assertEqual(diagnostics["status"], "stale_or_unverified")
+
     def test_read_only_detail_routes_return_their_own_schema(self):
         bodies={"/dashboard/quant/config":{"config":{"venue":"Drift"},"markets":["BTC-PERP"]},"/dashboard/polymarket/status":{"markets":[{"id":"test"}],"live_locked":True},"/dashboard/quant/copy/status":{"candidates":[{"score":5}],"qualified":[]}}
         def forward(path,*args,**kwargs):return 200,{"Content-Type":"application/json"},json.dumps(bodies[path]).encode()

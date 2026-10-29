@@ -155,27 +155,33 @@ def local_trading_snapshot():
         engine_ok = str(engine.get("status") or "").lower() in {"running", "degraded"}
         source_text = str(engine.get("data_source") or "").lower()
         source_ok = any(marker in source_text for marker in ("gmx", "drift", "velocity"))
-        if age > max_age or file_age > max_age or not engine_ok or not source_ok:
-            return None, {
-                "status": "stale_or_unverified",
-                "verified": False,
-                "age_seconds": round(max(age, file_age), 1),
-                "engine_status": engine.get("status"),
-                "data_source": engine.get("data_source"),
-            }
+        age_seconds = round(max(age, file_age), 1)
+        blockers = []
+        if age > max_age or file_age > max_age:
+            blockers.append("stale_snapshot")
+        if not engine_ok:
+            blockers.append("quant_engine_not_running")
+        if not source_ok:
+            blockers.append("paper_source_not_verified")
+        # Preserve a valid paper account snapshot even while the tower is
+        # restarting or its next cycle has not published yet.  Dropping the
+        # entire account made the shared dashboard look empty and encouraged
+        # duplicate "start" commands.  The snapshot remains explicitly
+        # unverified so it cannot be mistaken for fresh telemetry.
         published = dict(value)
-        published["_verified"] = True
+        published["_verified"] = not blockers
         published["_verified_source"] = "data/trading_status.json"
-        published["_verified_age_seconds"] = round(max(age, file_age), 1)
+        published["_verified_age_seconds"] = age_seconds
         published["_verified_max_age_seconds"] = max_age
-        published["_blockers"] = []
-        published["_telemetry_state"] = "live"
+        published["_blockers"] = blockers
+        published["_telemetry_state"] = "live" if not blockers else "stale"
         return published, {
-            "status": "verified",
-            "verified": True,
-            "age_seconds": published["_verified_age_seconds"],
+            "status": "verified" if not blockers else "stale_or_unverified",
+            "verified": not blockers,
+            "age_seconds": age_seconds,
             "engine_status": engine.get("status"),
             "data_source": engine.get("data_source"),
+            "blockers": blockers,
             "markets_count": len(value.get("markets") or []) if isinstance(value.get("markets"), list) else 0,
         }
     except Exception as error:
