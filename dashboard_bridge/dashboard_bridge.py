@@ -55,7 +55,9 @@ _GUEST_CHAT_MODULE = None
 
 # Authenticated phone-to-desktop mouse sessions.  Sessions are short-lived and
 # a watchdog releases every held button after a brief network silence.
-MOUSE_SESSION_TIMEOUT = 2.0
+# Keep a short safety timeout, but long enough for normal mobile touch pauses;
+# the dashboard also sends a lightweight heartbeat while the pad is open.
+MOUSE_SESSION_TIMEOUT = 8.0
 MOUSE_SESSIONS: dict[str, dict[str, Any]] = {}
 MOUSE_LOCK = threading.Lock()
 
