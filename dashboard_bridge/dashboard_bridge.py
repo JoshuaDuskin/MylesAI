@@ -7,6 +7,7 @@ import importlib.util
 import json
 import os
 import re
+import secrets
 import shutil
 import subprocess
 import threading
@@ -50,6 +51,12 @@ PAIR_EXPIRES = 0.0
 PAIR_PINNED = False
 PAIR_CODE_FILE: Path | None = None
 _GUEST_CHAT_MODULE = None
+
+# Authenticated phone-to-desktop mouse sessions.  Sessions are short-lived and
+# a watchdog releases every held button after a brief network silence.
+MOUSE_SESSION_TIMEOUT = 2.0
+MOUSE_SESSIONS: dict[str, dict[str, Any]] = {}
+MOUSE_LOCK = threading.Lock()
 
 
 _CHAT_DELIVERY=None
@@ -1027,6 +1034,70 @@ def rate_ok(client: str, is_post: bool) -> bool:
         return True
 
 
+def _mouse_release(session_id: str, session: dict[str, Any]) -> None:
+    held = sorted(str(x) for x in session.get("buttons", set()) if str(x) in {"left", "right", "middle"})
+    if not held:
+        return
+    try:
+        from myles_tools import desktop_mouse_input
+        desktop_mouse_input("mouse_" + session_id[:24], [{"type": "button", "button": b, "state": "up"} for b in held])
+    except Exception:
+        pass
+    session["buttons"] = set()
+
+
+def _prune_mouse_sessions() -> None:
+    cutoff = time.monotonic() - MOUSE_SESSION_TIMEOUT
+    with MOUSE_LOCK:
+        stale = [(sid, data) for sid, data in MOUSE_SESSIONS.items() if float(data.get("last", 0)) < cutoff]
+        for sid, data in stale:
+            _mouse_release(sid, data)
+            MOUSE_SESSIONS.pop(sid, None)
+
+
+def _mouse_watchdog() -> None:
+    while True:
+        time.sleep(0.5)
+        _prune_mouse_sessions()
+
+
+def _mouse_events(body: Any) -> list[dict[str, Any]]:
+    raw = body.get("events") if isinstance(body, dict) else None
+    if not isinstance(raw, list) or len(raw) > 100:
+        raise ValueError("Mouse event batch is invalid")
+    clean: list[dict[str, Any]] = []
+    for event in raw:
+        if not isinstance(event, dict):
+            continue
+        kind = str(event.get("type") or "").lower()
+        if kind == "move":
+            try:
+                dx, dy = float(event.get("dx", 0)), float(event.get("dy", 0))
+            except (TypeError, ValueError):
+                raise ValueError("Mouse move event is invalid")
+            clean.append({"type": "move", "dx": max(-2000, min(2000, dx)), "dy": max(-2000, min(2000, dy))})
+        elif kind == "scroll":
+            try:
+                dx, dy = float(event.get("dx", 0)), float(event.get("dy", 0))
+            except (TypeError, ValueError):
+                raise ValueError("Mouse scroll event is invalid")
+            clean.append({"type": "scroll", "dx": max(-12, min(12, dx)), "dy": max(-12, min(12, dy))})
+        elif kind == "button":
+            button, state = str(event.get("button") or "left").lower(), str(event.get("state") or "up").lower()
+            if button not in {"left", "right", "middle"} or state not in {"down", "up"}:
+                raise ValueError("Mouse button event is invalid")
+            clean.append({"type": "button", "button": button, "state": state})
+        elif kind == "key":
+            keys = str(event.get("keys") or "")[:80]
+            if keys:
+                clean.append({"type": "key", "keys": keys})
+        elif kind == "type":
+            text = str(event.get("text") or "")[:500]
+            if text:
+                clean.append({"type": "type", "text": text})
+    return clean
+
+
 def send_to_myles(text: str,request_id=None) -> tuple[int, Any, str]:
     candidates = [
         # Native Myles owner-message ingress. This is the same core path used
@@ -1148,10 +1219,86 @@ class Handler(BaseHTTPRequestHandler):
         except (ValueError, UnicodeDecodeError) as error:
             return self.deny(400, str(error))
 
+    def mouse_control(self) -> None:
+        """Owner-authenticated direct mouse/keyboard input for the Mouse page."""
+        path = self.path.split("?", 1)[0]
+        routes = {
+            "/dashboard/mouse/session": "POST",
+            "/dashboard/mouse/input": "POST",
+            "/dashboard/mouse/disconnect": "POST",
+            "/dashboard/mouse/state": "GET",
+        }
+        if path not in routes or self.command != routes[path]:
+            return self.deny(405, "Mouse method not allowed")
+        if not self.preflight(self.command == "POST"):
+            return
+        _prune_mouse_sessions()
+        if path == "/dashboard/mouse/state":
+            with MOUSE_LOCK:
+                active = len(MOUSE_SESSIONS)
+            return self.json_response(200, {"ok": True, "active_sessions": active})
+        try:
+            size = int(self.headers.get("Content-Length", "0"))
+            if not 0 <= size <= 64 * 1024:
+                raise ValueError("Mouse request body is too large")
+            raw = self.rfile.read(size) if size else b"{}"
+            body = json.loads(raw.decode("utf-8"))
+            if not isinstance(body, dict):
+                raise ValueError("Mouse request must be an object")
+        except (ValueError, UnicodeDecodeError, json.JSONDecodeError) as error:
+            return self.deny(400, str(error))
+
+        if path == "/dashboard/mouse/session":
+            old = str(body.get("session_id") or "")
+            if old:
+                with MOUSE_LOCK:
+                    prior = MOUSE_SESSIONS.pop(old, None)
+                if prior:
+                    _mouse_release(old, prior)
+            sid = secrets.token_urlsafe(24)
+            with MOUSE_LOCK:
+                MOUSE_SESSIONS[sid] = {"last": time.monotonic(), "buttons": set()}
+            return self.json_response(200, {"ok": True, "session_id": sid, "timeout_seconds": MOUSE_SESSION_TIMEOUT})
+
+        sid = str(body.get("session_id") or "")
+        if not sid:
+            return self.deny(400, "Mouse session is required")
+        with MOUSE_LOCK:
+            session = MOUSE_SESSIONS.get(sid)
+            if session:
+                session["last"] = time.monotonic()
+        if not session:
+            return self.deny(409, "Mouse session expired; reconnect")
+        if path == "/dashboard/mouse/disconnect":
+            with MOUSE_LOCK:
+                session = MOUSE_SESSIONS.pop(sid, session)
+            _mouse_release(sid, session)
+            return self.json_response(200, {"ok": True, "disconnected": True})
+        try:
+            events = _mouse_events(body)
+        except ValueError as error:
+            return self.deny(400, str(error))
+        for event in events:
+            if event["type"] == "button":
+                if event["state"] == "down":
+                    session["buttons"].add(event["button"])
+                else:
+                    session["buttons"].discard(event["button"])
+        try:
+            from myles_tools import desktop_mouse_input
+            result = desktop_mouse_input("mouse_" + sid[:24], events)
+        except Exception as error:
+            return self.deny(503, f"Mouse input unavailable: {type(error).__name__}")
+        if str(result).startswith("TOOL_ERROR"):
+            return self.deny(503, result)
+        return self.json_response(200, {"ok": True, "result": json.loads(result) if result.startswith("{") else result})
+
     def do_GET(self) -> None:  # noqa: N802
         path = urlparse(self.path).path
         if path.startswith("/dashboard/device-access/"):
             return self.device_access()
+        if path.startswith("/dashboard/mouse/"):
+            return self.mouse_control()
         if path == "/dashboard/public-chat/messages" and authorized(self):
             path = "/dashboard/messages"
         if path == "/dashboard/public-chat/messages":
@@ -1240,6 +1387,8 @@ class Handler(BaseHTTPRequestHandler):
         path = self.path.split("?", 1)[0]
         if path.startswith("/dashboard/device-access/"):
             return self.device_access()
+        if path.startswith("/dashboard/mouse/"):
+            return self.mouse_control()
         if path == "/dashboard/public-chat/messages" and authorized(self):
             path = "/dashboard/messages"
         if path == "/dashboard/public-chat/messages":
@@ -1554,6 +1703,7 @@ def main() -> None:
         refresh_pair_state()
     server = ThreadingHTTPServer((HOST, PORT), Handler)
     server.daemon_threads = True
+    threading.Thread(target=_mouse_watchdog, name="myles-mouse-watchdog", daemon=True).start()
     print(json.dumps({"ok": True, "listen": f"http://{HOST}:{PORT}", "core": CORE, "time": now_iso()}), flush=True)
     server.serve_forever(poll_interval=0.5)
 

@@ -1337,6 +1337,97 @@ def desktop_click(
     return result
 
 
+def _send_mouse_inputs(events: list[tuple[int, int, int, int]]) -> int:
+    """Send native relative mouse/button/wheel INPUT records in one syscall."""
+    ULONG_PTR = ctypes.c_size_t
+
+    class MOUSEINPUT(ctypes.Structure):
+        _fields_ = [
+            ("dx", ctypes.c_long), ("dy", ctypes.c_long),
+            ("mouseData", ctypes.c_ulong), ("dwFlags", ctypes.c_ulong),
+            ("time", ctypes.c_ulong), ("dwExtraInfo", ULONG_PTR),
+        ]
+
+    class KEYBDINPUT(ctypes.Structure):
+        _fields_ = [
+            ("wVk", ctypes.c_ushort), ("wScan", ctypes.c_ushort),
+            ("dwFlags", ctypes.c_ulong), ("time", ctypes.c_ulong),
+            ("dwExtraInfo", ULONG_PTR),
+        ]
+
+    class HARDWAREINPUT(ctypes.Structure):
+        _fields_ = [("uMsg", ctypes.c_ulong), ("wParamL", ctypes.c_ushort), ("wParamH", ctypes.c_ushort)]
+
+    class INPUT_UNION(ctypes.Union):
+        _fields_ = [("mi", MOUSEINPUT), ("ki", KEYBDINPUT), ("hi", HARDWAREINPUT)]
+
+    class INPUT(ctypes.Structure):
+        _anonymous_ = ("union",)
+        _fields_ = [("type", ctypes.c_ulong), ("union", INPUT_UNION)]
+
+    records = [INPUT(type=0, mi=MOUSEINPUT(int(dx), int(dy), int(data), int(flags), 0, 0))
+               for dx, dy, data, flags in events]
+    if not records:
+        return 0
+    array = (INPUT * len(records))(*records)
+    return int(ctypes.windll.user32.SendInput(len(records), array, ctypes.sizeof(INPUT)))
+
+
+def desktop_mouse_input(job_id: str, events: list[dict[str, Any]]) -> str:
+    """Apply a bounded batch of relative mouse, button, wheel, key and text events.
+
+    This is deliberately direct-control only: it never loads the model and never
+    records typed text. The bridge owns authentication/session lifetime.
+    """
+    if os.name != "nt":
+        return "TOOL_ERROR: desktop control is only available on the Windows tower."
+    _enable_windows_dpi_awareness()
+    button_flags = {
+        "left": (0x0002, 0x0004), "right": (0x0008, 0x0010), "middle": (0x0020, 0x0040),
+    }
+    native: list[tuple[int, int, int, int]] = []
+    applied = 0
+    for item in list(events or [])[:100]:
+        if not isinstance(item, dict):
+            continue
+        kind = str(item.get("type") or "").lower()
+        if kind == "move":
+            dx = max(-2000, min(2000, int(round(float(item.get("dx", 0))))))
+            dy = max(-2000, min(2000, int(round(float(item.get("dy", 0))))))
+            if dx or dy:
+                native.append((dx, dy, 0, 0x0001)); applied += 1
+        elif kind == "button":
+            button = str(item.get("button") or "left").lower()
+            state = str(item.get("state") or "up").lower()
+            pair = button_flags.get(button)
+            if pair and state in {"down", "up"}:
+                native.append((0, 0, 0, pair[0] if state == "down" else pair[1])); applied += 1
+        elif kind == "scroll":
+            dy = max(-12, min(12, int(round(float(item.get("dy", 0))))))
+            dx = max(-12, min(12, int(round(float(item.get("dx", 0))))))
+            if dy:
+                native.append((0, 0, dy * 120, 0x0800)); applied += 1
+            if dx:
+                native.append((0, 0, dx * 120, 0x01000)); applied += 1
+        elif kind == "key":
+            key = str(item.get("keys") or "")[:80]
+            if key:
+                desktop_key(job_id, key); applied += 1
+        elif kind == "type":
+            text = str(item.get("text") or "")[:500]
+            if text:
+                desktop_type(job_id, text); applied += 1
+    if native:
+        sent = _send_mouse_inputs(native)
+        if sent != len(native):
+            result = f"TOOL_ERROR: Windows accepted {sent}/{len(native)} mouse events."
+            trace(job_id, "tool.result", result, tool="desktop_mouse_input", ok=False)
+            return result
+    result = json.dumps({"ok": True, "events": applied}, ensure_ascii=False)
+    trace(job_id, "tool.result", result, tool="desktop_mouse_input", ok=True)
+    return result
+
+
 def _send_virtual_keys(keys: list[int]) -> None:
     user32 = ctypes.windll.user32
     for key in keys:
