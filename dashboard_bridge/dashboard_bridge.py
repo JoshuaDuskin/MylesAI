@@ -42,6 +42,11 @@ GET_LIMIT = 180
 # Keep a limit, but key authenticated traffic by a short hash of the owner
 # token and allow normal owner interaction plus retries.
 POST_LIMIT = 120
+# Mouse movement is direct, authenticated control traffic and can legitimately
+# produce many small batches per minute while a finger is moving. Keep it in a
+# separate bucket so pointer motion cannot consume the normal chat/dashboard
+# quota, while still bounding a runaway client.
+MOUSE_POST_LIMIT = 3600
 PUBLIC_CAPABILITY_FILE = ROOT / "data" / "public_capability_token.txt"
 OWNER_PIN_FILE = ROOT / "data" / "owner_pin.json"
 RATE: dict[str, deque[float]] = defaultdict(deque)
@@ -1096,11 +1101,11 @@ def constant_time_equal(a: str, b: str) -> bool:
     return result == 0
 
 
-def rate_ok(client: str, is_post: bool) -> bool:
-    limit = POST_LIMIT if is_post else GET_LIMIT
+def rate_ok(client: str, is_post: bool, limit: int | None = None, bucket_suffix: str = "") -> bool:
+    limit = (POST_LIMIT if is_post else GET_LIMIT) if limit is None else int(limit)
     now = time.monotonic()
     with RATE_LOCK:
-        q = RATE[client + (":post" if is_post else ":get")]
+        q = RATE[client + (":post" if is_post else ":get") + bucket_suffix]
         while q and q[0] < now - RATE_WINDOW:
             q.popleft()
         if len(q) >= limit:
@@ -1238,7 +1243,7 @@ class Handler(BaseHTTPRequestHandler):
         self.cors()
         self.end_headers()
 
-    def preflight(self, is_post: bool = False) -> bool:
+    def preflight(self, is_post: bool = False, rate_limit: int | None = None, rate_suffix: str = "") -> bool:
         origin = self.headers.get("Origin", "")
         if origin and origin != "null" and origin not in ALLOWED_ORIGINS and not origin.startswith("http://127.0.0.1:") and not origin.startswith("http://localhost:"):
             self.deny(403, "Origin not allowed")
@@ -1249,7 +1254,7 @@ class Handler(BaseHTTPRequestHandler):
         identity = self.client_address[0]
         if supplied:
             identity = "owner:" + hashlib.sha256(supplied.encode("utf-8")).hexdigest()[:24]
-        if not rate_ok(identity, is_post):
+        if not rate_ok(identity, is_post, limit=rate_limit, bucket_suffix=rate_suffix):
             self.deny(429, "Rate limit exceeded")
             return False
         if not authorized(self):
@@ -1353,7 +1358,8 @@ class Handler(BaseHTTPRequestHandler):
         }
         if path not in routes or self.command != routes[path]:
             return self.deny(405, "Mouse method not allowed")
-        if not self.preflight(self.command == "POST"):
+        mouse_rate_limit = MOUSE_POST_LIMIT if self.command == "POST" else None
+        if not self.preflight(self.command == "POST", rate_limit=mouse_rate_limit, rate_suffix=":mouse"):
             return
         _prune_mouse_sessions()
         if path == "/dashboard/mouse/state":
