@@ -43,6 +43,7 @@ GET_LIMIT = 180
 # token and allow normal owner interaction plus retries.
 POST_LIMIT = 120
 PUBLIC_CAPABILITY_FILE = ROOT / "data" / "public_capability_token.txt"
+OWNER_PIN_FILE = ROOT / "data" / "owner_pin.json"
 RATE: dict[str, deque[float]] = defaultdict(deque)
 RATE_LOCK = threading.Lock()
 TOKEN = ""
@@ -57,6 +58,15 @@ _GUEST_CHAT_MODULE = None
 MOUSE_SESSION_TIMEOUT = 2.0
 MOUSE_SESSIONS: dict[str, dict[str, Any]] = {}
 MOUSE_LOCK = threading.Lock()
+
+# A short owner PIN is only an unlock convenience; the tower still issues the
+# same owner bearer credential used by the existing owner dashboard. Keep the
+# PIN salted, rate-limited and local to the tower.
+OWNER_PIN_ITERATIONS = 180_000
+OWNER_PIN_RATE: dict[str, deque[float]] = defaultdict(deque)
+OWNER_PIN_RATE_LOCK = threading.Lock()
+OWNER_PIN_WINDOW = 600.0
+OWNER_PIN_ATTEMPTS = 5
 
 
 _CHAT_DELIVERY=None
@@ -145,6 +155,69 @@ def public_authorized(handler: BaseHTTPRequestHandler) -> bool:
     expected = public_capability_token()
     supplied = str(handler.headers.get("X-Myles-Link") or "").strip()
     return bool(expected and supplied and hmac.compare_digest(supplied, expected))
+
+
+def _owner_pin_record() -> dict[str, Any] | None:
+    value = load_json(OWNER_PIN_FILE)
+    if not isinstance(value, dict):
+        return None
+    salt = str(value.get("salt") or "")
+    digest = str(value.get("digest") or "")
+    iterations = int(value.get("iterations") or OWNER_PIN_ITERATIONS)
+    if not re.fullmatch(r"[0-9a-fA-F]{32,128}", salt):
+        return None
+    if not re.fullmatch(r"[0-9a-fA-F]{64}", digest):
+        return None
+    if iterations < 100_000 or iterations > 1_000_000:
+        return None
+    return {"salt": salt, "digest": digest, "iterations": iterations}
+
+
+def owner_pin_configured() -> bool:
+    return _owner_pin_record() is not None
+
+
+def _owner_pin_digest(pin: str, salt_hex: str, iterations: int) -> str:
+    return hashlib.pbkdf2_hmac(
+        "sha256", pin.encode("utf-8"), bytes.fromhex(salt_hex), iterations
+    ).hex()
+
+
+def set_owner_pin(pin: str) -> None:
+    if not re.fullmatch(r"[0-9]{4}", str(pin or "")):
+        raise ValueError("Owner PIN must be exactly four digits")
+    OWNER_PIN_FILE.parent.mkdir(parents=True, exist_ok=True)
+    salt = secrets.token_hex(16)
+    record = {
+        "version": 1,
+        "salt": salt,
+        "digest": _owner_pin_digest(pin, salt, OWNER_PIN_ITERATIONS),
+        "iterations": OWNER_PIN_ITERATIONS,
+        "updated_at": now_iso(),
+    }
+    temp = OWNER_PIN_FILE.with_name(OWNER_PIN_FILE.name + ".tmp")
+    temp.write_text(json.dumps(record, indent=2) + "\n", encoding="utf-8")
+    os.replace(temp, OWNER_PIN_FILE)
+
+
+def owner_pin_rate_ok(client: str) -> bool:
+    now = time.monotonic()
+    with OWNER_PIN_RATE_LOCK:
+        queue = OWNER_PIN_RATE[client]
+        while queue and queue[0] < now - OWNER_PIN_WINDOW:
+            queue.popleft()
+        if len(queue) >= OWNER_PIN_ATTEMPTS:
+            return False
+        queue.append(now)
+        return True
+
+
+def verify_owner_pin(pin: str) -> bool:
+    record = _owner_pin_record()
+    if record is None or not re.fullmatch(r"[0-9]{4}", str(pin or "")):
+        return False
+    actual = _owner_pin_digest(pin, record["salt"], record["iterations"])
+    return hmac.compare_digest(actual, record["digest"])
 
 
 def load_json(path: Path) -> Any:
@@ -1219,6 +1292,54 @@ class Handler(BaseHTTPRequestHandler):
         except (ValueError, UnicodeDecodeError) as error:
             return self.deny(400, str(error))
 
+    def owner_pin(self) -> None:
+        """Owner sign-in using a local four-digit PIN.
+
+        The PIN is never stored or returned. A successful sign-in returns the
+        same tower owner token used by the existing authenticated dashboard.
+        Setup remains owner-authenticated; public callers may only attempt the
+        rate-limited sign-in.
+        """
+        path = urlparse(self.path).path
+        if path not in {"/dashboard/owner-pin/status", "/dashboard/owner-pin/login", "/dashboard/owner-pin/setup"}:
+            return self.deny(405, "Owner PIN method not allowed")
+        origin = self.headers.get("Origin", "")
+        if origin and origin != "null" and origin not in ALLOWED_ORIGINS and not origin.startswith(("http://127.0.0.1:", "http://localhost:")):
+            return self.deny(403, "Origin not allowed")
+        if not TOKEN:
+            return self.deny(503, "Owner sign-in is unavailable")
+        if path.endswith("/status"):
+            if self.command != "GET":
+                return self.deny(405, "Owner PIN status is read-only")
+            return self.json_response(200, {"ok": True, "configured": owner_pin_configured()})
+        if self.command != "POST":
+            return self.deny(405, "Owner PIN requires POST")
+        if path.endswith("/setup") and not authorized(self):
+            return self.deny(401, "Owner authorization required to set the PIN")
+        if path.endswith("/login") and not owner_pin_rate_ok(str(self.client_address[0] or "unknown") + ":owner-pin"):
+            return self.deny(429, "Too many owner PIN attempts. Try again later.")
+        try:
+            size = int(self.headers.get("Content-Length", "0"))
+            if not 0 < size <= 1024:
+                raise ValueError("Invalid owner PIN request body")
+            body = json.loads(self.rfile.read(size).decode("utf-8"))
+            if not isinstance(body, dict):
+                raise ValueError("Invalid owner PIN request")
+            pin = str(body.get("pin") or "").strip()
+            if not re.fullmatch(r"[0-9]{4}", pin):
+                raise ValueError("Owner PIN must be exactly four digits")
+            if path.endswith("/setup"):
+                set_owner_pin(pin)
+                return self.json_response(200, {"ok": True, "configured": True})
+            if not owner_pin_configured():
+                return self.deny(409, "Owner PIN has not been configured on the tower")
+            if not verify_owner_pin(pin):
+                time.sleep(0.35)
+                return self.deny(401, "Owner PIN is incorrect")
+            return self.json_response(200, {"ok": True, "token": TOKEN, "role": "owner"})
+        except (ValueError, UnicodeDecodeError, json.JSONDecodeError) as error:
+            return self.deny(400, str(error))
+
     def mouse_control(self) -> None:
         """Owner-authenticated direct mouse/keyboard input for the Mouse page."""
         path = self.path.split("?", 1)[0]
@@ -1295,6 +1416,8 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_GET(self) -> None:  # noqa: N802
         path = urlparse(self.path).path
+        if path.startswith("/dashboard/owner-pin/"):
+            return self.owner_pin()
         if path.startswith("/dashboard/device-access/"):
             return self.device_access()
         if path.startswith("/dashboard/mouse/"):
@@ -1385,6 +1508,8 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_POST(self) -> None:  # noqa: N802
         path = self.path.split("?", 1)[0]
+        if path.startswith("/dashboard/owner-pin/"):
+            return self.owner_pin()
         if path.startswith("/dashboard/device-access/"):
             return self.device_access()
         if path.startswith("/dashboard/mouse/"):

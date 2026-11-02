@@ -414,6 +414,29 @@ class Handler(BaseHTTPRequestHandler):
         code, response_headers, raw = request_local(path, self.command, body, headers, 12)
         return self.send_json(code, raw, response_headers.get("Content-Type", "application/json"))
 
+    def proxy_owner_pin(self):
+        """Public PIN sign-in plus owner-authenticated PIN setup."""
+        path = self.path.split("?", 1)[0]
+        routes = {
+            "/dashboard/owner-pin/status": "GET",
+            "/dashboard/owner-pin/login": "POST",
+            "/dashboard/owner-pin/setup": "POST",
+        }
+        if path not in routes or self.command != routes[path]:
+            return self.send_json(405, {"ok": False, "error": "Owner PIN method not allowed"})
+        if path.endswith("/setup") and not owner_read_ok(self.headers):
+            return self.send_json(401, {"ok": False, "error": "Owner authorization required"})
+        try:
+            size = int(self.headers.get("Content-Length", "0"))
+        except ValueError:
+            size = -1
+        if self.command == "POST" and (size <= 0 or size > 1024):
+            return self.send_json(400, {"ok": False, "error": "Invalid owner PIN request size"})
+        body = self.rfile.read(size) if self.command == "POST" and size else None
+        headers = {name: self.headers[name] for name in ("Authorization", "X-Myles-Token", "Content-Type", "Origin") if self.headers.get(name)}
+        code, response_headers, raw = request_local(path, self.command, body, headers, 12)
+        return self.send_json(code, raw, response_headers.get("Content-Type", "application/json"))
+
     def proxy_public_chat(self):
         """Shared public chat; privileged routes retain owner authentication."""
         path = self.path.split("?", 1)[0]
@@ -463,6 +486,8 @@ class Handler(BaseHTTPRequestHandler):
         self.send_json(status, raw, response_headers.get("Content-Type", "application/json"))
 
     def do_GET(self):
+        if self.path.split("?", 1)[0] == "/dashboard/owner-pin/status":
+            return self.proxy_owner_pin()
         if self.path.split("?",1)[0] in {"/dashboard/polymarket/status", "/dashboard/quant/config", "/dashboard/quant/copy/status"} and owner_read_ok(self.headers):
             return self.proxy()
         if self.path.split("?",1)[0].startswith("/dashboard/device-access/"):
@@ -476,6 +501,8 @@ class Handler(BaseHTTPRequestHandler):
         return self.proxy()
 
     def do_POST(self):
+        if self.path.split("?", 1)[0] in {"/dashboard/owner-pin/login", "/dashboard/owner-pin/setup"}:
+            return self.proxy_owner_pin()
         if self.path.split("?",1)[0].startswith("/dashboard/device-access/"):
             return self.proxy_device_access()
         if self.path.split("?", 1)[0] == "/dashboard/public-chat/messages":
